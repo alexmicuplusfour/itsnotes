@@ -73,6 +73,8 @@ run.bat
 setup-import.sh
 test-docker.ps1
 test-docker.sh
+docker-setup.ps1
+docker-setup.sh
 
 # PM2 runtime
 .pm2/
