@@ -65,6 +65,8 @@ backup*.sh
 
 # Deployment scripts with credentials
 setup_droplet*.py
+deploy*.ps1
+deploy*.py
 
 # PM2 runtime
 .pm2/
