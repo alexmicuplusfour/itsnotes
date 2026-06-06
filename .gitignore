@@ -68,6 +68,10 @@ setup_droplet*.py
 deploy*.ps1
 deploy*.py
 
+# Deployment-specific compose files
+docker-compose.demo.yml
+docker-compose.prod.yml
+
 # Local dev scripts
 run.bat
 client/src/debug-noteform-rerenders.js

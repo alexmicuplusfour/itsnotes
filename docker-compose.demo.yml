@@ -1,8 +1,0 @@
-services:
-  itsnotes-server:
-    environment:
-      DEMO_MODE: true
-      DEMO_RESET_MINUTES: 2
-      DEMO_SEED_FILE: /app/demo-data/seed.zip
-    volumes:
-      - ./demo-data:/app/demo-data:ro
