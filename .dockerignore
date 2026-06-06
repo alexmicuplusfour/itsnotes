@@ -1,0 +1,34 @@
+# Shared files to ignore
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.DS_Store
+
+# Development files
+*.log
+*.tar.gz
+itsnotes-takeout/
+
+# Build artifacts
+*/dist
+*/build
+*/coverage
+*.backup
+
+# Backup files
+*.bak
+*.old
+*.swp
+
+# Archives and database dumps
+*.tar
+*.gz
+*.zip
+# Allow SQL files to be used in db_init
+# *.sql
+
+# Environment files (except examples)
+**/.env
+!**/.env.example

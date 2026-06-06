@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+README.md
+dist
+build
+.nyc_output
+coverage
+.dockerignore
+cert/

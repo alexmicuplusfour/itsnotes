@@ -1,0 +1,4 @@
+services:
+  itsnotes-client:
+    ports:
+      - "80:80"

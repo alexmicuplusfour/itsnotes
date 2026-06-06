@@ -1,0 +1,23 @@
+{
+  "name": "itsnotes",
+  "short_name": "itsnotes",
+  "description": "A modern note-taking application",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1d1d1d",
+  "theme_color": "#14140b",
+  "icons": [
+    {
+      "src": "/favicon/192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon/512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

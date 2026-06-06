@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="format-detection" content="telephone=no" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#0b0f14">
+  
+  <!-- FOUC Prevention: Minimal interference with style loading -->
+  <style>
+    /* Only hide the main content, not the entire body */
+    #root {
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out;
+    }
+    /* Ensure fonts load smoothly */
+    body {
+      font-display: swap;
+    }
+  </style>
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon/16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon/32.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/favicon/64.png">
+  <link rel="apple-touch-icon" href="/favicon/192.png">
+  <title>itsnotes</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Preload critical font to reduce FOUC -->
+  <link rel="preload" href="/src/assets/fonts/ProductSans-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="/src/assets/fonts/ProductSans-Medium.ttf" as="font" type="font/ttf" crossorigin>
+  <script>
+    // Improved FOUC Prevention: Target only the content, not all styles
+    
+    // Function to reveal content
+    function revealContent() {
+      const root = document.getElementById('root');
+      if (root) {
+        root.style.opacity = '1';
+      }
+    }
+    
+    // Primary method: Use DOMContentLoaded for faster reveal
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function() {
+        // Small delay to ensure critical fonts are applied
+        setTimeout(revealContent, 100);
+      });
+    } else {
+      // Document already loaded
+      revealContent();
+    }
+    
+    // Fallback: Ensure content is revealed even if something goes wrong
+    window.addEventListener('load', function() {
+      setTimeout(revealContent, 150);
+    });
+  </script>
+  
+  <!-- Fallback for users with JavaScript disabled -->
+  <noscript>
+    <style>
+      #root {
+        opacity: 1 !important;
+      }
+    </style>
+  </noscript>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/index.jsx"></script>
+</body>
+</html>

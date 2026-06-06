@@ -1,0 +1,628 @@
+/* Product Sans Font Definitions */
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Thin.ttf') format('truetype');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap; /* Prevent invisible text during font load */
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-ThinItalic.ttf') format('truetype');
+  font-weight: 100;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-LightItalic.ttf') format('truetype');
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-MediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-Black.ttf') format('truetype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Product Sans';
+  src: url('./assets/fonts/ProductSans-BlackItalic.ttf') format('truetype');
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+
+:root {
+  /* Common variables */
+  --nav-height: 64px;
+  --accent-color: #23a286; /* Google blue */
+  --accent-hover-color: #32b598;
+  
+  /* Note color variables - Dark Mode */
+  --note-color-default: transparent;
+  --note-color-coral: #77172e;
+  --note-color-peach: #692b17;
+  --note-color-sand: #7c4a03;
+  --note-color-mint: #254436;
+  --note-color-sage: #105350;
+  --note-color-fog: #256377;
+  --note-color-storm: #284255;
+  --note-color-dusk: #472e5b;
+  --note-color-blossom: #6c394f;
+  --note-color-clay: #4b443a;
+  --note-color-chalk: #232427;
+}
+
+:root {
+  /* Dark mode variables (default) */
+  --text-color: rgba(255, 255, 255, 0.9);
+  --text-secondary-color: rgba(255, 255, 255, 0.6);
+  --text-color-contrast: rgba(0, 0, 0, 0.9);    
+  --foreground-color: rgb(253, 253, 253);
+  --background-color: #202124;
+  --mobile-background-color: #14140b;
+  --note-border-color: #5f6368;
+  --noteform-border-color: rgba(255, 255, 255, 0.15);
+  --header-border-color: #3e3e38;
+  --mobile-note-border-color: #46494d;
+  --border-color: rgba(255, 255, 255, 0.15);
+  --note-hover-color: #2d2e30;
+  --pinned-section-color: #2d2e30;
+  --header-bg-color: #202124;
+  --header-bg-color-glassy: rgba(32, 33, 36, 0.8); /* Added for glassy effect */
+  --mobile-header-bg-color: #14140b;
+  --mobile-header-bg-color-glassy: rgba(28, 28, 20, 0.8); /* Added for glassy effect */
+  --selection-header-bg-color: #202124;
+  --selection-header-bg-color-glassy: rgba(32, 33, 36, 0.8); /* Added for glassy effect */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --dropdown-bg-color: #2d2e30;
+  --dropdown-bg-color-glassy: rgba(34, 34, 34, 0.95);
+  --search-bg-color: rgba(65, 65, 65, 0.6);
+  --search-active-bg-color: rgba(57, 57, 57, 0.7);
+  --button-hover-color: rgba(255, 255, 255, 0.1);
+  --list-hover-color: rgba(15, 15, 15, 0.1);
+  --button-bg-color: #3c4043;
+  --note-bg-color: #202124;
+  --mobile-note-bg-color: #14140b;
+  --border-transparent: rgba(255, 255, 255, 0.1);
+  --fab-color: var(--accent-color);
+  --fab-hover-color: var(--accent-hover-color);
+  --fab-text-color: rgba(255, 255, 255, 0.9);
+  --fab-bg-color-glassy: rgba(255, 255, 255, 0.8); /* Added glassy FAB background */
+  --fab-hover-color-glassy: rgba(255, 255, 255, 1); /* Added glassy FAB hover */
+  --floating-element: #393939;
+  --menu-item-hover-bg: rgba(0, 0, 0, 0.05);
+  --menu-item-separator-light: rgb(230, 230, 230);
+  --menu-item-separator-dark: rgb(60, 60, 60);
+  --spinner-highlight: rgba(255, 255, 255, 0.5);
+  --progress-highlight: rgba(255, 255, 255, 0.25);
+  --link: #90aeff;
+  --switch-dark-unchecked: #adadad;
+  --tiptap-setting-button: #d3d3d3;
+  --tiptap-setting-button-hover: #dedede;
+  --tiptap-setting-button-selected: #4e4e4e;
+  --tiptap-highlight-background: rgba(255, 216, 0, 0.3);
+  --input-bg-color: rgba(0, 0, 0, 0.3);
+  --button-bg: rgba(255, 255, 255, 0.1);
+  --fill-subtle: rgba(255, 255, 255, 0.05);
+  --menu-item-hover : rgba(255, 255, 255, 0.2);
+  --menu-item-selected : rgba(255, 255, 255, 0.1);
+  --star-rating-unfilled : rgba(255, 255, 255, 0.4);
+  --star-rating-filled : #f1a500;
+  --typeahead-mobile-bg-color: #1b1b17;
+  --container-light: rgba(255, 255, 255, 0.05);
+  --alert-info-background: rgba(0, 88, 233, 0.25);
+  --alert-info-text: #62abff;
+  
+  /* Switch inverse colors (for use on same-colored backgrounds as theme) */
+  --switch-inverse-active: rgba(255, 255, 255, 0.9);
+  --switch-inverse-inactive: rgba(255, 255, 255, 0.5);
+  --switch-inverse-knob-active: #202124;
+  --switch-inverse-knob-inactive: rgba(255, 255, 255, 0.5);
+}
+
+:root.light-theme {
+  /* Light mode variables */
+  --text-color: rgba(0, 0, 0, 0.9);
+  --text-secondary-color: rgba(0, 0, 0, 0.6);
+  --text-color-contrast: rgba(255, 255, 255, 0.9);    
+  --foreground-color: rgb(15, 15, 15);
+  --background-color: #fff;
+  --mobile-background-color: #fffef2;
+  --note-border-color: #e0e0e0;
+  --noteform-border-color: rgba(0, 0, 0, 0.08);
+  --header-border-color: #e3e2de;
+  --mobile-note-border-color: rgba(0, 0, 0, 0.22);
+  --border-color: rgba(0, 0, 0, 0.22);
+  --note-hover-color: #f5f5f5;
+  --pinned-section-color: #f1f3f4;
+  --header-bg-color: #fff;
+  --header-bg-color-glassy: rgba(255, 255, 255, 0.8); /* Added for glassy effect */
+  --mobile-header-bg-color: #fff;
+  --mobile-header-bg-color-glassy: rgba(239, 234, 220, 0.8); /* Added for glassy effect */
+  --selection-header-bg-color: #f1f3f4; /* Added a light mode selection color */
+  --selection-header-bg-color-glassy: rgba(241, 243, 244, 0.8); /* Added for glassy effect */
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --dropdown-bg-color: #fff;
+  --dropdown-bg-color-glassy: rgba(252, 252, 252, 0.95);    
+  --search-bg-color: rgba(209, 209, 209, 0.4);
+  --search-active-bg-color: rgba(209, 209, 209, 0.7);
+  --button-hover-color: rgba(0, 0, 0, 0.1);
+  --list-hover-color: rgba(255, 255, 255, 0.1);
+  --button-bg-color: #fff;
+  --note-bg-color: #fff;
+  --mobile-note-bg-color: #fffef2;
+  --border-transparent: rgba(0, 0, 0, 0.1);
+  --fab-color: var(--accent-color);
+  --fab-hover-color: var(--accent-hover-color);
+  --fab-text-color: rgba(255, 255, 255, 0.9);
+  --fab-bg-color-glassy: rgba(32, 33, 36, 0.8); /* Added glassy FAB background */
+  --fab-hover-color-glassy: rgba(32, 33, 36, 1); /* Added glassy FAB hover */
+  --floating-element: #cecece;
+  --menu-item-hover-bg: rgba(255, 255, 255, 0.15);
+  --menu-item-separator-light: rgb(60, 60, 60);
+  --menu-item-separator-dark: rgb(230, 230, 230);   
+  --spinner-highlight: rgba(0, 0, 0, 0.5);
+  --progress-highlight: rgba(0, 0, 0, 0.25);
+  --link: #1f3ebf;
+  --switch-dark-unchecked: #717171;
+  --tiptap-setting-button: #484848;
+  --tiptap-setting-button-hover: #393939;
+  --tiptap-setting-button-selected: #d0d0d0;
+  --tiptap-highlight-background: rgba(255, 210, 0, 0.66);
+  --input-bg-color: rgba(0, 0, 0, 0.08); 
+  --button-bg: rgba(0, 0, 0, 0.1);
+  --fill-subtle: rgba(0, 0, 0, 0.05);
+  --menu-item-hover : rgba(0, 0, 0, 0.2);
+  --menu-item-selected : rgba(0, 0, 0, 0.1);
+  --star-rating-unfilled : rgba(0, 0, 0, 0.3);
+  --star-rating-filled : #d86800;
+  --typeahead-mobile-bg-color: #fffffb;
+  --container-light: rgba(0, 0, 0, 0.05);
+  --alert-info-background: rgba(66, 133, 244, 0.15);
+  --alert-info-text: #1565c0;
+  
+  /* Switch inverse colors (for use on same-colored backgrounds as theme) */
+  --switch-inverse-active: rgba(0, 0, 0, 0.9);
+  --switch-inverse-inactive: rgba(0, 0, 0, 0.5);
+  --switch-inverse-knob-active: #fff;
+  --switch-inverse-knob-inactive: rgba(0, 0, 0, 0.5);
+    
+  /* Note color variables - Light Mode */
+  --note-color-default: #ffffff;
+  --note-color-coral: #ffc8c3;
+  --note-color-peach: #fbcfa7;
+  --note-color-sand: #fff8b8;
+  --note-color-mint: #e2f6d3;
+  --note-color-sage: #b4ddd3;
+  --note-color-fog: #d4e4ed;
+  --note-color-storm: #aeccdc;
+  --note-color-dusk: #d3bfdb;
+  --note-color-blossom: #f6e2dd;
+  --note-color-clay: #e9e3d4;
+  --note-color-chalk: #efeff1;
+}
+ 
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Disable overscroll/elastic effect on all scrollable containers */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+
+
+/* Support for notched devices */
+@supports (padding-top: env(safe-area-inset-top)) {
+  :root {
+    --safe-area-inset-top: env(safe-area-inset-top);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom);
+    --safe-area-inset-left: env(safe-area-inset-left);
+    --safe-area-inset-right: env(safe-area-inset-right);
+  }
+  
+  body {
+    padding-top: var(--safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom);
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+  }
+}
+
+/* Google-like custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgba(154, 160, 166, 0.5);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(154, 160, 166, 0.8);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(154, 160, 166, 0.5) transparent;
+}
+
+/* Fix sub-pixel rendering issues on scroll */
+[style*="overflow"], 
+[class*="scroll"],
+*::-webkit-scrollbar-thumb {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+body {
+  font-family: 'Product Sans', Arial, sans-serif;
+  color: var(--text-color);
+  background-color: var(--background-color);
+  line-height: 1.6;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  touch-action: manipulation;
+  user-select: none;
+  font-variant-ligatures: none;         /* Disables all ligatures (e.g., fi, ffl) */
+  font-variant-caps: normal;          /* Ensures regular capitalization, no small-caps, etc. */
+  font-variant-alternates: normal;    /* Disables stylistic alternates for letters/symbols */
+  font-variant-numeric: lining-nums !important;  /* Ensures standard, full-height numerals, disables old-style, circled, etc. */    
+}
+
+@media (max-width: 600px) {
+  body {
+    background-color: var(--mobile-background-color);
+  }
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button, input, textarea {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+  box-sizing: content-box;
+  line-height: 1;
+}
+
+input, textarea {
+  border: none;
+  outline: none;
+}
+
+
+a {
+ color: var(--link);
+ text-decoration: none;
+ cursor: pointer;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+hr {
+    border: 1px solid var(--border-transparent);
+    background-color: transparent;
+    height: 0px;
+}
+
+mark {
+    background-color: var(--tiptap-highlight-background);
+    color: var(--text-color);
+}
+
+h1, h2, h3 {
+  line-height: 1.1; /* Adjust as needed */
+}
+
+/* Masonry grid layout for notes */
+.main-container {
+  width: 100%;
+  padding-top: var(--nav-height);
+  position: relative;
+}
+
+.main-container::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: var(--page-bg-url, none);
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  opacity: 0.3;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black 0%, black 50%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 50%, transparent 100%);
+  z-index: 0;
+}
+
+.content {
+  width: 100%;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 4px 80px 4px; /* Even smaller padding */
+}
+
+.content.list-view-content {
+  max-width: 100%;
+  padding: 0;
+}
+
+/* Direct approach with inline-block layout */
+.notes-grid {
+  text-align: left;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+.note-card {
+  display: inline-block;
+  vertical-align: top;
+  width: calc(33.33% - 8px);
+  margin: 0 4px 8px 4px;
+  box-sizing: border-box;
+}
+
+/* Tablet sizes */
+@media (max-width: 800px) {
+  .note-card {
+    width: calc(50% - 8px);
+  }
+}
+
+/* Mobile styles - force exactly two columns */
+@media (max-width: 600px) {
+  .notes-grid {
+    padding: 4px;
+    text-align: center;
+  }
+  
+  .note-card {
+    width: calc(50% - 4px) !important;
+    margin: 0 2px 8px 2px !important;
+    box-sizing: border-box !important;
+    background-color: var(--mobile-note-bg-color);
+  }
+}
+
+/* Extra small screen handling */
+@media (max-width: 400px) {
+  .notes-grid {
+    padding: 4px;
+  }
+  
+  .note-card {
+    width: calc(50% - 4px) !important;
+    margin: 0 2px 4px 2px !important;
+    background-color: var(--mobile-note-bg-color);
+  }
+}
+
+/* Note card styling */
+.note-card {
+  background-color: var(--note-bg-color);
+  border: 1px solid var(--note-border-color);
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  color: var(--text-color);
+}
+
+.note-card:hover {
+  box-shadow: 0 1px 5px var(--shadow-color);
+  background-color: var(--note-hover-color);
+}
+
+.note-card-title {
+  font-weight: 500;
+  margin-bottom: 8px;
+  overflow-wrap: break-word;
+}
+
+.note-card-content {
+  flex-grow: 1;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.note-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  opacity: 0;
+}
+
+.note-card:hover .note-card-actions {
+  opacity: 1;
+}
+
+.pinned-section {
+  background-color: var(--pinned-section-color);
+  margin-bottom: 20px;
+  padding: 8px 0;
+}
+
+/* Task list styles for notecards and editor */
+ul[data-type="taskList"] {
+  padding: 0;
+}
+
+ul[data-type="taskList"] li {
+  /* display: flex;
+  align-items: flex-start; */
+  margin-bottom: 4px;
+}
+
+ul[data-type="taskList"] li[data-checked="true"] {
+  text-decoration: line-through;
+  opacity: 1;
+}
+
+ul[data-type="taskList"] li[data-checked="true"] p {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* SVG Checkbox animations */
+@keyframes checkmarkAnimation {
+  0% { stroke-dashoffset: 20; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes indeterminateAnimation {
+  0% { opacity: 0; transform: scaleX(0.5); }
+  100% { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Hide the UUID text completely inside the editor - the preview card will show instead */
+.ProseMirror .note-reference-link {
+  position: absolute;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  user-select: none;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  visibility: hidden;
+}
+
+/* Default style for note reference link (e.g. in NoteCard) */
+.note-reference-link {
+  color: var(--link);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.note-reference-link:hover {
+  text-decoration: underline;
+}
+
+/* AI placeholder style for OCR and Summary extraction */
+.ai-placeholder {
+  width: 100%;
+  background-color: var(--menu-item-hover);
+  text-align: center;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-style: italic;
+  margin: 8px 0;
+}
+
+.ProseMirror .ai-placeholder {
+  width: 100%;
+  background-color: var(--menu-item-selected);
+  color: var(--text-secondary-color);
+  text-align: center;
+  padding: 4px 16px;
+  border-radius: 50vh;
+  font-style: normal;
+  margin: 8px 0;
+} 

@@ -1,0 +1,29 @@
+.demo-banner {
+  position: fixed;
+  bottom: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: rgba(255, 160, 0, 0.92);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: #1a1a1a;
+  padding: 10px 20px;
+  border-radius: 50px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  user-select: none;
+}
+
+.demo-banner--dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.demo-banner__countdown {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

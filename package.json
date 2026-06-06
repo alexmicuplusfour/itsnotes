@@ -1,0 +1,22 @@
+{
+  "name": "itsnotes",
+  "version": "1.0.0",
+  "description": "itsnotes — a personal notes app built with Node.js and PostgreSQL",
+  "main": "index.js",
+  "scripts": {
+    "server": "cd server && npm start",
+    "client": "cd client && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "install": "cd server && npm install && cd ../client && npm install",
+    "test": "cd server && npm test && cd ../client && npm test",
+    "lint": "cd server && npm run lint && cd ../client && npm run lint",
+    "android:build": "cd client && npm run build && npx cap sync",
+    "android:open": "cd client && npx cap open android"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.0",
+    "html-to-text": "^9.0.5",
+    "react-textarea-autosize": "^8.5.7",
+    "uuid": "^11.1.0"
+  }
+}
