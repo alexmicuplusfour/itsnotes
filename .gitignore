@@ -68,6 +68,12 @@ setup_droplet*.py
 deploy*.ps1
 deploy*.py
 
+# Local dev scripts
+run.bat
+setup-import.sh
+test-docker.ps1
+test-docker.sh
+
 # PM2 runtime
 .pm2/
 
