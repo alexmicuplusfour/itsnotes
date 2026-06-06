@@ -70,6 +70,8 @@ deploy*.py
 
 # Local dev scripts
 run.bat
+client/src/debug-noteform-rerenders.js
+server/populate_plain_content.js
 setup-import.sh
 test-docker.ps1
 test-docker.sh
