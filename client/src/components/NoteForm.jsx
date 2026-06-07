@@ -1385,12 +1385,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         if (contentInputRef.current && result.image) {
           const editor = contentInputRef.current.getEditor?.();
           if (editor && !editor.isDestroyed) {
-            const success = editor.commands.insertImage({
+            const success = editor.chain().focus().insertImage({
               src: result.image.data || result.image.thumbnail,
               alt: result.image.name,
               title: result.image.name,
               'data-image-id': result.image.id,
-            });
+            }).run();
             console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
           }
         }

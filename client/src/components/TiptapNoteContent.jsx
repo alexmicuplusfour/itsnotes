@@ -271,7 +271,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
     insertContent: (content) => {
       const editor = editorRef.current?.getEditor();
       if (editor && !editor.isDestroyed) {
-        editor.commands.insertContent(content);
+        editor.chain().focus().insertContent(content).run();
         return true;
       }
       return false;

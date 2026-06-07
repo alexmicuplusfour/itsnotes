@@ -1098,6 +1098,7 @@ const TiptapEditor = forwardRef(({
   useEffect(() => {
     if (editor) {
       setEditorReady(true);
+      editor.commands.setTextSelection(editor.state.doc.content.size);
       if (autoFocus) {
         setTimeout(() => {
           if (editor && !editor.isDestroyed) {
