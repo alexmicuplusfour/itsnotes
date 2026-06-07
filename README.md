@@ -1,4 +1,6 @@
-<img src="docs/logo-wordmark.png" width="275" alt="itsnotes" />
+# itsnotes
+
+<p align="center"><img src="docs/logo-wordmark.png" width="275" alt="itsnotes" /></p>
 
 A self-hosted Google Keep replacement with rich text, tagging, image attachments, and real-time sync across clients. Built with React, Node.js, PostgreSQL, and Socket.io.
 
