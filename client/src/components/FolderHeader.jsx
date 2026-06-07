@@ -422,12 +422,12 @@ const FolderHeader = ({ searchQuery }) => {
 
     const hasSubfolders = subfolders.length > 0;
     const msg = hasSubfolders
-      ? `Delete "${currentFolder.name}" and its ${subfolders.length} subfolder${subfolders.length !== 1 ? 's' : ''}? Notes will not be deleted.`
-      : `Delete "${currentFolder.name}"? Notes will not be deleted.`;
+      ? `Delete "${currentFolder.name}" and its ${subfolders.length} subfolder${subfolders.length !== 1 ? 's' : ''}? All notes inside will be moved to trash.`
+      : `Delete "${currentFolder.name}"? All notes inside will be moved to trash.`;
 
     if (!window.confirm(msg)) return;
 
-    await deleteTag(currentFolder.id);
+    await deleteTag(currentFolder.id, { withNotes: true });
 
     if (parentFolder) {
       searchByTag(parentFolder.id, parentFolder.name);
@@ -511,7 +511,7 @@ const FolderHeader = ({ searchQuery }) => {
         onClick={handleDelete}
       >
         <Icon name="trash" size={18} />
-        Delete folder
+        Delete with notes
       </DropdownItem>
     </MoreDropdown>
   );

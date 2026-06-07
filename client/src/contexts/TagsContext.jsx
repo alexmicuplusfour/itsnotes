@@ -156,13 +156,13 @@ export const TagsProvider = ({ children }) => {
   };
 
   // Delete a tag
-  const deleteTag = async (id) => {
+  const deleteTag = async (id, options = {}) => {
     try {
       // Get the tag name before deleting for the toast
       const tagToDelete = tags.find(tag => tag.id === id);
       const tagName = tagToDelete ? tagToDelete.name : '';
-      
-      await tagsApi.deleteTag(id);
+
+      await tagsApi.deleteTag(id, options);
       setTags(prevTags => prevTags.filter(tag => tag.id !== id));
       
       // Show success toast

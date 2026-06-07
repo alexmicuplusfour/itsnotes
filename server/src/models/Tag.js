@@ -127,6 +127,23 @@ class Tag {
     return result.rows[0];
   }
 
+  static async getNoteIdsInFolder(folderId) {
+    const result = await db.query(`
+      WITH RECURSIVE folder_tree AS (
+        SELECT id FROM tags WHERE id = $1
+        UNION ALL
+        SELECT t.id FROM tags t
+        JOIN folder_tree ft ON t.parent_id = ft.id
+      )
+      SELECT DISTINCT nt.note_id
+      FROM note_tags nt
+      JOIN folder_tree ft ON nt.tag_id = ft.id
+      JOIN notes n ON nt.note_id = n.id
+      WHERE n.is_deleted = false
+    `, [folderId]);
+    return result.rows.map(row => row.note_id);
+  }
+
   // Tag-Note relationships
   static async findNotesByTagId(tagId, { page = 1, limit = 40 }) {
     const offset = (page - 1) * limit;

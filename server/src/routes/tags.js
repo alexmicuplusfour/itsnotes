@@ -1,5 +1,6 @@
 const express = require('express');
 const Tag = require('../models/Tag');
+const Note = require('../models/Note');
 const router = express.Router();
 
 // Get all tags
@@ -147,14 +148,24 @@ router.patch('/:id/visibility', async (req, res) => {
 // Delete a tag
 router.delete('/:id', async (req, res) => {
   try {
+    if (req.query.withNotes === 'true') {
+      const noteIds = await Tag.getNoteIdsInFolder(req.params.id);
+      if (noteIds.length > 0) {
+        await Note.bulkUpdate(noteIds, { is_deleted: true });
+        const updatedNotes = await Note.findManyByIds(noteIds, true);
+        updatedNotes.forEach(note => {
+          req.app.get('io').emit('note_updated', note);
+        });
+      }
+    }
+
     const tag = await Tag.delete(req.params.id);
     if (!tag) {
       return res.status(404).json({ message: 'Tag not found' });
     }
-    
-    // Emit socket event
+
     req.app.get('io').emit('tag_deleted', req.params.id);
-    
+
     res.json({ message: 'Tag deleted successfully', tag });
   } catch (error) {
     console.error('Error deleting tag:', error);

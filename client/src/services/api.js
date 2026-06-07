@@ -323,8 +323,8 @@ export const tagsApi = {
   },
   
   // Delete a tag
-  deleteTag: async (id) => {
-    const response = await api.delete(`/tags/${id}`);
+  deleteTag: async (id, { withNotes = false } = {}) => {
+    const response = await api.delete(`/tags/${id}`, withNotes ? { params: { withNotes: 'true' } } : {});
     return response.data;
   },
   
