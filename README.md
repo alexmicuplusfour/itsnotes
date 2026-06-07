@@ -17,9 +17,6 @@ Edit `.env` to set a strong `JWT_SECRET` and your preferred database credentials
 ```bash
 docker compose up -d --build
 ```
-
-Open http://localhost and create your account.
-
 ## Configuration
 
 All configuration is via `.env`. See `.env.example` for available options.
