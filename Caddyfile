@@ -1,3 +1,0 @@
-try.itsnotes.app {
-    reverse_proxy itsnotes-client:80
-}

@@ -68,6 +68,9 @@ setup_droplet*.py
 deploy*.ps1
 deploy*.py
 
+# Deployment-specific files
+Caddyfile
+
 # Deployment-specific compose files
 docker-compose.demo.yml
 docker-compose.prod.yml
