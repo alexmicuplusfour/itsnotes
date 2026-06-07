@@ -190,7 +190,10 @@ const AttachmentCard = (props) => {
         <InfoWrapper>
           <FileName title={filename}>{filename}</FileName>
           <FileSize>
-            {uploading ? 'Uploading...' : formatBytes(size)}
+            {uploading ? 'Uploading...' : (() => {
+              const ext = filename && filename.includes('.') ? filename.split('.').pop().toUpperCase() : null;
+              return ext ? `${ext} · ${formatBytes(size)}` : formatBytes(size);
+            })()}
           </FileSize>
         </InfoWrapper>
         {!uploading && (
