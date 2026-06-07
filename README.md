@@ -13,6 +13,14 @@ A self-hosted Google Keep replacement with rich text, tagging, image attachments
     <td><img src="docs/screenshots/search.png"/></td>
     <td><img src="docs/screenshots/settings.png"/></td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/note-dark.png"/></td>
+    <td><img src="docs/screenshots/note-fullscreen.png"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/tagging.png"/></td>
+    <td></td>
+  </tr>
 </table>
 
 ## Setup
