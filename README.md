@@ -44,3 +44,6 @@ All configuration is via `.env`. See `.env.example` for available options.
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
+---
+
+This project is entirely vibecoded.
