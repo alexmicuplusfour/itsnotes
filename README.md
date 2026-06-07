@@ -2,6 +2,19 @@
 
 A self-hosted Google Keep replacement with rich text, tagging, image attachments, and real-time sync across clients. Built with React, Node.js, PostgreSQL, and Socket.io.
 
+![grid-dark](docs/screenshots/grid-dark.png)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/grid-light.png"/></td>
+    <td><img src="docs/screenshots/list-view.png"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/search.png"/></td>
+    <td><img src="docs/screenshots/settings.png"/></td>
+  </tr>
+</table>
+
 ## Setup
 
 Requires Docker and Docker Compose.
