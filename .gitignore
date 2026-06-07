@@ -28,6 +28,7 @@ itsnotes-import-temp/
 # Database dumps
 _db_dump/
 *.sql
+demo-data/seed_.zip
 
 #Foxit plugin
 foxit-snooper/
