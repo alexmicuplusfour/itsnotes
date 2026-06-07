@@ -1,6 +1,6 @@
 # itsnotes
 
-A self-hosted notes app with rich text, tagging, image attachments, and real-time sync across clients. Built with React, Node.js, PostgreSQL, and Socket.io.
+A self-hosted Google Keep replacement with rich text, tagging, image attachments, and real-time sync across clients. Built with React, Node.js, PostgreSQL, and Socket.io.
 
 ## Setup
 
