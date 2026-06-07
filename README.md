@@ -26,18 +26,3 @@ All configuration is via `.env`. See `.env.example` for available options.
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
-## Useful commands
-
-```bash
-# View logs
-docker compose logs -f
-
-# Stop
-docker compose down
-
-# Rebuild after code changes
-docker compose up -d --build
-
-# Reset all data
-docker compose down -v
-```
