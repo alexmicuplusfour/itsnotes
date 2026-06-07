@@ -72,7 +72,9 @@ deploy*.py
 # Deployment-specific files
 Caddyfile
 
-# Deployment-specific compose files
+# Deployment-specific and local compose files
+docker-compose.yml
+docker-compose.override.yml
 docker-compose.demo.yml
 docker-compose.prod.yml
 

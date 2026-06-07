@@ -31,6 +31,7 @@ Requires Docker and Docker Compose.
 git clone https://github.com/alexmicuplusfour/itsnotes
 cd itsnotes
 cp .env.example .env
+cp docker-compose.example.yml docker-compose.yml
 ```
 
 Edit `.env` to set a strong `JWT_SECRET` and your preferred database credentials, then:
