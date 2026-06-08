@@ -2106,13 +2106,17 @@ export const NotesProvider = ({ children }) => {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkUnarchiveNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
-      loadNotes(true);
+      if (searchModeRef.current && searchQueryRef.current) {
+        handleSearch(searchQueryRef.current, true, false, null, false, true);
+      } else {
+        loadNotes(true);
+      }
     } catch (err) {
       console.error('Failed to undo archive:', err);
       setError('Failed to undo archive');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastArchivedNoteIds, loadNotes]);
+  }, [lastArchivedNoteIds, loadNotes, handleSearch]);
 
   const handleUndoTrash = useCallback(async () => {
     if (!lastTrashedNoteIds.length) return;
@@ -2122,13 +2126,17 @@ export const NotesProvider = ({ children }) => {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkRestoreNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
-      loadNotes(true);
+      if (searchModeRef.current && searchQueryRef.current) {
+        handleSearch(searchQueryRef.current, true, false, null, false, true);
+      } else {
+        loadNotes(true);
+      }
     } catch (err) {
       console.error('Failed to undo trash:', err);
       setError('Failed to undo trash');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastTrashedNoteIds, loadNotes]);
+  }, [lastTrashedNoteIds, loadNotes, handleSearch]);
 
   const deleteNote = useCallback(async (id, suppressToast = false) => {
     // First, get the note to check if it's archived
