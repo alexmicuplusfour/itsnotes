@@ -39,7 +39,8 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodeuser -u 1001
 
 # Create directories and set permissions
-RUN mkdir -p /tmp/itsnotes-import && \
+# /app/uploads must exist in the image so Docker initializes the named volume with nodeuser ownership
+RUN mkdir -p /tmp/itsnotes-import /app/uploads && \
     chown -R nodeuser:nodejs /app /tmp/itsnotes-import
 
 # Switch to non-root user
