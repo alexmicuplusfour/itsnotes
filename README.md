@@ -41,6 +41,20 @@ Edit `.env` to set a strong `JWT_SECRET` and your preferred database credentials
 ```bash
 docker compose up -d --build
 ```
+
+The app will be available on port 80.
+
+### With Caddy (HTTPS + domain)
+
+To run with automatic HTTPS via Caddy:
+
+```bash
+cp docker-compose.caddy.example.yml docker-compose.yml
+cp Caddyfile.example Caddyfile
+```
+
+Edit `Caddyfile` to set your domain, then `docker compose up -d --build`. Caddy handles SSL certificates automatically.
+
 ## Configuration
 
 All configuration is via `.env`. See `.env.example` for available options.

@@ -1,0 +1,62 @@
+name: itsnotes
+
+services:
+  itsnotes-db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db_init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  itsnotes-server:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      itsnotes-db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: itsnotes-db
+      DB_PORT: 5432
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      BACKUP_PATH: /app/backups
+    volumes:
+      - attachments_data:/app/uploads
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backups:/app/backups
+
+  itsnotes-client:
+    build: ./client
+    restart: unless-stopped
+    depends_on:
+      - itsnotes-server
+
+  itsnotes-caddy:
+    image: caddy:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - itsnotes-client
+
+volumes:
+  postgres_data:
+  attachments_data:
+  caddy_data:
+  caddy_config:
