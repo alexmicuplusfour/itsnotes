@@ -4,7 +4,7 @@ import './AuthPage.css';
 import logo from '../assets/images/loom.png';
 
 const AuthPage = () => {
-  const { login, setup, requiresSetup, disconnectSignOut, isDemoMode } = useAuth();
+  const { login, setup, requiresSetup, isDemoMode } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -89,12 +89,6 @@ const AuthPage = () => {
             </div>
           )}
 
-          {disconnectSignOut && (
-            <div className="info-message">
-              You were signed out because the connection to the server was lost.
-            </div>
-          )}
-          
           {error && (
             <div className="error-message">
               {error}

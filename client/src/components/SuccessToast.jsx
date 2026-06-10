@@ -6,8 +6,8 @@ const ToastContainer = styled.div`
   bottom: 100px;
   left: 50%;
   transform: translateX(-50%);
-  background-color: var(--foreground-color);
-  color: var(--text-color-contrast);
+  background-color: ${props => props.$bgColor || 'var(--foreground-color)'};
+  color: ${props => props.$bgColor ? 'var(--text-color)' : 'var(--text-color-contrast)'};
   padding: 10px 16px;
   border-radius: 4px;
   z-index: 1200;
@@ -42,7 +42,7 @@ const UndoButton = styled.button`
   }
 `;
 
-const SuccessToast = ({ message, isVisible, onHide, onUndo, duration = 3000 }) => {
+const SuccessToast = ({ message, isVisible, onHide, onUndo, duration = 3000, bgColor }) => {
   useEffect(() => {
     if (isVisible && onHide) {
       const timer = setTimeout(() => {
@@ -74,7 +74,7 @@ const SuccessToast = ({ message, isVisible, onHide, onUndo, duration = 3000 }) =
   };
 
   return (
-    <ToastContainer>
+    <ToastContainer $bgColor={bgColor}>
       {message}
       {onUndo && <UndoButton onClick={handleUndoClick}>Undo</UndoButton>}
     </ToastContainer>

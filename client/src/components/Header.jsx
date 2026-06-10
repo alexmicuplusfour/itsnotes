@@ -810,7 +810,7 @@ const Header = () => {
   } = useUIPreferences();
   
   const { tags, toggleTagsModal, createTag } = useTags();
-  const { logout } = useAuth();
+  const { logout, isSocketConnected } = useAuth();
 
   // Helper to translate custom color labels back to actual color names in search query
   // e.g., "$moral $blue" -> "$coral $blue" (if "coral" was labeled "moral")
@@ -2084,10 +2084,16 @@ const Header = () => {
         onClose={() => setIsSettingsModalOpen(false)} 
       />
 
-      <SuccessToast 
+      <SuccessToast
         message={toastMessage}
         isVisible={showToast}
         onClose={() => setShowToast(false)}
+      />
+
+      <SuccessToast
+        message="Reconnecting to server..."
+        isVisible={isSocketConnected === false}
+        bgColor="var(--warning-toast-bg)"
       />
     </>
   );

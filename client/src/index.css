@@ -119,6 +119,7 @@
 
 :root {
   /* Dark mode variables (default) */
+  --warning-toast-bg: #b45309;
   --text-color: rgba(255, 255, 255, 0.9);
   --text-secondary-color: rgba(255, 255, 255, 0.6);
   --text-color-contrast: rgba(0, 0, 0, 0.9);    
@@ -187,6 +188,7 @@
 
 :root.light-theme {
   /* Light mode variables */
+  --warning-toast-bg: #f59e0b;
   --text-color: rgba(0, 0, 0, 0.9);
   --text-secondary-color: rgba(0, 0, 0, 0.6);
   --text-color-contrast: rgba(255, 255, 255, 0.9);    

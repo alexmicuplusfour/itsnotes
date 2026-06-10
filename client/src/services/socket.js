@@ -29,6 +29,9 @@ class SocketService {
     this._disconnectTimeout = null;
     this._disconnectGracePeriod = 30000; // 30 seconds default
     this.onDisconnectTimeoutCallback = null;
+
+    // Connection status callback
+    this._connectionStatusCallback = null;
   }
 
   // Register the sync callback
@@ -48,6 +51,21 @@ class SocketService {
   clearDisconnectTimeoutCallback() {
     this.onDisconnectTimeoutCallback = null;
     this._clearDisconnectTimeout();
+  }
+
+  // Register connection status callback (called with true on connect, false on disconnect)
+  registerConnectionStatusCallback(callback) {
+    this._connectionStatusCallback = callback;
+  }
+
+  clearConnectionStatusCallback() {
+    this._connectionStatusCallback = null;
+  }
+
+  _notifyConnectionStatus(connected) {
+    if (typeof this._connectionStatusCallback === 'function') {
+      this._connectionStatusCallback(connected);
+    }
   }
 
   // Start the disconnect timeout
@@ -103,8 +121,8 @@ class SocketService {
     this.socket = io(SOCKET_URL, {
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 200,
+      reconnectionDelayMax: 2000,
       timeout: 60000,
       transports: ['websocket', 'polling'], // Keep polling as fallback
       autoConnect: false, // We will call connect manually
@@ -120,6 +138,7 @@ class SocketService {
       console.log('Socket connected with ID:', this.socket.id);
       this.connectionAttempts = 0;
       this._clearDisconnectTimeout(); // Cancel any pending sign-out
+      this._notifyConnectionStatus(true);
       this.requestWakeLock(); // Request wake lock when connected
       this.setupVisibilityHandler(); // Ensure visibility handler is set up
       
@@ -143,16 +162,18 @@ class SocketService {
       console.log('Socket disconnected:', reason);
       this.releaseWakeLock(); // Release wake lock on disconnect
       this.stopKeepAlive(); // Stop custom keep-alive pings
-      
+
       // Start disconnect timeout for auto sign-out (unless it was a manual disconnect)
       if (reason !== 'io client disconnect') {
         this._startDisconnectTimeout();
+        this._notifyConnectionStatus(false);
       }
     });
     
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('Socket reconnected after', attemptNumber, 'attempts');
       this._clearDisconnectTimeout(); // Cancel any pending sign-out
+      this._notifyConnectionStatus(true);
       
       // Trigger sync on successful reconnection
       console.log("Reconnection successful, triggering sync.");

@@ -1,12 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import env from '../../env.js';
 import socketService from '../services/socket.js';
 
 const AuthContext = createContext();
-
-// Default grace period: 30 seconds
-const DISCONNECT_GRACE_PERIOD_MS = 30 * 1000;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -28,43 +25,60 @@ export const AuthProvider = ({ children }) => {
     return storedToken;
   });
   const [authChecked, setAuthChecked] = useState(false);
-  
-  // Track if we're being signed out due to disconnect
-  const [disconnectSignOut, setDisconnectSignOut] = useState(false);
 
-  // Handle disconnect timeout - auto logout
-  const handleDisconnectTimeout = useCallback(() => {
-    console.log('AuthContext: Disconnect timeout reached - signing out');
-    setDisconnectSignOut(true);
-    setToken(null);
-    setUser(null);
-    setIsAuthenticated(false);
-    setAuthChecked(false);
-  }, []);
+  // Track live socket connection status (null = unknown, true = connected, false = disconnected)
+  const [isSocketConnected, setIsSocketConnected] = useState(null);
+  const disconnectTimerRef = React.useRef(null);
+  const isDisconnectedRef = React.useRef(false);
 
-  // Register disconnect timeout callback when authenticated
+  // Register connection status callback when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      socketService.registerDisconnectTimeoutCallback(
-        handleDisconnectTimeout,
-        DISCONNECT_GRACE_PERIOD_MS
-      );
-    } else {
-      socketService.clearDisconnectTimeoutCallback();
+    if (!isAuthenticated) {
+      clearTimeout(disconnectTimerRef.current);
+      socketService.clearConnectionStatusCallback();
+      setIsSocketConnected(null);
+      isDisconnectedRef.current = false;
+      return () => {};
     }
-    
-    return () => {
-      socketService.clearDisconnectTimeoutCallback();
+
+    const startDisconnectTimer = (delay) => {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = setTimeout(() => {
+        if (isDisconnectedRef.current) setIsSocketConnected(false);
+      }, delay);
     };
-  }, [isAuthenticated, handleDisconnectTimeout]);
 
-  // Clear disconnect sign out flag after a brief moment (for UI to show message if needed)
-  useEffect(() => {
-    if (disconnectSignOut) {
-      const timer = setTimeout(() => setDisconnectSignOut(false), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [disconnectSignOut]);
+    socketService.registerConnectionStatusCallback((connected) => {
+      if (connected) {
+        clearTimeout(disconnectTimerRef.current);
+        disconnectTimerRef.current = null;
+        isDisconnectedRef.current = false;
+        setIsSocketConnected(true);
+      } else {
+        isDisconnectedRef.current = true;
+        // Only start timer if visible — if the page is hidden (phone locked),
+        // the timer will be started when the page becomes visible again
+        if (document.visibilityState === 'visible') {
+          startDisconnectTimer(4000);
+        }
+      }
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isDisconnectedRef.current && !disconnectTimerRef.current) {
+        // Page just became visible and we're still disconnected — give the socket
+        // a moment to reconnect before showing the toast
+        startDisconnectTimer(3000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      clearTimeout(disconnectTimerRef.current);
+      socketService.clearConnectionStatusCallback();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAuthenticated]);
 
   // Update API headers when token changes
   useEffect(() => {
@@ -283,7 +297,7 @@ export const AuthProvider = ({ children }) => {
     changePassword,
     checkAuthStatus,
     token,
-    disconnectSignOut,
+    isSocketConnected,
     isDemoMode,
     nextResetAt
   };
