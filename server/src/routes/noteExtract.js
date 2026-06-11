@@ -195,6 +195,58 @@ const decodeHtml = (text) => {
     }
 };
 
+// Pull the numeric Goodreads id and (optional) title slug out of a book URL.
+// Examples: /book/show/376434.Diary_Of_A_Baby -> { id: '376434', slug: 'Diary_Of_A_Baby' }
+//           /book/show/12345                  -> { id: '12345',  slug: null }
+function parseGoodreadsUrl(url) {
+    const m = url.match(/\/book\/show\/(\d+)(?:[._-]([^/?#]+))?/);
+    return m ? { id: m[1], slug: m[2] || null } : null;
+}
+
+// Primary metadata source: Open Library. Keyless, generous rate limits, returns
+// title/author/year/pages/cover/ISBN. Does NOT return ratings — those are dropped
+// when this path wins; the OGS/Playwright fallbacks below still attempt them for
+// books Open Library doesn't have.
+async function fetchOpenLibraryBook(titleQuery) {
+    if (!titleQuery) return null;
+
+    const searchUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(titleQuery)}&limit=3`;
+    const searchResp = await axios.get(searchUrl, { timeout: 8000 });
+    const doc = searchResp.data?.docs?.[0];
+    if (!doc?.title) return null;
+
+    const data = {
+        title: doc.title,
+        author: Array.isArray(doc.author_name) ? doc.author_name.join(', ') : doc.author_name,
+    };
+    if (doc.first_publish_year) {
+        data.publishedYear = String(doc.first_publish_year);
+        data.publishedDate = data.publishedYear;
+    }
+    if (doc.number_of_pages_median) {
+        data.total_pages = doc.number_of_pages_median;
+        data.pages = `${doc.number_of_pages_median} pages`;
+    }
+    if (doc.cover_i) {
+        data.cover = `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    }
+
+    // Description lives on the work record, not the search result.
+    if (doc.key && doc.key.startsWith('/works/')) {
+        try {
+            const workResp = await axios.get(`https://openlibrary.org${doc.key}.json`, { timeout: 5000 });
+            const desc = workResp.data?.description;
+            if (desc) {
+                data.description = typeof desc === 'string' ? desc : desc.value;
+            }
+        } catch (e) {
+            // Missing description is fine; downstream may fill it from OGS.
+        }
+    }
+
+    return data;
+}
+
 // --- Goodreads Extraction Endpoint ---
 router.post('/extract-goodreads', async (req, res) => {
     const { url } = req.body;
@@ -467,6 +519,34 @@ router.post('/extract-goodreads', async (req, res) => {
             }
         }
         // --- End Playwright Fallback ---
+
+        // --- Final Fallback: Open Library (keyless metadata API) ---
+        // Reached only if OGS + Axios + Playwright all failed to recover a title.
+        // Returns no rating, but preserves a usable book card for sites we can't scrape.
+        if (!data.title) {
+            const parsed = parseGoodreadsUrl(url);
+            if (parsed?.slug) {
+                try {
+                    const query = parsed.slug.replace(/[_-]+/g, ' ').trim();
+                    console.log(`[extract-goodreads] Querying Open Library for: "${query}"`);
+                    const olData = await fetchOpenLibraryBook(query);
+                    if (olData) {
+                        // Don't overwrite anything earlier sources managed to grab
+                        for (const key of Object.keys(olData)) {
+                            if (data[key] === undefined || data[key] === null || data[key] === '') {
+                                data[key] = olData[key];
+                            }
+                        }
+                        console.log(`[extract-goodreads] Open Library hit: "${olData.title}" by ${olData.author}`);
+                    } else {
+                        console.log('[extract-goodreads] Open Library returned no match.');
+                    }
+                } catch (olError) {
+                    console.warn(`[extract-goodreads] Open Library lookup failed: ${olError.message}`);
+                }
+            }
+        }
+        // --- End Open Library Fallback ---
 
         // Truncate description to 300 characters
         if (data.description && data.description.length > 300) {
