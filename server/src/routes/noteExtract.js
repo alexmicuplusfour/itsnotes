@@ -1,0 +1,796 @@
+const express = require('express');
+const axios = require('axios');
+const { chromium } = require('playwright');
+const { JSDOM } = require('jsdom');
+const { Readability } = require('@mozilla/readability');
+const ogs = require('open-graph-scraper');
+const UserObject = require('../models/UserObject');
+const { extractExternalId } = require('../utils/extractExternalId');
+const { extractImageUrls, processAndUploadImages } = require('../utils/imageProcessing');
+require('dotenv').config();
+
+const router = express.Router();
+
+// Extract content from URL - Puppeteer first, Axios fallback
+router.post('/extract-url', async (req, res) => {
+    const { url, noteId, includeImages = false } = req.body;
+
+    // --- Input validation ---
+    if (!url) { return res.status(400).json({ message: 'URL is required' }); }
+    try { new URL(url); } catch (_) { return res.status(400).json({ message: 'Invalid URL format provided.' }); }
+
+    // If includeImages is true, noteId is required
+    if (includeImages && !noteId) {
+        return res.status(400).json({ message: 'Note ID is required when includeImages is true' });
+    }
+    // --- End Input Validation ---
+
+    // --- Check if this is a Goodreads URL and book already exists ---
+    if (url.includes('goodreads.com/book/show/')) {
+        const userId = req.user?.id || 1;
+        const externalId = extractExternalId(url);
+
+        if (externalId) {
+            const existingBook = await UserObject.findByExternalId(userId, externalId);
+            if (existingBook) {
+                console.log(`[extract-url] Book already exists (external_id: ${externalId}), skipping full extraction`);
+                return res.json({
+                    message: 'Book already exists',
+                    exists: true,
+                    book: existingBook,
+                    title: existingBook.title,
+                    content: '' // Don't extract content for existing books
+                });
+            }
+        }
+    }
+    // --- End Goodreads check ---
+
+    let extractedContent = null;
+    let extractedTitle = null;
+    let browser = null; // Playwright browser instance
+    let finalError = null;
+
+    // --- Get executable path from environment variable ---
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH; // Using same env var name
+
+    // --- Attempt 1: Playwright Method (only if path is configured) ---
+    if (chromiumPath) {
+        console.log(`Using Chromium path for Playwright: ${chromiumPath}`);
+        try {
+            console.log(`Attempting extraction via Playwright for ${url}...`);
+            browser = await chromium.launch({
+                headless: true,
+                executablePath: chromiumPath,
+                args: [ '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage' ]
+            });
+
+            // *** FIX IS HERE: Set userAgent during page creation ***
+            const page = await browser.newPage({
+                 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' // Your UA String
+            });
+            // *******************************************************
+
+            console.log(`Navigating (Playwright) to ${url}...`);
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+            console.log(`Getting rendered content (Playwright) for ${url}...`);
+            const html = await page.content();
+            await page.close();
+            console.log(`Page closed for ${url}.`);
+
+            // --- JSDOM + Readability part ---
+            const doc = new JSDOM(html, { url });
+            const reader = new Readability(doc.window.document.cloneNode(true));
+            const article = reader.parse();
+
+            if (article && article.content) {
+                extractedContent = article.content; // Return HTML directly instead of converting to text
+                extractedTitle = article.title;
+                console.log(`Extraction successful via Playwright for ${url}.`);
+            } else {
+                console.warn(`Readability (Playwright) failed for ${url}, falling back to rendered body text.`);
+                const bodyHtml = doc.window.document.body ? doc.window.document.body.innerHTML : '';
+                extractedContent = bodyHtml || "";
+                extractedTitle = doc.window.document.title || '';
+                if (extractedContent === null) extractedContent = "";
+            }
+            // --- End JSDOM part ---
+
+        } catch (playwrightError) {
+            console.error(`Playwright extraction failed for ${url} (even with path set):`, playwrightError.message);
+            finalError = playwrightError;
+            if (browser) { try { await browser.close(); browser = null; } catch (e) { console.error("Error closing browser post-Playwright error:", e); } }
+        } finally {
+            if (browser) {
+                try {
+                    console.log(`Closing Playwright browser instance for ${url}...`);
+                    await browser.close();
+                    browser = null;
+                    console.log(`Playwright browser closed for ${url}.`);
+                } catch (e) { console.error("Error closing Playwright browser in finally:", e); }
+            }
+        }
+    } else {
+        console.warn("PUPPETEER_EXECUTABLE_PATH not set. Skipping Playwright attempt...");
+    }
+
+    // --- Attempt 2: Axios Fallback Method (remains the same) ---
+    if (extractedContent === null) {
+        console.log(`Attempting Axios fallback extraction for ${url}...`);
+        try {
+            // ... Axios logic ...
+            const response = await axios.get(url, { /* ... */ });
+            const html = response.data;
+            const doc = new JSDOM(html, { url });
+            const reader = new Readability(doc.window.document.cloneNode(true));
+            const article = reader.parse();
+
+            if (article && article.content) {
+                 extractedContent = article.content; // Return HTML directly instead of converting to text
+                 extractedTitle = article.title;
+                 console.log(`Extraction successful via Axios fallback for ${url}.`);
+                 finalError = null;
+            } else {
+                 console.warn(`Readability (Axios fallback) failed for ${url}, trying body text.`);
+                 const bodyHtml = doc.window.document.body ? doc.window.document.body.innerHTML : '';
+                 extractedContent = bodyHtml || "";
+                 extractedTitle = doc.window.document.title || '';
+                 finalError = null;
+                 if (extractedContent === null) extractedContent = "";
+             }
+        } catch (axiosError) {
+            console.error(`Axios fallback extraction also failed for ${url}:`, axiosError.message);
+            if (!finalError) finalError = axiosError;
+        }
+    }
+
+    // --- Final Response with Image Processing ---
+    if (extractedContent !== null) {
+        let uploadedImages = [];
+
+        // Process images if requested and noteId is provided
+        if (includeImages && noteId) {
+            try {
+                console.log(`Extracting images from ${url} for note ${noteId}`);
+
+                // Extract image URLs from the content
+                const imageUrls = extractImageUrls(extractedContent, url);
+                console.log(`Found ${imageUrls.length} images in content`);
+
+                if (imageUrls.length > 0) {
+                    // Process and upload images
+                    uploadedImages = await processAndUploadImages(imageUrls, noteId);
+                    console.log(`Successfully uploaded ${uploadedImages.length} images`);
+                }
+            } catch (imageError) {
+                console.error(`Failed to process images for ${url}:`, imageError.message);
+                // Don't fail the entire request if image processing fails
+            }
+        }
+
+        res.json({
+            title: (extractedTitle || '').trim(),
+            content: extractedContent.trim(),
+            images: uploadedImages
+        });
+    } else {
+        // ... Error reporting logic using finalError ...
+        console.error(`All extraction methods failed for ${url}. Reporting last error.`);
+        let errorMessage = 'Failed to extract content after trying multiple methods.';
+        let statusCode = 500;
+        const detailedErrorMsg = finalError ? finalError.message : 'Unknown extraction failure.';
+        // ... map finalError to statusCode ...
+        res.status(statusCode).json({ message: errorMessage, error: detailedErrorMsg });
+    }
+});
+
+// Helper to decode HTML entities
+const decodeHtml = (text) => {
+    if (!text) return text;
+    try {
+        const dom = new JSDOM(text);
+        return dom.window.document.body.textContent;
+    } catch (e) {
+        return text;
+    }
+};
+
+// --- Goodreads Extraction Endpoint ---
+router.post('/extract-goodreads', async (req, res) => {
+    const { url } = req.body;
+
+    if (!url) { return res.status(400).json({ message: 'URL is required' }); }
+    try { new URL(url); } catch (_) { return res.status(400).json({ message: 'Invalid URL format provided.' }); }
+
+    try {
+        // Check if book already exists
+        const userId = req.user?.id || 1;
+        console.log('[extract-goodreads] extractExternalId type:', typeof extractExternalId);
+        const externalId = extractExternalId(url);
+
+        if (externalId) {
+            const existingBook = await UserObject.findByExternalId(userId, externalId);
+            if (existingBook) {
+                console.log(`Book already exists (external_id: ${externalId}), skipping extraction`);
+                // Return data in the same format as a new extraction
+                const source = existingBook.metadata?.source || {};
+                return res.json({
+                    title: existingBook.title,
+                    author: source.author,
+                    cover: existingBook.thumbnail_url || source.cover_url,
+                    url: existingBook.source_url,
+                    rating: source.rating,
+                    publishedYear: source.year,
+                    total_pages: source.page_count,
+                    description: source.description,
+                    exists: true // Flag to indicate this was from cache
+                });
+            }
+        }
+
+        console.log(`Attempting Goodreads extraction (OGS) for ${url}...`);
+
+        const { result } = await ogs({ url });
+
+        if (!result.success) {
+            throw new Error('Open Graph Scraper failed to fetch data.');
+        }
+
+        const data = {
+            title: decodeHtml(result.ogTitle),
+            description: decodeHtml(result.ogDescription),
+            cover: result.ogImage?.[0]?.url,
+            url: result.ogUrl || url
+        };
+
+        // Extract specifics from JSON-LD
+        if (result.jsonLD) {
+            // Goodreads sometimes returns an array of JSON-LD objects
+            const ld = Array.isArray(result.jsonLD) ? result.jsonLD.find(item => item['@type'] === 'Book') || result.jsonLD[0] : result.jsonLD;
+
+            if (ld) {
+                // Prefer JSON-LD data if available
+                if (ld.name) data.title = decodeHtml(ld.name);
+                if (ld.image) data.cover = ld.image;
+
+                if (ld.author) {
+                    const authors = Array.isArray(ld.author) ? ld.author : [ld.author];
+                    data.author = decodeHtml(authors.map(a => a.name).join(', '));
+                }
+
+                if (ld.aggregateRating) {
+                    data.rating = ld.aggregateRating.ratingValue;
+                }
+
+                if (ld.numberOfPages) {
+                    data.pages = `${ld.numberOfPages} pages`;
+                    data.total_pages = parseInt(ld.numberOfPages, 10);
+                }
+
+                if (ld.datePublished) {
+                    data.publishedDate = ld.datePublished;
+                    const match = ld.datePublished.match(/\d{4}/);
+                    if (match) {
+                        data.publishedYear = match[0];
+                    }
+                }
+            }
+        }
+
+        // --- Enhancement: Try to fetch full description and details if OGS result is truncated ---
+        try {
+            // Only attempt if we have a URL and (description is short OR we are missing published year)
+            if (url && ((!data.description || data.description.endsWith('…') || data.description.endsWith('...')) || !data.publishedYear)) {
+                console.log('Attempting to fetch full details via Axios...');
+                const response = await axios.get(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.5'
+                    },
+                    timeout: 5000 // Short timeout to not delay response too much
+                });
+
+                const dom = new JSDOM(response.data);
+                const doc = dom.window.document;
+
+                // Goodreads selectors for description
+                // 1. New design: div[data-testid="description"]
+                // 2. Old design: #description
+                const descContainer = doc.querySelector('div[data-testid="description"]') || doc.querySelector('#description');
+
+                if (descContainer) {
+                    // Check for hidden span (common in older Goodreads layout for "Show more")
+                    const hiddenSpan = descContainer.querySelector('span[style*="display:none"]');
+                    if (hiddenSpan) {
+                        data.description = decodeHtml(hiddenSpan.textContent.trim());
+                    } else {
+                        // Newer layout or no hidden span
+                        data.description = decodeHtml(descContainer.textContent.trim());
+                    }
+                    console.log('Successfully extracted full description via Axios/JSDOM');
+                }
+
+                // Try to extract published year if missing
+                if (!data.publishedYear) {
+                    // New design: p[data-testid="publicationInfo"]
+                    const pubInfo = doc.querySelector('p[data-testid="publicationInfo"]');
+                    if (pubInfo) {
+                        const match = pubInfo.textContent.match(/\d{4}/);
+                        if (match) data.publishedYear = match[0];
+                    } else {
+                        // Old design: look for "First published" or "Published" in details
+                        // Often in #details .row or similar
+                        const details = doc.body.textContent; // Fallback to searching body text if specific selector fails
+                        const pubMatch = details.match(/(?:First published|Published)\s+(?:in\s+)?([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?,?\s+)?(\d{4})/i);
+                        if (pubMatch) {
+                             // The year is usually the last capturing group or the one that looks like a year
+                             // Group 2 is likely the year in the regex above
+                             data.publishedYear = pubMatch[2];
+                        }
+                    }
+                }
+            }
+        } catch (enhancementError) {
+            // Silently fail enhancement and stick with OGS data
+            console.warn('Full description extraction failed (using OGS fallback):', enhancementError.message);
+        }
+        // --- End Enhancement ---
+
+        // --- Playwright Fallback: OGS often returns empty when Goodreads/Cloudflare blocks the bot UA.
+        //     If we still don't have a title, render the page in chromium and parse JSON-LD + DOM. ---
+        if (!data.title) {
+            const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+            if (chromiumPath) {
+                let browser = null;
+                try {
+                    console.log(`[extract-goodreads] No title from OGS, attempting Playwright fallback for ${url}...`);
+                    browser = await chromium.launch({
+                        headless: true,
+                        executablePath: chromiumPath,
+                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                    });
+                    const page = await browser.newPage({
+                        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+                    });
+                    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+                    const html = await page.content();
+                    await page.close();
+
+                    const dom = new JSDOM(html);
+                    const doc = dom.window.document;
+
+                    // Walk all JSON-LD script blocks and pick out Book metadata
+                    const ldScripts = doc.querySelectorAll('script[type="application/ld+json"]');
+                    for (const script of ldScripts) {
+                        try {
+                            const parsed = JSON.parse(script.textContent);
+                            const ld = Array.isArray(parsed)
+                                ? parsed.find(item => item && item['@type'] === 'Book') || parsed[0]
+                                : (parsed && (parsed['@type'] === 'Book' ? parsed : parsed));
+                            if (!ld) continue;
+
+                            if (ld.name && !data.title) data.title = decodeHtml(ld.name);
+                            if (ld.image && !data.cover) data.cover = Array.isArray(ld.image) ? ld.image[0] : ld.image;
+                            if (ld.author && !data.author) {
+                                const authors = Array.isArray(ld.author) ? ld.author : [ld.author];
+                                data.author = decodeHtml(authors.map(a => typeof a === 'string' ? a : a.name).filter(Boolean).join(', '));
+                            }
+                            if (ld.aggregateRating && !data.rating) {
+                                data.rating = ld.aggregateRating.ratingValue;
+                            }
+                            if (ld.numberOfPages && !data.total_pages) {
+                                data.pages = `${ld.numberOfPages} pages`;
+                                data.total_pages = parseInt(ld.numberOfPages, 10);
+                            }
+                            if (ld.datePublished && !data.publishedYear) {
+                                data.publishedDate = ld.datePublished;
+                                const match = String(ld.datePublished).match(/\d{4}/);
+                                if (match) data.publishedYear = match[0];
+                            }
+                            if (ld.description && !data.description) {
+                                data.description = decodeHtml(ld.description);
+                            }
+                        } catch (parseErr) {
+                            // Skip malformed JSON-LD blocks
+                        }
+                    }
+
+                    // OG meta tags as a second source
+                    if (!data.title) {
+                        const ogTitle = doc.querySelector('meta[property="og:title"]');
+                        if (ogTitle) data.title = decodeHtml(ogTitle.getAttribute('content') || '');
+                    }
+                    if (!data.cover) {
+                        const ogImage = doc.querySelector('meta[property="og:image"]');
+                        if (ogImage) data.cover = ogImage.getAttribute('content');
+                    }
+                    if (!data.description) {
+                        const ogDesc = doc.querySelector('meta[property="og:description"]');
+                        if (ogDesc) data.description = decodeHtml(ogDesc.getAttribute('content') || '');
+                    }
+
+                    // DOM selectors for the modern (React) Goodreads layout
+                    if (!data.title) {
+                        const titleEl = doc.querySelector('h1[data-testid="bookTitle"]')
+                            || doc.querySelector('h1.Text__title1')
+                            || doc.querySelector('#bookTitle');
+                        if (titleEl) data.title = decodeHtml(titleEl.textContent.trim());
+                    }
+                    if (!data.author) {
+                        const authorEl = doc.querySelector('span[data-testid="name"]')
+                            || doc.querySelector('a.ContributorLink')
+                            || doc.querySelector('a.authorName span');
+                        if (authorEl) data.author = decodeHtml(authorEl.textContent.trim());
+                    }
+                    if (!data.description) {
+                        const descContainer = doc.querySelector('div[data-testid="description"]') || doc.querySelector('#description');
+                        if (descContainer) {
+                            const hiddenSpan = descContainer.querySelector('span[style*="display:none"]');
+                            data.description = decodeHtml((hiddenSpan || descContainer).textContent.trim());
+                        }
+                    }
+                    if (!data.publishedYear) {
+                        const pubInfo = doc.querySelector('p[data-testid="publicationInfo"]');
+                        if (pubInfo) {
+                            const match = pubInfo.textContent.match(/\d{4}/);
+                            if (match) data.publishedYear = match[0];
+                        }
+                    }
+                    if (!data.cover) {
+                        const coverImg = doc.querySelector('img.ResponsiveImage')
+                            || doc.querySelector('div.BookCover img')
+                            || doc.querySelector('img#coverImage');
+                        if (coverImg) data.cover = coverImg.getAttribute('src');
+                    }
+                    if (!data.total_pages) {
+                        const pagesEl = doc.querySelector('p[data-testid="pagesFormat"]');
+                        if (pagesEl) {
+                            const match = pagesEl.textContent.match(/(\d+)\s*pages/i);
+                            if (match) {
+                                data.total_pages = parseInt(match[1], 10);
+                                data.pages = `${match[1]} pages`;
+                            }
+                        }
+                    }
+
+                    console.log(`[extract-goodreads] Playwright fallback result: title="${data.title}", author="${data.author}", year=${data.publishedYear}`);
+                } catch (playwrightError) {
+                    console.error(`[extract-goodreads] Playwright fallback failed for ${url}:`, playwrightError.message);
+                } finally {
+                    if (browser) {
+                        try { await browser.close(); } catch (e) { /* ignore */ }
+                    }
+                }
+            } else {
+                console.warn('[extract-goodreads] PUPPETEER_EXECUTABLE_PATH not set, skipping Playwright fallback.');
+            }
+        }
+        // --- End Playwright Fallback ---
+
+        // Truncate description to 300 characters
+        if (data.description && data.description.length > 300) {
+            data.description = data.description.substring(0, 300) + '...';
+        }
+
+        console.log('Goodreads extraction result:', data);
+
+        if (!data.title) {
+            throw new Error('Could not extract book title.');
+        }
+
+        res.json(data);
+
+    } catch (error) {
+        console.error(`Goodreads extraction failed for ${url}:`, error.message);
+        res.status(500).json({ message: 'Goodreads extraction failed', error: error.message });
+    }
+});
+
+// --- TMDB URL Extraction Endpoint (Movies & TV Shows) ---
+router.post('/extract-tmdb', async (req, res) => {
+    const { url } = req.body;
+
+    if (!url) { return res.status(400).json({ message: 'URL is required' }); }
+    try { new URL(url); } catch (_) { return res.status(400).json({ message: 'Invalid URL format provided.' }); }
+
+    try {
+        console.log(`[extract-tmdb] Attempting TMDB extraction for ${url}...`);
+
+        const tmdbMatch = url.match(/\/(movie|tv)\/(\d+)/);
+        if (!tmdbMatch) {
+            throw new Error('Could not extract TMDB ID from URL. Please provide a valid TMDB movie or TV URL.');
+        }
+        const [, mediaType, tmdbId] = tmdbMatch;
+        console.log(`[extract-tmdb] Extracted type: ${mediaType}, ID: ${tmdbId}`);
+
+        const TMDB_API_KEY = process.env.TMDB_API_KEY;
+
+        if (mediaType === 'movie') {
+            const detailsResponse = await axios.get(`https://api.themoviedb.org/3/movie/${tmdbId}`, {
+                params: { api_key: TMDB_API_KEY, append_to_response: 'credits' }
+            });
+
+            const movie = detailsResponse.data;
+            console.log(`[extract-tmdb] Got movie details:`, movie.title);
+
+            let director = null;
+            if (movie.credits && movie.credits.crew) {
+                const directors = movie.credits.crew.filter(member => member.job === 'Director');
+                if (directors.length > 0) {
+                    director = directors.map(d => d.name).join(', ');
+                }
+            }
+
+            const data = {
+                type: 'movie',
+                title: movie.title,
+                poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+                url: url,
+                year: movie.release_date ? movie.release_date.substring(0, 4) : null,
+                rating: movie.vote_average || null,
+                director: director
+            };
+
+            console.log('[extract-tmdb] Movie extraction result:', data);
+
+            if (!data.title) { throw new Error('Could not extract movie title.'); }
+            return res.json(data);
+
+        } else {
+            const detailsResponse = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbId}`, {
+                params: { api_key: TMDB_API_KEY }
+            });
+
+            const show = detailsResponse.data;
+            console.log(`[extract-tmdb] Got show details:`, show.name);
+
+            const data = {
+                type: 'show',
+                title: show.name,
+                poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                url: url,
+                startYear: show.first_air_date ? show.first_air_date.substring(0, 4) : null,
+                endYear: show.status === 'Ended' && show.last_air_date ? show.last_air_date.substring(0, 4) : null,
+                rating: show.vote_average || null,
+                seasons: show.number_of_seasons || null,
+                episodes: show.number_of_episodes || null,
+                creator: show.created_by && show.created_by.length > 0
+                    ? show.created_by.map(c => c.name).join(', ')
+                    : null
+            };
+
+            console.log('[extract-tmdb] TV show extraction result:', data);
+
+            if (!data.title) { throw new Error('Could not extract TV show title.'); }
+            return res.json(data);
+        }
+
+    } catch (error) {
+        console.error(`[extract-tmdb] TMDB extraction failed for ${url}:`, error);
+        res.status(500).json({
+            message: 'TMDB extraction failed',
+            error: error?.message || error?.toString() || 'Unknown error'
+        });
+    }
+});
+
+// Playwright fallback for IMDb: render the page and parse its JSON-LD.
+// Used when the TMDB API path fails (e.g. invalid/rate-limited key).
+async function extractImdbViaPlaywright(url) {
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (!chromiumPath) {
+        throw new Error('PUPPETEER_EXECUTABLE_PATH not set; Playwright fallback unavailable.');
+    }
+    let browser = null;
+    try {
+        browser = await chromium.launch({
+            headless: true,
+            executablePath: chromiumPath,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+        const page = await browser.newPage({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
+        });
+        await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+        const html = await page.content();
+        await page.close();
+
+        const dom = new JSDOM(html);
+        const doc = dom.window.document;
+        const data = { url };
+
+        // IMDb embeds rich Movie/TVSeries schema in <script type="application/ld+json">.
+        const ldScripts = doc.querySelectorAll('script[type="application/ld+json"]');
+        for (const script of ldScripts) {
+            try {
+                const parsed = JSON.parse(script.textContent);
+                const items = Array.isArray(parsed) ? parsed : [parsed];
+                const ld = items.find(item => item && (item['@type'] === 'Movie' || item['@type'] === 'TVSeries'));
+                if (!ld) continue;
+
+                data.type = ld['@type'] === 'Movie' ? 'movie' : 'show';
+                if (ld.name) data.title = decodeHtml(ld.name);
+                if (ld.image) data.poster = Array.isArray(ld.image) ? ld.image[0] : ld.image;
+                if (ld.aggregateRating && ld.aggregateRating.ratingValue !== undefined) {
+                    const r = Number(ld.aggregateRating.ratingValue);
+                    if (!Number.isNaN(r)) data.rating = r;
+                }
+                if (ld.datePublished) {
+                    const yearMatch = String(ld.datePublished).match(/\d{4}/);
+                    if (yearMatch) {
+                        if (data.type === 'movie') data.year = yearMatch[0];
+                        else data.startYear = yearMatch[0];
+                    }
+                }
+                if (data.type === 'movie' && ld.director) {
+                    const directors = Array.isArray(ld.director) ? ld.director : [ld.director];
+                    data.director = directors
+                        .map(d => typeof d === 'string' ? d : d?.name)
+                        .filter(Boolean)
+                        .join(', ');
+                }
+                if (data.type === 'show' && ld.creator) {
+                    const creators = Array.isArray(ld.creator) ? ld.creator : [ld.creator];
+                    data.creator = creators
+                        .map(c => typeof c === 'string' ? c : c?.name)
+                        .filter(Boolean)
+                        .join(', ');
+                }
+                break;
+            } catch (parseErr) {
+                // Skip malformed JSON-LD block
+            }
+        }
+
+        // OG meta tags fill anything JSON-LD didn't cover.
+        if (!data.title) {
+            const ogTitle = doc.querySelector('meta[property="og:title"]');
+            if (ogTitle) data.title = decodeHtml(ogTitle.getAttribute('content') || '');
+        }
+        if (!data.poster) {
+            const ogImage = doc.querySelector('meta[property="og:image"]');
+            if (ogImage) data.poster = ogImage.getAttribute('content');
+        }
+
+        // Last-resort DOM selectors for IMDb's modern (React) layout.
+        if (!data.title) {
+            const titleEl = doc.querySelector('h1[data-testid="hero__pageTitle"] span')
+                || doc.querySelector('h1[data-testid="hero-title-block__title"]')
+                || doc.querySelector('h1.hero__primary-text');
+            if (titleEl) data.title = decodeHtml(titleEl.textContent.trim());
+        }
+
+        if (!data.type) {
+            const ogType = doc.querySelector('meta[property="og:type"]');
+            const t = ogType?.getAttribute('content');
+            data.type = (t === 'video.tv_show' || t === 'video.episode') ? 'show' : 'movie';
+        }
+
+        if (!data.title) {
+            throw new Error('Could not extract title from IMDb page.');
+        }
+        return data;
+    } finally {
+        if (browser) {
+            try { await browser.close(); } catch (e) { /* ignore */ }
+        }
+    }
+}
+
+// --- Unified IMDb Extraction Endpoint (Movies & TV Shows) ---
+router.post('/extract-imdb', async (req, res) => {
+    const { url } = req.body;
+
+    if (!url) { return res.status(400).json({ message: 'URL is required' }); }
+    try { new URL(url); } catch (_) { return res.status(400).json({ message: 'Invalid URL format provided.' }); }
+
+    console.log(`[extract-imdb] Attempting IMDb extraction for ${url}...`);
+
+    // Extract IMDb ID from URL
+    const imdbIdMatch = url.match(/title\/(tt\d+)/);
+    if (!imdbIdMatch) {
+        return res.status(400).json({ message: 'Could not extract IMDb ID from URL. Please provide a valid IMDb title URL.' });
+    }
+    const imdbId = imdbIdMatch[1];
+    console.log(`[extract-imdb] Extracted IMDb ID: ${imdbId}`);
+
+    // --- Attempt 1: TMDB API (fast, structured) ---
+    let tmdbError = null;
+    try {
+        const TMDB_API_KEY = process.env.TMDB_API_KEY;
+
+        const findResponse = await axios.get(`https://api.themoviedb.org/3/find/${imdbId}`, {
+            params: {
+                api_key: TMDB_API_KEY,
+                external_source: 'imdb_id'
+            }
+        });
+
+        const movieResults = findResponse.data.movie_results || [];
+        const tvResults = findResponse.data.tv_results || [];
+
+        if (movieResults.length > 0) {
+            const tmdbId = movieResults[0].id;
+            console.log(`[extract-imdb] Found movie with TMDB ID: ${tmdbId}`);
+
+            const detailsResponse = await axios.get(`https://api.themoviedb.org/3/movie/${tmdbId}`, {
+                params: { api_key: TMDB_API_KEY, append_to_response: 'credits' }
+            });
+            const movie = detailsResponse.data;
+
+            let director = null;
+            if (movie.credits && movie.credits.crew) {
+                const directors = movie.credits.crew.filter(member => member.job === 'Director');
+                if (directors.length > 0) {
+                    director = directors.map(d => d.name).join(', ');
+                }
+            }
+
+            const data = {
+                type: 'movie',
+                title: movie.title,
+                poster: movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : null,
+                url: url,
+                year: movie.release_date ? movie.release_date.substring(0, 4) : null,
+                rating: movie.vote_average || null,
+                director: director
+            };
+
+            if (!data.title) throw new Error('Could not extract movie title.');
+            console.log('[extract-imdb] TMDB movie result:', data);
+            return res.json(data);
+
+        } else if (tvResults.length > 0) {
+            const tmdbId = tvResults[0].id;
+            console.log(`[extract-imdb] Found TV show with TMDB ID: ${tmdbId}`);
+
+            const detailsResponse = await axios.get(`https://api.themoviedb.org/3/tv/${tmdbId}`, {
+                params: { api_key: TMDB_API_KEY }
+            });
+            const show = detailsResponse.data;
+
+            const data = {
+                type: 'show',
+                title: show.name,
+                poster: show.poster_path ? `https://image.tmdb.org/t/p/w500${show.poster_path}` : null,
+                url: url,
+                startYear: show.first_air_date ? show.first_air_date.substring(0, 4) : null,
+                endYear: show.status === 'Ended' && show.last_air_date ? show.last_air_date.substring(0, 4) : null,
+                rating: show.vote_average || null,
+                seasons: show.number_of_seasons || null,
+                episodes: show.number_of_episodes || null,
+                creator: show.created_by && show.created_by.length > 0
+                    ? show.created_by.map(c => c.name).join(', ')
+                    : null
+            };
+
+            if (!data.title) throw new Error('Could not extract TV show title.');
+            console.log('[extract-imdb] TMDB TV show result:', data);
+            return res.json(data);
+
+        } else {
+            throw new Error('No movie or TV show found in TMDB for this IMDb ID');
+        }
+    } catch (error) {
+        tmdbError = error;
+        const apiMsg = error.response?.data?.status_message;
+        console.warn(`[extract-imdb] TMDB path failed: ${apiMsg || error.message}. Falling back to Playwright.`);
+    }
+
+    // --- Attempt 2: Playwright fallback (scrape IMDb directly) ---
+    try {
+        const data = await extractImdbViaPlaywright(url);
+        console.log('[extract-imdb] Playwright fallback result:', data);
+        return res.json(data);
+    } catch (playwrightError) {
+        console.error(`[extract-imdb] Playwright fallback failed for ${url}:`, playwrightError.message);
+        const reported = tmdbError || playwrightError;
+        return res.status(500).json({
+            message: 'IMDb extraction failed',
+            error: reported?.response?.data?.status_message || reported?.message || 'Unknown error'
+        });
+    }
+});
+
+module.exports = router;
