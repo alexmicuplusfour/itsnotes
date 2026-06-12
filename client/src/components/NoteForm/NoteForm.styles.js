@@ -260,7 +260,8 @@ export const TextareaWrapper = styled.div`
 
 export const ContentInput = styled.div`
   // <-- Change to div
-  font-size: 16px;
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
+  font-size: var(--note-body-font-size, 16px);
   margin: 0;
   padding: 0; // Keep padding, adjust if necessary
   width: 100%;
@@ -309,7 +310,7 @@ export const ContentInput = styled.div`
     max-height: calc(100vh - 60px);
     margin: 0;
     padding: 0 0 260px 0;
-    font-size: 16px;
+    font-size: var(--note-body-font-size, 16px);
     overflow-y: hidden; /* Remove scrolling - let TiptapEditor handle it */
     scroll-padding-bottom: 10px;
     flex: 1;
@@ -526,7 +527,8 @@ export const HighlightContainer = styled.div`
   min-height: 120px;
   background-color: transparent;
   color: var(--text-color);
-  font-size: 16px;
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
+  font-size: var(--note-body-font-size, 16px);
   line-height: 1.4; /* Match Tiptap's base line-height */
   padding: 0px 0; /* Adjust padding as needed */
   white-space: pre-wrap;

@@ -95,8 +95,77 @@
   font-display: swap;
 }
 
+/* Source Serif 4 Font Definitions */
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-MediumItalic.ttf') format('truetype');
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-SemiBoldItalic.ttf') format('truetype');
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Source Serif 4';
+  src: url('./assets/fonts/SourceSerif4-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 
 :root {
+  /* Note body typography variables (controlled from Settings) */
+  --note-body-font-family: 'Product Sans', Arial, sans-serif;
+  --note-body-font-size: 16px;
+  --note-card-body-font-size: 15px;
   /* Common variables */
   --nav-height: 64px;
   --accent-color: #23a286; /* Google blue */

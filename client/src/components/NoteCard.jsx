@@ -185,7 +185,8 @@ const ContentWrapper = styled.div`
 `;
 
 const Content = styled.div`
-  font-size: 15px;
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
+  font-size: var(--note-card-body-font-size, 15px);
   white-space: pre-wrap;
   overflow-wrap: break-word;
   overflow: hidden;

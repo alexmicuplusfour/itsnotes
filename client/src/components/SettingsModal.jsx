@@ -591,6 +591,10 @@ const SettingsModal = ({ isOpen, onClose }) => {
     setPageBackgroundEnabled,
     pickBackground,
     setAiEnabled,
+    notesFontFamily,
+    notesBodyFontSize,
+    setNotesFontFamily,
+    setNotesBodyFontSize,
   } = useUIPreferences();
 
   // Auto-tagging context
@@ -1375,12 +1379,69 @@ const SettingsModal = ({ isOpen, onClose }) => {
                       <SectionTitle>Note Editor</SectionTitle>
                       <OptionRow>
                         <Label style={{ marginBottom: 0 }}>Fullscreen Note Form (Desktop)</Label>
-                        <Switch 
+                        <Switch
                           id="fullscreen-noteform-toggle"
                           checked={fullscreenNoteForm}
                           onChange={toggleFullscreenNoteForm}
                         />
                       </OptionRow>
+                    </SectionContainer>
+
+                    <SectionContainer>
+                      <SectionTitle>Typography</SectionTitle>
+                      <OptionRow>
+                        <Label style={{ marginBottom: 0 }}>Font Family</Label>
+                        <ModeSelector>
+                          <ModeButton
+                            $active={notesFontFamily === 'sans'}
+                            onClick={() => setNotesFontFamily('sans')}
+                            title="Sans-serif (Product Sans)"
+                          >
+                            {notesFontFamily === 'sans' && <Icon name="check" size={16} strokeWidth="2.5"/>}
+                            <span style={{ fontFamily: "'Product Sans', Arial, sans-serif" }}>Sans</span>
+                          </ModeButton>
+                          <ModeButton
+                            $active={notesFontFamily === 'serif'}
+                            onClick={() => setNotesFontFamily('serif')}
+                            title="Serif (Source Serif 4)"
+                          >
+                            {notesFontFamily === 'serif' && <Icon name="check" size={16} strokeWidth="2.5"/>}
+                            <span style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>Serif</span>
+                          </ModeButton>
+                        </ModeSelector>
+                      </OptionRow>
+                      <OptionRow>
+                        <Label style={{ marginBottom: 0 }}>Body Font Size</Label>
+                        <ModeSelector>
+                          <ModeButton
+                            $active={notesBodyFontSize === 's'}
+                            onClick={() => setNotesBodyFontSize('s')}
+                            title="Small"
+                          >
+                            {notesBodyFontSize === 's' && <Icon name="check" size={16} strokeWidth="2.5"/>}
+                            <span style={{ fontSize: '12px' }}>Small</span>
+                          </ModeButton>
+                          <ModeButton
+                            $active={notesBodyFontSize === 'm'}
+                            onClick={() => setNotesBodyFontSize('m')}
+                            title="Medium (default)"
+                          >
+                            {notesBodyFontSize === 'm' && <Icon name="check" size={16} strokeWidth="2.5"/>}
+                            <span style={{ fontSize: '14px' }}>Medium</span>
+                          </ModeButton>
+                          <ModeButton
+                            $active={notesBodyFontSize === 'l'}
+                            onClick={() => setNotesBodyFontSize('l')}
+                            title="Large"
+                          >
+                            {notesBodyFontSize === 'l' && <Icon name="check" size={16} strokeWidth="2.5"/>}
+                            <span style={{ fontSize: '16px' }}>Large</span>
+                          </ModeButton>
+                        </ModeSelector>
+                      </OptionRow>
+                      <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
+                        Applies to note body in the editor and note cards.
+                      </p>
                     </SectionContainer>
 
                     <SectionContainer>

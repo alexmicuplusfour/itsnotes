@@ -55,8 +55,8 @@ const EditorContainer = styled.div`
     min-height: 100px;
     outline: none;
     padding: 0;
-    font-family: inherit;
-    font-size: 16px;
+    font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
+    font-size: var(--note-body-font-size, 16px);
     color: var(--text-color, inherit);
     line-height: 1.4;
     width: 100%;

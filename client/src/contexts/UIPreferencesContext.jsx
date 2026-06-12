@@ -67,6 +67,46 @@ export const UIPreferencesProvider = ({ children }) => {
     localStorage.setItem('aiEnabled', String(enabled));
   }, []);
 
+  // Note body typography: family (sans|serif) and size (s|m|l)
+  const [notesFontFamily, setNotesFontFamilyState] = useState(() => {
+    const saved = localStorage.getItem('notesFontFamily');
+    return saved === 'serif' ? 'serif' : 'sans';
+  });
+  const [notesBodyFontSize, setNotesBodyFontSizeState] = useState(() => {
+    const saved = localStorage.getItem('notesBodyFontSize');
+    return ['s', 'm', 'l'].includes(saved) ? saved : 'm';
+  });
+
+  const setNotesFontFamily = useCallback((family) => {
+    const next = family === 'serif' ? 'serif' : 'sans';
+    setNotesFontFamilyState(next);
+    localStorage.setItem('notesFontFamily', next);
+  }, []);
+
+  const setNotesBodyFontSize = useCallback((size) => {
+    const next = ['s', 'm', 'l'].includes(size) ? size : 'm';
+    setNotesBodyFontSizeState(next);
+    localStorage.setItem('notesBodyFontSize', next);
+  }, []);
+
+  // Apply typography CSS variables to :root
+  useEffect(() => {
+    const root = document.documentElement;
+    const family = notesFontFamily === 'serif'
+      ? "'Source Serif 4', Georgia, 'Times New Roman', serif"
+      : "'Product Sans', Arial, sans-serif";
+    root.style.setProperty('--note-body-font-family', family);
+
+    const sizeMap = {
+      s: { form: '14px', card: '13px' },
+      m: { form: '16px', card: '15px' },
+      l: { form: '18px', card: '17px' },
+    };
+    const sizes = sizeMap[notesBodyFontSize] || sizeMap.m;
+    root.style.setProperty('--note-body-font-size', sizes.form);
+    root.style.setProperty('--note-card-body-font-size', sizes.card);
+  }, [notesFontFamily, notesBodyFontSize]);
+
   // Page background
   const [pageBackgroundEnabled, _setPageBackgroundEnabled] = useState(false);
   const [activeBackground, setActiveBackground] = useState(() => {
@@ -277,6 +317,8 @@ export const UIPreferencesProvider = ({ children }) => {
     colorLabels,
     pageBackgroundEnabled,
     aiEnabled,
+    notesFontFamily,
+    notesBodyFontSize,
 
     // Functions
     pinFolder,
@@ -296,6 +338,8 @@ export const UIPreferencesProvider = ({ children }) => {
     setPageBackgroundEnabled,
     pickBackground,
     setAiEnabled,
+    setNotesFontFamily,
+    setNotesBodyFontSize,
   }), [
     // State dependencies
     savedSearches,
@@ -308,6 +352,8 @@ export const UIPreferencesProvider = ({ children }) => {
     colorLabels,
     pageBackgroundEnabled,
     aiEnabled,
+    notesFontFamily,
+    notesBodyFontSize,
 
     // Function dependencies
     pinFolder,
@@ -327,6 +373,8 @@ export const UIPreferencesProvider = ({ children }) => {
     setPageBackgroundEnabled,
     pickBackground,
     setAiEnabled,
+    setNotesFontFamily,
+    setNotesBodyFontSize,
   ]);
 
   // --- Render Provider ---
