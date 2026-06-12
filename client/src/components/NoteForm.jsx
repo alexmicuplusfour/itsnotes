@@ -1285,7 +1285,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       // Prevent saving if the note has been trashed/deleted
       // Check both the note prop and the current state from context
       const currentNoteFromContext = notes?.find(n => n.id === note?.id);
-      if (note?.is_deleted === true || currentNoteFromContext?.is_deleted === true || isBeingTrashed) {
+      if (note?.is_deleted === true || currentNoteFromContext?.is_deleted === true || isBeingTrashed || isBeingTrashedRef.current) {
         console.log(`[saveNoteIfNeeded] Aborted: Note ${note?.id} has been trashed/deleted or is being trashed.`);
         return;
       }
