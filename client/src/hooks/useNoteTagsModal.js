@@ -90,7 +90,11 @@ export const useNoteTagsModal = ({
 }) => {
   // --- State ---
   const [showTagsModal, setShowTagsModal] = useState(false);
-  const [noteTags, setNoteTags] = useState([]);
+  // Seed from note.tags (populated by the list/search endpoint) so the form
+  // renders the correct tag pills on the first paint instead of flashing empty
+  // while the per-note /tags fetch is in flight.
+  const [noteTags, setNoteTags] = useState(() => note?.tags || []);
+  const seededNoteIdRef = useRef(note?.id);
 
   // --- Refs ---
   const tagButtonRef = useRef(null);
@@ -201,7 +205,16 @@ export const useNoteTagsModal = ({
   // Fetch note tags when note ID changes with debouncing
   useEffect(() => {
     if (!note?.id) return;
-    
+
+    // When the note id changes, immediately seed from note.tags so the form
+    // doesn't flash empty while the fetch is in flight.
+    if (seededNoteIdRef.current !== note.id) {
+      seededNoteIdRef.current = note.id;
+      if (Array.isArray(note.tags)) {
+        setNoteTags(note.tags);
+      }
+    }
+
     // Debounce to prevent rapid consecutive calls during component mounting cycles
     const timeoutId = setTimeout(() => {
       const fetchTags = async () => {

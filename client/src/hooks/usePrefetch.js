@@ -92,8 +92,9 @@ export const usePrefetch = (cacheSettings) => {
     }
 
     try {
-      // Fetch full note content
-      const response = await api.get(`/notes/${noteId}`);
+      // Fetch full note content with tags/images/objects so the NoteForm can
+      // render the tag row on first paint without a follow-up /tags request.
+      const response = await api.get(`/notes/${noteId}`, { params: { includeDetails: true } });
       // GET /notes/:id returns note directly, not wrapped in { note: ... }
       const fetchedNote = response.data;
 
