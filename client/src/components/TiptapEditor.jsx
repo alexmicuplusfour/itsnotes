@@ -913,6 +913,11 @@ const TiptapEditor = forwardRef(({
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
 
+    // Fast path: while the user is typing, the editor owns the source of
+    // truth. Skip the comparison (and the expensive getCleanHTML) entirely
+    // — we'd bail at the !editor.isFocused check anyway.
+    if (editor.isFocused) return;
+
     const currentEditorHTML = getCleanHTML(editor);
     let incomingHTML = isContentEmpty(content) ? '' : content;
 
@@ -922,9 +927,8 @@ const TiptapEditor = forwardRef(({
       incomingHTML = incomingHTML.replace(/ {2,}/g, (match) => ' '.repeat(match.length));
     }
 
-    // Only sync if content actually changed and editor is not focused
-    // Skip if focused to avoid cursor jumps during typing
-    if (incomingHTML !== currentEditorHTML && !editor.isFocused) {
+    // Only sync if content actually changed (editor focus already handled above)
+    if (incomingHTML !== currentEditorHTML) {
       try {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = incomingHTML || '<p></p>';

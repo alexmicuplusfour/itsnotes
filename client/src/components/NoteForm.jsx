@@ -521,13 +521,45 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     showSearch
   });
 
-  // Ref to track content for internal logic without triggering re-renders
+  // Ref to track content for internal logic without triggering re-renders.
+  // The keystroke handler writes here synchronously so derived consumers
+  // (save logic, latestStateRef) always see the live editor HTML, even
+  // between debounced React state updates.
   const contentRef = useRef(content);
 
-  // Sync contentRef with content state
+  // Debounce timer for committing live editor HTML into the React `content`
+  // state. State changes drive expensive things (pill recompute, action-bar
+  // re-renders, etc.) that don't need to fire on every keystroke.
+  const contentDebounceTimerRef = useRef(null);
+  const CONTENT_DEBOUNCE_MS = 200;
+
+  // Commit content immediately to both the ref and React state. Use this
+  // for non-keystroke paths (note load, restore version, URL extraction)
+  // where downstream consumers should see the value right away.
+  const commitContent = useCallback((value) => {
+    if (contentDebounceTimerRef.current) {
+      clearTimeout(contentDebounceTimerRef.current);
+      contentDebounceTimerRef.current = null;
+    }
+    contentRef.current = value;
+    setContent(value);
+  }, []);
+
+  // Sync contentRef with content state — backstop in case state changes
+  // through a path that didn't update the ref directly.
   useEffect(() => {
     contentRef.current = content;
   }, [content]);
+
+  // Cleanup the debounce timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (contentDebounceTimerRef.current) {
+        clearTimeout(contentDebounceTimerRef.current);
+        contentDebounceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Consolidated effect to handle note changes and state resets
   useEffect(() => {
@@ -576,7 +608,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         console.log("Rendering shell note while waiting for real data");
         // Minimal UI for shell notes - keep everything empty until full data loads
         setTitle(""); // Reset title
-        setContent(""); // Reset content using standard setter
+        commitContent(""); // Reset content (immediate, bypass debounce)
         setColor("default");
         setIsPinned(false);
         setContentFullyLoaded(false); // Explicitly mark as not loaded
@@ -603,7 +635,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           console.log("[NoteForm useEffect] Converted content:", contentToSet);
         }
 
-        setContent(contentToSet);
+        commitContent(contentToSet);
         setColor(note?.color || "default");
         setIsPinned(note?.is_pinned || false);
 
@@ -836,7 +868,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         // Update local state with restored content
         setTitle(response.note.title || '');
         setColor(response.note.color || 'default');
-        setContent(response.note.content || '');
+        commitContent(response.note.content || '');
 
         // Update editor content (notes table stores HTML in 'content' field)
         if (editorInstance && response.note.content) {
@@ -865,7 +897,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       console.error("Error restoring note version:", error);
       showToast("Failed to restore version");
     }
-  }, [note?.id, editorInstance, fetchNoteVersions, setTitle, setColor, setContent, showToast]);
+  }, [note?.id, editorInstance, fetchNoteVersions, setTitle, setColor, commitContent, showToast]);
   // --- End Version History Modal Logic ---
 
   const { isTyping, setIsTyping } = useTyping(); // Use the context hook
@@ -917,7 +949,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   } = useNoteSaver(
     note, // initialNote
     title, // currentTitle
-    contentRef.current, // currentContent - Use ref to avoid re-creating hook on every keystroke
+    contentRef.current, // currentContent (fallback; getCurrentContent below is preferred)
     color, // currentColor
     images, // currentImages
     unsavedImageIds, // unsavedImageIds from useImageManager
@@ -930,6 +962,10 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       uploadTemporaryImages,
       clearUnsavedIds,
       resetImageState,
+      // Always read the freshest HTML from the ref at save time. The
+      // `content` React state lags behind by up to CONTENT_DEBOUNCE_MS,
+      // and useNoteSaver itself stashes the value param only on render.
+      getCurrentContent: () => contentRef.current,
       // Callbacks
       onSaveStart: () => console.log('[NoteForm] Save started'),
       onSaveSuccess: (savedNote) => console.log('[NoteForm] Save successful:', savedNote?.id),
@@ -946,12 +982,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Handle external content updates (e.g. from URL extraction)
   const handleExternalContentUpdate = useCallback((newContent) => {
     console.log('[NoteForm] External content update:', newContent);
-    setContent(newContent);
+    commitContent(newContent);
     // Force update the editor content via ref since we decoupled initialContent
     if (contentInputRef.current) {
       contentInputRef.current.setValue(newContent);
     }
-  }, []);
+  }, [commitContent]);
 
   // URL extraction hook - NOW placed after useNoteSaver to access markAsModified
   const {
@@ -1484,54 +1520,38 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // --- URL Extraction Logic ---
   // Now accepts extractType directly from the prompt buttons
 
-  // Handle textarea content change - with accurate height calculation and URL detection
+  // Handle textarea content change. The hot path: bump the synchronous ref
+  // and mark modified instantly, but debounce the React state update so
+  // pills, action bar, and other content-derived UI don't re-render on
+  // every keystroke. TiptapEditor already returns clean HTML (its own
+  // getCleanHTML runs before emitting), so the regex sanitize and the
+  // tempDiv innerText round-trip from the old hot path are gone.
   const handleContentChange = useCallback((newHtmlContent) => {
-    // --- Typing Detection Logic (Using Hook) ---
     handleTypingDetection();
-    // --- End Typing Detection Logic ---
 
-    // --- Existing Content Update & Other Logic ---
-    // Extract plain text from HTML for URL detection
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = newHtmlContent;
-    let newContent = tempDiv.innerText;
-    const prevContent = contentRef.current; // Use ref instead of state dependency
-
-    // Update content state using the hook's setter (keeping the HTML format)
-    if (newHtmlContent !== contentRef.current) {
-      // Sanitize HTML content before updating state to avoid nested tags 
-      let sanitizedHtml = newHtmlContent;
-
-      // Clean up HTML, but PRESERVE multiple empty paragraphs (line breaks)
-      if (typeof sanitizedHtml === 'string') {
-        // Fix nested paragraphs
-        sanitizedHtml = sanitizedHtml
-          .replace(/<p>(\s*)<p>/g, '<p>$1')
-          .replace(/<\/p>(\s*)<\/p>/g, '</p>$1')
-          .replace(/<p><p>/g, '<p>')
-          .replace(/<\/p><\/p>/g, '</p>');
-
-        // Replace empty paragraphs with class with simple ones
-        sanitizedHtml = sanitizedHtml.replace(/<p class="is-empty"><\/p>/g, '<p></p>');
-
-        // DO NOT normalize multiple empty paragraphs - they represent multiple line breaks
-      }
-
-      // console.log("[handleContentChange] Content changed, updating state:", sanitizedHtml);
-      setContent(sanitizedHtml);
+    if (newHtmlContent === contentRef.current) {
+      return; // no-op: editor emitted the same HTML we already have
     }
 
-    // --- URL Detection using hook ---
-    detectUrls(newContent, prevContent);
-    // --- End URL Detection ---
-
-    // Mark as modified if content changed from original
-    // Note: useNoteSaver's _shouldSave will compare against initialNote
-    // and skip saving if nothing actually changed
+    const prevContent = contentRef.current;
+    contentRef.current = newHtmlContent;
     markAsModified();
 
-    // --- End Existing Logic ---
-  }, [handleTypingDetection, detectUrls, markAsModified]); // Removed 'content' and 'note' dependencies
+    // URL detection only does work when there's a pending paste flag — the
+    // extraction prompt itself is disabled, so the regex scan is wasted on
+    // a normal keystroke. Gate it to keep the hot path tight.
+    if (pasteDetectedRef?.current) {
+      detectUrls(newHtmlContent, prevContent);
+    }
+
+    if (contentDebounceTimerRef.current) {
+      clearTimeout(contentDebounceTimerRef.current);
+    }
+    contentDebounceTimerRef.current = setTimeout(() => {
+      contentDebounceTimerRef.current = null;
+      setContent(contentRef.current);
+    }, CONTENT_DEBOUNCE_MS);
+  }, [handleTypingDetection, detectUrls, markAsModified, pasteDetectedRef]);
 
   // Debug: Track when hookHandleSelectionUpdate changes
   const hookHandleSelectionUpdateRef = useRef(hookHandleSelectionUpdate);
@@ -2222,8 +2242,15 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Track undo/redo state locally to avoid polling ref during render
   const [editorState, setEditorState] = useState({ canUndo: false, canRedo: false });
 
+  // TiptapEditor fires onTransaction (-> onStateChange) on every keystroke
+  // with a fresh `{canUndo, canRedo}` object. Bail when the booleans are
+  // unchanged so we don't re-render NoteForm per keystroke.
   const handleEditorStateChange = useCallback((newState) => {
-    setEditorState(newState);
+    setEditorState(prev => (
+      prev.canUndo === newState.canUndo && prev.canRedo === newState.canRedo
+        ? prev
+        : newState
+    ));
   }, []);
 
   // Use the attachment manager hook

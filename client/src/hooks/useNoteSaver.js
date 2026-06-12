@@ -24,35 +24,51 @@ export function useNoteSaver(
   options = {}
 ) {
   const {
-    // Callbacks
-    onSaveStart,
-    onSaveSuccess,
-    onSaveError,
-    onDeleteSuccess,
-    // Context functions
-    createNote,
-    updateNote,
-    deleteNote,
-    // Image manager functions
-    uploadTemporaryImages,
-    clearUnsavedIds,
-    resetImageState,
     // Auto-save interval (default to 2000ms)
     autoSaveInterval = 2000,
+    // Optional: lazy getter for content. When provided, saves read the
+    // latest editor HTML from this fn instead of the (possibly debounced)
+    // currentContent value param.
+    getCurrentContent,
   } = options;
+
+  // Stash callbacks/context fns in a ref. NoteForm passes inline arrows,
+  // so reading via deps would rebuild saveNote every render and churn the
+  // auto-save timer.
+  const callbacksRef = useRef(options);
+  callbacksRef.current = options;
 
   // Internal state - now managed entirely by the hook
   const [isModified, setIsModified] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastSaveTime, setLastSaveTime] = useState(Date.now());
+  // lastSaveTime lives in a ref — it's bumped on every modification (debounce)
+  // and after each save. Keeping it as state would trigger a re-render and
+  // tear down the auto-save interval on every keystroke.
+  const lastSaveTimeRef = useRef(Date.now());
+  // Mirror isModified so markAsModified can stay completely stable.
+  const isModifiedRef = useRef(false);
+  isModifiedRef.current = isModified;
   const autoSaveTimerRef = useRef(null);
+
+  // Stash hot-path props in refs so saveNote's identity doesn't change
+  // on every keystroke. Reading the latest values via refs at save-time
+  // keeps the auto-save interval effect stable.
+  const currentTitleRef = useRef(currentTitle);
+  const currentContentRef = useRef(currentContent);
+  const currentColorRef = useRef(currentColor);
+  const currentImagesRef = useRef(currentImages);
+  currentTitleRef.current = currentTitle;
+  currentContentRef.current = currentContent;
+  currentColorRef.current = currentColor;
+  currentImagesRef.current = currentImages;
   /**
    * Marks the note as modified
    */
   const markAsModified = useCallback(() => {
-    // console.log('[useNoteSaver] Note marked as modified');
-    setIsModified(true);
-    setLastSaveTime(Date.now()); // Reset save timer when marking as modified
+    // Bumping the ref on every keystroke is free; setIsModified only fires
+    // the first time per typing session, and the callback itself is stable.
+    lastSaveTimeRef.current = Date.now();
+    if (!isModifiedRef.current) setIsModified(true);
   }, []);
 
   /**
@@ -108,14 +124,14 @@ export function useNoteSaver(
     
     if (!shouldSave) {
       console.log('[useNoteSaver] No save needed');
-      
+
       // Reset modification state since content matches original
       // This prevents auto-save timer from getting stuck in a loop
-      if (isModified) {
+      if (isModifiedRef.current) {
         console.log('[useNoteSaver] Resetting isModified flag since no save needed');
         setIsModified(false);
       }
-      
+
       return { success: true, action: 'none' };
     }
 
@@ -123,7 +139,20 @@ export function useNoteSaver(
     if (isAutoSaving) {
       console.log('[useNoteSaver] Save already in progress, skipping');
       return { success: false, error: 'Save already in progress' };
-    }    try {
+    }
+    const {
+      onSaveStart,
+      onSaveSuccess,
+      onSaveError,
+      onDeleteSuccess,
+      createNote,
+      updateNote,
+      deleteNote,
+      uploadTemporaryImages,
+      clearUnsavedIds,
+      resetImageState,
+    } = callbacksRef.current;
+    try {
       // Set saving state
       setIsAutoSaving(true);
       if (onSaveStart) onSaveStart();
@@ -133,19 +162,19 @@ export function useNoteSaver(
       if (action === 'delete') {
         // Handle empty note deletion - only happens on forced saves now
         console.log('[useNoteSaver] Deleting empty existing note on forced save:', noteData.id);
-        
+
         await deleteNote(noteData.id, true); // suppressToast=true for empty note cleanup
         if (resetImageState) resetImageState();
         if (onDeleteSuccess) onDeleteSuccess();
-        
+
         // Reset modification state
         setIsModified(false);
-        
+
         result = { success: true, action: 'delete' };
       } else if (action === 'create') {
         // Create new note
         console.log('[useNoteSaver] Creating new note');
-        
+
         const response = await createNote({
           title: noteData.title,
           content: noteData.content,
@@ -155,12 +184,12 @@ export function useNoteSaver(
         if (response?.note?.id) {
           const newNoteId = response.note.id;
           console.log(`[useNoteSaver] New note created with ID: ${newNoteId}`);
-          
+
           // Upload temporary images
           if (uploadTemporaryImages) {
             await uploadTemporaryImages(newNoteId);
           }
-          
+
           result = { success: true, action: 'create', note: response.note };
         } else {
           throw new Error('Failed to get new note ID after creation');
@@ -168,13 +197,13 @@ export function useNoteSaver(
       } else if (action === 'update') {
         // Update existing note
         console.log('[useNoteSaver] Updating existing note:', noteData.id);
-        
+
         const response = await updateNote(noteData.id, {
           title: noteData.title,
           content: noteData.content,
           color: noteData.color,
         });
-        
+
         result = { success: true, action: 'update', note: response };
       }
 
@@ -182,13 +211,13 @@ export function useNoteSaver(
       if (result?.success && result.action !== 'none') {
         // Clear unsaved IDs
         if (clearUnsavedIds) clearUnsavedIds();
-        
+
         // Update save time
-        setLastSaveTime(Date.now());
-        
+        lastSaveTimeRef.current = Date.now();
+
         // Reset modification state
         setIsModified(false);
-        
+
         // Call success callback
         if (onSaveSuccess) onSaveSuccess(result.note);
       }
@@ -197,56 +226,50 @@ export function useNoteSaver(
 
     } catch (error) {
       console.error('[useNoteSaver] Save failed:', error);
-      
+
       // Handle "payload too large" error
       if (error.message && (
-        error.message.includes('payload too large') || 
+        error.message.includes('payload too large') ||
         error.message.includes('request entity too large')
       )) {
         console.warn('[useNoteSaver] Payload too large, attempting to remove unsaved images');
-        
+
         // TODO: Implement image removal logic if needed
         // This could be moved to the component level or handled via callback
       }
-      
+
       // Call error callback
       if (onSaveError) onSaveError(error);
         return { success: false, error: error.message };
     } finally {
       setIsAutoSaving(false);
     }
-  }, [
-    _shouldSave,
-    isAutoSaving,
-    onSaveStart,
-    onSaveSuccess,
-    onSaveError,
-    onDeleteSuccess,
-    createNote,
-    updateNote,
-    deleteNote,
-    uploadTemporaryImages,
-    clearUnsavedIds,
-    resetImageState,
-  ]);
+  }, [_shouldSave, isAutoSaving]);
 
   /**
    * Public save function
    */
   const saveNote = useCallback(async (options = {}) => {
     const { forceSave = false, ...overrides } = options;
-    
+
+    // Prefer the lazy getter (synced with the editor) over the possibly
+    // debounced currentContent value.
+    const getContent = callbacksRef.current?.getCurrentContent;
+    const liveContent = typeof getContent === 'function'
+      ? getContent()
+      : currentContentRef.current;
+
     const noteData = {
       id: initialNote?.id,
-      title: currentTitle,
-      content: currentContent,
-      color: currentColor,
-      images: currentImages,
+      title: currentTitleRef.current,
+      content: liveContent,
+      color: currentColorRef.current,
+      images: currentImagesRef.current,
       ...overrides
     };
-    
+
     return await _performSave(noteData, forceSave);
-  }, [_performSave, initialNote?.id, currentTitle, currentContent, currentColor, currentImages]);
+  }, [_performSave, initialNote?.id]);
 
   /**
    * Auto-save trigger function
@@ -266,8 +289,8 @@ export function useNoteSaver(
     const checkInterval = Math.max(Math.floor(autoSaveInterval / 2), 500);
     
     autoSaveTimerRef.current = setInterval(() => {
-      const timeSinceLastSave = Date.now() - lastSaveTime;
-      
+      const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
+
       if (timeSinceLastSave >= autoSaveInterval && isModified && !isAutoSaving) {
         console.log('[useNoteSaver] Auto-save conditions met, triggering save');
         triggerAutoSave();
@@ -280,14 +303,14 @@ export function useNoteSaver(
         autoSaveTimerRef.current = null;
       }
     };
-  }, [autoSaveInterval, lastSaveTime, isModified, isAutoSaving, triggerAutoSave]);
+  }, [autoSaveInterval, isModified, isAutoSaving, triggerAutoSave]);
 
   // Initial note change effect - reset state when note changes
   useEffect(() => {
     if (initialNote?.id !== undefined) {
       console.log('[useNoteSaver] Note changed, resetting state');
       // Reset save time when note changes
-      setLastSaveTime(Date.now());
+      lastSaveTimeRef.current = Date.now();
       // Reset modification state
       setIsModified(false);
     }
@@ -297,7 +320,9 @@ export function useNoteSaver(
     saveNote,
     isSaving: isAutoSaving,
     isModified,
-    lastSaveTimestamp: lastSaveTime,
+    // lastSaveTimestamp is read off the ref. Consumers can call it; if they
+    // ever depend on it for re-render, they'd need to convert it back to state.
+    lastSaveTimestamp: lastSaveTimeRef.current,
     markAsModified, // Function to mark the note as modified
   };
 }

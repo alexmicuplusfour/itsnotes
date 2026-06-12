@@ -194,6 +194,14 @@ const TiptapBubbleMenu = ({ editor }) => {
     return null;
   }
 
+  // Whether the editor has a non-empty selection — the only state in which
+  // the menu actually appears. During plain typing this is false on every
+  // keystroke, and we use it below to skip expensive editor.can()/isActive()
+  // probes whose results are unobservable to the user.
+  const { from, to } = editor.state.selection;
+  const hasSelection = from !== to;
+  const canSetDetails = hasSelection ? editor.can().setDetails() : true;
+
   return (
     <BubbleMenu 
       editor={editor}
@@ -353,7 +361,7 @@ const TiptapBubbleMenu = ({ editor }) => {
             onClick={handleButtonClick(() => editor.chain().focus().setDetails().run())}
             $active={editor.isActive('details')}
             title="Details"
-            disabled={!editor.can().setDetails()}
+            disabled={!canSetDetails}
           >
             <Icon name="tiptap_details" size={16} strokeWidth="2.5" />
           </MenuButton>

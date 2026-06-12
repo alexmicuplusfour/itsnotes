@@ -84,12 +84,24 @@ const TiptapNoteContent = React.memo(forwardRef(({
   initialScrollRatio = null, // Add initialScrollRatio prop
   scrollableRef = null, // Ref to external scrollable container (e.g., Form)
 }, ref) => {
-  // Use lazy initializer to process content BEFORE first render
-  // This ensures TiptapEditor receives properly formatted HTML from the start
+  // Use lazy initializer to process content BEFORE first render.
+  // This `content` state only updates from EXTERNAL paths (initialContent
+  // prop change, setValue from imperative ref, restore-version, URL
+  // extraction). When the editor itself is the source — i.e. user typing —
+  // we DON'T setState here, because Tiptap already owns the canonical
+  // state. Re-rendering this wrapper per keystroke would only feed a stale
+  // `content` prop back into TiptapEditor and re-run its sync effect for
+  // no benefit. The freshest HTML lives in `liveContentRef`.
   const [content, setContent] = useState(() => processInitialContent(initialContent));
+  const liveContentRef = useRef(content);
   const [isFocused, setIsFocused] = useState(false);
   const editorWrapperRef = useRef(null); // Ref for the styled wrapper
   const editorRef = useRef(null); // Ref for the editor instance
+
+  // Keep liveContentRef synced when external paths change `content` state.
+  useEffect(() => {
+    liveContentRef.current = content;
+  }, [content]);
   //const { openNoteById } = useContext(useNotes);
 
   const { openNoteById } = useNotes();
@@ -196,8 +208,11 @@ const TiptapNoteContent = React.memo(forwardRef(({
 
   // Expose methods to parent component
   useImperativeHandle(ref, () => ({
-    getValue: () => content,
-    setValue: (newContent) => setContent(newContent),
+    getValue: () => liveContentRef.current,
+    setValue: (newContent) => {
+      liveContentRef.current = newContent;
+      setContent(newContent);
+    },
     focus: (position = 'end') => { // Allow specifying focus position
       // Try to focus the editor using the TiptapEditor instance if possible
       // (Assuming TiptapEditor component might expose its editor instance via ref in the future)
@@ -228,7 +243,8 @@ const TiptapNoteContent = React.memo(forwardRef(({
       }
     },
     isEmpty: () => {
-      return content === '' || content === '<p></p>';
+      const c = liveContentRef.current;
+      return c === '' || c === '<p></p>';
     },
     // Add undo method
     undo: () => {
@@ -337,16 +353,19 @@ const TiptapNoteContent = React.memo(forwardRef(({
     },
     get innerText() {
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = content;
+      tempDiv.innerHTML = liveContentRef.current;
       return tempDiv.innerText;
     },
     set innerText(value) {
-      setContent(`<p>${value}</p>`);
+      const html = `<p>${value}</p>`;
+      liveContentRef.current = html;
+      setContent(html);
     },
     get innerHTML() {
-      return content;
+      return liveContentRef.current;
     },
     set innerHTML(value) {
+      liveContentRef.current = value;
       setContent(value);
     },
     // Updated scrollTop getter/setter - use external scrollable ref if provided
@@ -394,7 +413,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
     },
     // Method to get inline image IDs from current content
     getInlineImageIds: () => {
-      return syncInlineImages(content);
+      return syncInlineImages(liveContentRef.current);
     },
     // Method to debug all inline images in content
     debugInlineImages: () => {
@@ -529,10 +548,13 @@ const TiptapNoteContent = React.memo(forwardRef(({
   }));
 
   const handleUpdate = (newContent) => {
-    // Only update if content has actually changed
-    if (content !== newContent) {
-      setContent(newContent);
-      onChange(newContent); // Propagate change up
+    // Hot path: avoid setContent here. Bumping the live ref + forwarding
+    // up to onChange is enough — re-rendering this wrapper per keystroke
+    // would only feed a stale `content` prop back into TiptapEditor and
+    // re-run its sync effect for no benefit.
+    if (liveContentRef.current !== newContent) {
+      liveContentRef.current = newContent;
+      onChange(newContent);
     }
   };
 
@@ -551,7 +573,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
     if (!isBubbleMenuInteraction) {
       setIsFocused(false);
       onBlur(event); // Call parent onBlur
-      onSave(content); // Trigger save on genuine blur
+      onSave(liveContentRef.current); // Trigger save on genuine blur
     }
   };
 
