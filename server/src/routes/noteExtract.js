@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
-const { chromium } = require('playwright');
+const { chromium: rawChromium } = require('playwright-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const { marked } = require('marked');
 const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
 const ogs = require('open-graph-scraper');
@@ -9,7 +11,64 @@ const { extractExternalId } = require('../utils/extractExternalId');
 const { extractImageUrls, processAndUploadImages } = require('../utils/imageProcessing');
 require('dotenv').config();
 
+// playwright-extra is patched with the puppeteer stealth plugin (it accepts both).
+// Stealth masks navigator.webdriver, plugins, WebGL vendor, etc. — needed to clear
+// Vercel/Cloudflare challenges, especially from datacenter IPs (e.g. DO droplets)
+// where the network alone is enough to trigger a challenge.
+const chromium = rawChromium;
+chromium.use(StealthPlugin());
+
 const router = express.Router();
+
+// Markers that mean we got an anti-bot challenge page, not the real article.
+// If any of these appear in the title or first chunk of body text, treat the
+// extraction as a failure so we move on to the next tier instead of writing
+// "Vercel Security Checkpoint" into a user's note.
+const CHALLENGE_MARKERS = [
+    'vercel security checkpoint',
+    'just a moment',
+    'attention required! | cloudflare',
+    'checking your browser before accessing',
+    'cloudflare ray id',
+    'ddos protection by cloudflare',
+    'enable javascript and cookies to continue',
+    'please enable javascript to continue',
+    'access denied | cloudflare',
+    'one moment, please',
+    'verify you are human',
+];
+
+function looksLikeChallenge(title, content) {
+    const t = String(title || '').toLowerCase();
+    const c = String(content || '').toLowerCase().slice(0, 2000);
+    if (CHALLENGE_MARKERS.some(m => t.includes(m) || c.includes(m))) return true;
+    // Readability sometimes returns a near-empty doc for challenge pages —
+    // a real article is virtually never under ~250 chars of text.
+    const textOnly = String(content || '').replace(/<[^>]+>/g, '').trim();
+    if (textOnly.length > 0 && textOnly.length < 250) return true;
+    return false;
+}
+
+// Jina Reader proxies the URL through its own headless renderer and returns
+// clean markdown + title in JSON. Keyless (with rate limits) and bypasses
+// Vercel/Cloudflare from our side because the request originates from Jina's
+// IPs, not the droplet. Last-resort tier.
+async function extractViaJina(url) {
+    const jinaUrl = `https://r.jina.ai/${url}`;
+    const response = await axios.get(jinaUrl, {
+        headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)',
+        },
+        timeout: 30000,
+    });
+    const data = response.data?.data || response.data;
+    const title = data?.title || '';
+    const markdown = data?.content || '';
+    if (!markdown) throw new Error('Jina Reader returned no content.');
+    const html = marked.parse(markdown);
+    return { title, content: html };
+}
 
 // Extract content from URL - Puppeteer first, Axios fallback
 router.post('/extract-url', async (req, res) => {
@@ -94,6 +153,15 @@ router.post('/extract-url', async (req, res) => {
                 extractedTitle = doc.window.document.title || '';
                 if (extractedContent === null) extractedContent = "";
             }
+
+            // Reject anti-bot interstitials so we proceed to the next tier
+            // instead of writing "Vercel Security Checkpoint" into the note.
+            if (looksLikeChallenge(extractedTitle, extractedContent)) {
+                console.warn(`Playwright result for ${url} looks like a challenge page — discarding and falling through.`);
+                extractedContent = null;
+                extractedTitle = null;
+                finalError = new Error('Anti-bot challenge page detected (Playwright tier).');
+            }
             // --- End JSDOM part ---
 
         } catch (playwrightError) {
@@ -138,9 +206,37 @@ router.post('/extract-url', async (req, res) => {
                  finalError = null;
                  if (extractedContent === null) extractedContent = "";
              }
+
+            if (looksLikeChallenge(extractedTitle, extractedContent)) {
+                console.warn(`Axios result for ${url} looks like a challenge page — discarding and falling through.`);
+                extractedContent = null;
+                extractedTitle = null;
+                finalError = new Error('Anti-bot challenge page detected (Axios tier).');
+            }
         } catch (axiosError) {
             console.error(`Axios fallback extraction also failed for ${url}:`, axiosError.message);
             if (!finalError) finalError = axiosError;
+        }
+    }
+
+    // --- Attempt 3: Jina Reader (server-side renderer) ---
+    // Reaches here only if Playwright + Axios both failed or got challenged.
+    // Jina renders the page from its own infra, so challenges aimed at our
+    // droplet's IP don't apply.
+    if (extractedContent === null) {
+        console.log(`Attempting Jina Reader fallback for ${url}...`);
+        try {
+            const jina = await extractViaJina(url);
+            if (looksLikeChallenge(jina.title, jina.content)) {
+                throw new Error('Jina Reader also returned a challenge-like page.');
+            }
+            extractedContent = jina.content;
+            extractedTitle = jina.title;
+            finalError = null;
+            console.log(`Extraction successful via Jina Reader for ${url}.`);
+        } catch (jinaError) {
+            console.error(`Jina Reader fallback failed for ${url}:`, jinaError.message);
+            if (!finalError) finalError = jinaError;
         }
     }
 
@@ -174,13 +270,13 @@ router.post('/extract-url', async (req, res) => {
             images: uploadedImages
         });
     } else {
-        // ... Error reporting logic using finalError ...
         console.error(`All extraction methods failed for ${url}. Reporting last error.`);
-        let errorMessage = 'Failed to extract content after trying multiple methods.';
-        let statusCode = 500;
         const detailedErrorMsg = finalError ? finalError.message : 'Unknown extraction failure.';
-        // ... map finalError to statusCode ...
-        res.status(statusCode).json({ message: errorMessage, error: detailedErrorMsg });
+        const challengeHit = /challenge page detected|challenge-like/i.test(detailedErrorMsg);
+        const errorMessage = challengeHit
+            ? "Couldn't read this page — the site is blocked behind an anti-bot wall."
+            : "Couldn't extract content from this URL.";
+        res.status(challengeHit ? 502 : 500).json({ message: errorMessage, error: detailedErrorMsg });
     }
 });
 

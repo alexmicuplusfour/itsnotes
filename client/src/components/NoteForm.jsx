@@ -1019,6 +1019,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         loadImages(note.id);
       }
     },
+    onExtractionError: (error, url) => {
+      const serverMsg = error?.response?.data?.message;
+      const fallback = "Couldn't extract content from this URL.";
+      showToast(serverMsg || fallback);
+      console.warn(`[NoteForm] URL extraction failed for ${url}:`, error?.message || error);
+    },
     onExtractionSuccess: async (result, url) => {
       console.log(`[NoteForm] URL extraction successful for: ${url}`);
       // Handle auto-tagging for URL content
