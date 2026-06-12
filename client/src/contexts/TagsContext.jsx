@@ -31,8 +31,12 @@ export const TagsProvider = ({ children }) => {
   const [deletedTagName, setDeletedTagName] = useState('');
 
   // Load all tags
-  const loadTags = useCallback(async () => {
-    setLoading(true);
+  const loadTags = useCallback(async ({ silent = false } = {}) => {
+    // Only flip loading=true on initial load. Background refreshes (e.g. after
+    // a note change) must not toggle loading, or consumers gated on
+    // `tagsLoading` (QuickAccess pinned folders, etc.) flicker empty for a
+    // frame and shift the layout.
+    if (!silent) setLoading(true);
     try {
       const response = await tagsApi.getAllTags();
       
@@ -61,7 +65,7 @@ export const TagsProvider = ({ children }) => {
       setError('Failed to load tags');
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -288,10 +292,12 @@ export const TagsProvider = ({ children }) => {
       });
     };
 
-    // Reload tags when notes are created/updated/deleted to update note counts
+    // Reload tags when notes are created/updated/deleted to update note counts.
+    // Use silent mode so consumers gated on `loading` (QuickAccess pinned
+    // folders) don't flicker empty during the refetch.
     const handleNoteChange = () => {
       console.log("Socket: Note changed, reloading tags to update counts");
-      loadTags();
+      loadTags({ silent: true });
     };
 
     // Register event listeners
