@@ -43,6 +43,8 @@ class SettingsService {
     try {
       const result = await db.query('SELECT key, value FROM settings');
       result.rows.forEach(row => {
+        // JWT_SECRET is owned by ensureJwtSecret() — don't clobber an explicit .env value
+        if (row.key === 'JWT_SECRET') return;
         if (row.value) {
           process.env[row.key] = row.value;
         }

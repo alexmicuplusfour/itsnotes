@@ -6,7 +6,9 @@ const path = require('path');     // <--- Import Path module
 const socketIo = require('socket.io');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { initDb } = require('./db');
+const crypto = require('crypto');
+const db = require('./db');
+const { initDb } = db;
 const { runMigrations } = require('./migrate');
 const notesRoutes = require('./routes/notes');
 const tagsRoutes = require('./routes/tags');
@@ -195,11 +197,34 @@ io.on('connection', (socket) => {
   });
 });
 
+// Auto-generate JWT_SECRET on first startup so users don't have to.
+// Precedence: explicit .env value > previously generated DB value > new random.
+async function ensureJwtSecret() {
+  const fromEnv = process.env.JWT_SECRET;
+  const placeholder = 'change-this-to-a-long-random-secret';
+  if (fromEnv && fromEnv !== placeholder) return;
+
+  const existing = await db.query("SELECT value FROM settings WHERE key = 'JWT_SECRET'");
+  if (existing.rows[0]?.value) {
+    process.env.JWT_SECRET = existing.rows[0].value;
+    return;
+  }
+
+  const secret = crypto.randomBytes(48).toString('hex');
+  await db.query(
+    "INSERT INTO settings (key, value) VALUES ('JWT_SECRET', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+    [secret]
+  );
+  process.env.JWT_SECRET = secret;
+  console.log('[auth] JWT_SECRET auto-generated and persisted to database');
+}
+
 // Initialize the database before starting the server
 async function startServer(retryCount = 0, maxRetries = 10) {
   try {
     await initDb();
     await runMigrations();
+    await ensureJwtSecret();
     await settingsService.init();
     await backupScheduler.init();
     // Listen on 0.0.0.0 to accept connections from other devices on the network

@@ -1,18 +1,25 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-// JWT secret - in production, use a secure environment variable
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
+// Read JWT_SECRET lazily from process.env so the value set by ensureJwtSecret()
+// during startup is always picked up — no insecure compile-time fallback.
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET is not set. Server startup should have generated one.');
+  }
+  return secret;
+};
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // 7 days
 
 // Generate JWT token
 const generateToken = (user) => {
   return jwt.sign(
-    { 
-      id: user.id, 
-      username: user.username 
+    {
+      id: user.id,
+      username: user.username
     },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: JWT_EXPIRES_IN }
   );
 };
@@ -32,7 +39,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     req.user = decoded;
     next();
   } catch (error) {
@@ -72,5 +79,8 @@ module.exports = {
   generateToken,
   authenticateToken,
   optionalAuth,
-  JWT_SECRET
+  getJwtSecret,
+  get JWT_SECRET() {
+    return getJwtSecret();
+  }
 };

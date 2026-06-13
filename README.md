@@ -36,7 +36,7 @@ cp .env.example .env
 cp docker-compose.example.yml docker-compose.yml
 ```
 
-Edit `.env` to set a strong `JWT_SECRET` and your preferred database credentials, then:
+Edit `.env` to set your database credentials, then:
 
 ```bash
 docker compose up -d --build
