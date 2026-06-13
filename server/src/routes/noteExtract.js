@@ -21,9 +21,6 @@ chromium.use(StealthPlugin());
 const router = express.Router();
 
 // Markers that mean we got an anti-bot challenge page, not the real article.
-// If any of these appear in the title or first chunk of body text, treat the
-// extraction as a failure so we move on to the next tier instead of writing
-// "Vercel Security Checkpoint" into a user's note.
 const CHALLENGE_MARKERS = [
     'vercel security checkpoint',
     'just a moment',
@@ -38,15 +35,55 @@ const CHALLENGE_MARKERS = [
     'verify you are human',
 ];
 
-function looksLikeChallenge(title, content) {
+// Markers that suggest the page is gated behind a paywall or signup. False
+// positives are a real risk (legit sites mention "subscribe" in newsletter
+// modules), so a paywall hit only counts when the marker is in the title OR
+// in the first 1500 chars of body AND the page is unusually short.
+const PAYWALL_MARKERS = [
+    'subscribe to continue reading',
+    'subscribe to read',
+    'subscribe to keep reading',
+    'subscribe now to continue',
+    'to continue reading, log in',
+    'this article is for subscribers',
+    'this content is for subscribers',
+    'this story is for subscribers',
+    'log in or subscribe',
+    'sign in to continue reading',
+    'create a free account to continue',
+    'register to read this article',
+    "you've reached your free article limit",
+    "you've read your free articles",
+    'free articles this month',
+    'subscriber-only',
+    'subscribers only',
+    'become a member to read',
+    'this is a paid article',
+];
+
+// Returns null if the page looks usable, otherwise 'challenge' | 'paywall'.
+// Both outcomes mean "discard and try the next tier" — archive.org in
+// particular often has a pre-paywall snapshot.
+function detectBlocker(title, content) {
     const t = String(title || '').toLowerCase();
-    const c = String(content || '').toLowerCase().slice(0, 2000);
-    if (CHALLENGE_MARKERS.some(m => t.includes(m) || c.includes(m))) return true;
-    // Readability sometimes returns a near-empty doc for challenge pages —
-    // a real article is virtually never under ~250 chars of text.
+    const cFull = String(content || '').toLowerCase();
+    const cHead = cFull.slice(0, 2000);
+
+    if (CHALLENGE_MARKERS.some(m => t.includes(m) || cHead.includes(m))) return 'challenge';
+
     const textOnly = String(content || '').replace(/<[^>]+>/g, '').trim();
-    if (textOnly.length > 0 && textOnly.length < 250) return true;
-    return false;
+    // Near-empty Readability output is almost always a challenge stub.
+    if (textOnly.length > 0 && textOnly.length < 250) return 'challenge';
+
+    // Paywall: marker in title is strong enough on its own. Marker in body
+    // only counts when the article is short enough that the wall is the
+    // dominant content (a real 5k-word essay mentioning "subscribe" in a
+    // newsletter callout shouldn't trip this).
+    const cPaywallHead = cFull.slice(0, 1500);
+    if (PAYWALL_MARKERS.some(m => t.includes(m))) return 'paywall';
+    if (textOnly.length < 1800 && PAYWALL_MARKERS.some(m => cPaywallHead.includes(m))) return 'paywall';
+
+    return null;
 }
 
 // Tracking params that prevent archive.org from finding a snapshot. The
@@ -216,13 +253,14 @@ router.post('/extract-url', async (req, res) => {
                 if (extractedContent === null) extractedContent = "";
             }
 
-            // Reject anti-bot interstitials so we proceed to the next tier
-            // instead of writing "Vercel Security Checkpoint" into the note.
-            if (looksLikeChallenge(extractedTitle, extractedContent)) {
-                console.warn(`Playwright result for ${url} looks like a challenge page — discarding and falling through.`);
+            // Reject anti-bot interstitials and paywalls so we proceed to the
+            // next tier instead of writing junk into the note.
+            const blockerPw = detectBlocker(extractedTitle, extractedContent);
+            if (blockerPw) {
+                console.warn(`Playwright result for ${url} looks like a ${blockerPw} — discarding and falling through.`);
                 extractedContent = null;
                 extractedTitle = null;
-                finalError = new Error('Anti-bot challenge page detected (Playwright tier).');
+                finalError = new Error(`${blockerPw} detected (Playwright tier).`);
             }
             // --- End JSDOM part ---
 
@@ -269,11 +307,12 @@ router.post('/extract-url', async (req, res) => {
                  if (extractedContent === null) extractedContent = "";
              }
 
-            if (looksLikeChallenge(extractedTitle, extractedContent)) {
-                console.warn(`Axios result for ${url} looks like a challenge page — discarding and falling through.`);
+            const blockerAx = detectBlocker(extractedTitle, extractedContent);
+            if (blockerAx) {
+                console.warn(`Axios result for ${url} looks like a ${blockerAx} — discarding and falling through.`);
                 extractedContent = null;
                 extractedTitle = null;
-                finalError = new Error('Anti-bot challenge page detected (Axios tier).');
+                finalError = new Error(`${blockerAx} detected (Axios tier).`);
             }
         } catch (axiosError) {
             console.error(`Axios fallback extraction also failed for ${url}:`, axiosError.message);
@@ -289,8 +328,9 @@ router.post('/extract-url', async (req, res) => {
         console.log(`Attempting archive.org fallback for ${url}...`);
         try {
             const arch = await extractViaArchive(url);
-            if (looksLikeChallenge(arch.title, arch.content)) {
-                throw new Error('archive.org snapshot looks like a challenge page.');
+            const blockerArch = detectBlocker(arch.title, arch.content);
+            if (blockerArch) {
+                throw new Error(`archive.org snapshot looks like a ${blockerArch}.`);
             }
             extractedContent = arch.content;
             extractedTitle = arch.title;
@@ -309,8 +349,9 @@ router.post('/extract-url', async (req, res) => {
         console.log(`Attempting Jina Reader fallback for ${url}...`);
         try {
             const jina = await extractViaJina(url);
-            if (looksLikeChallenge(jina.title, jina.content)) {
-                throw new Error('Jina Reader also returned a challenge-like page.');
+            const blockerJina = detectBlocker(jina.title, jina.content);
+            if (blockerJina) {
+                throw new Error(`Jina Reader also returned a ${blockerJina} page.`);
             }
             extractedContent = jina.content;
             extractedTitle = jina.title;
@@ -354,11 +395,17 @@ router.post('/extract-url', async (req, res) => {
     } else {
         console.error(`All extraction methods failed for ${url}. Reporting last error.`);
         const detailedErrorMsg = finalError ? finalError.message : 'Unknown extraction failure.';
-        const challengeHit = /challenge page detected|challenge-like/i.test(detailedErrorMsg);
-        const errorMessage = challengeHit
-            ? "Couldn't read this page — the site is blocked behind an anti-bot wall."
-            : "Couldn't extract content from this URL.";
-        res.status(challengeHit ? 502 : 500).json({ message: errorMessage, error: detailedErrorMsg });
+        const paywallHit = /paywall/i.test(detailedErrorMsg);
+        const challengeHit = !paywallHit && /challenge/i.test(detailedErrorMsg);
+        let errorMessage;
+        if (paywallHit) {
+            errorMessage = "This article appears to be behind a paywall — no free version found.";
+        } else if (challengeHit) {
+            errorMessage = "Couldn't read this page — the site is blocked behind an anti-bot wall.";
+        } else {
+            errorMessage = "Couldn't extract content from this URL.";
+        }
+        res.status((paywallHit || challengeHit) ? 502 : 500).json({ message: errorMessage, error: detailedErrorMsg });
     }
 });
 
