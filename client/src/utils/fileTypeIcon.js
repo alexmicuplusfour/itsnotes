@@ -1,3 +1,4 @@
+import darkArchive from '../assets/file-icons/dark/archive.svg';
 import darkAudio from '../assets/file-icons/dark/audio.svg';
 import darkCode from '../assets/file-icons/dark/code.svg';
 import darkDefault from '../assets/file-icons/dark/default.svg';
@@ -7,6 +8,7 @@ import darkPdf from '../assets/file-icons/dark/pdf.svg';
 import darkSpreadsheet from '../assets/file-icons/dark/spreadsheet.svg';
 import darkVideo from '../assets/file-icons/dark/video.svg';
 
+import lightArchive from '../assets/file-icons/light/archive.svg';
 import lightAudio from '../assets/file-icons/light/audio.svg';
 import lightCode from '../assets/file-icons/light/code.svg';
 import lightDefault from '../assets/file-icons/light/default.svg';
@@ -18,6 +20,7 @@ import lightVideo from '../assets/file-icons/light/video.svg';
 
 const ICONS = {
   dark: {
+    archive: darkArchive,
     audio: darkAudio,
     code: darkCode,
     default: darkDefault,
@@ -28,6 +31,7 @@ const ICONS = {
     video: darkVideo,
   },
   light: {
+    archive: lightArchive,
     audio: lightAudio,
     code: lightCode,
     default: lightDefault,
@@ -63,7 +67,31 @@ const EXT_TO_TYPE = {
   c: 'code', h: 'code', cpp: 'code', hpp: 'code', cc: 'code', cs: 'code',
   go: 'code', rs: 'code', swift: 'code', sh: 'code', bash: 'code', zsh: 'code',
   ps1: 'code', sql: 'code', r: 'code', lua: 'code', dart: 'code', vue: 'code', svelte: 'code',
+  // archive
+  zip: 'archive', rar: 'archive', '7z': 'archive', tar: 'archive', gz: 'archive', tgz: 'archive',
+  bz2: 'archive', tbz: 'archive', tbz2: 'archive', xz: 'archive', txz: 'archive', zst: 'archive',
+  lz: 'archive', lzma: 'archive', lzh: 'archive', z: 'archive', cab: 'archive', iso: 'archive',
+  dmg: 'archive', jar: 'archive', war: 'archive', ear: 'archive',
 };
+
+const ARCHIVE_MIME_TYPES = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-rar-compressed',
+  'application/vnd.rar',
+  'application/x-7z-compressed',
+  'application/x-tar',
+  'application/gzip',
+  'application/x-gzip',
+  'application/x-bzip',
+  'application/x-bzip2',
+  'application/x-xz',
+  'application/zstd',
+  'application/x-compressed',
+  'application/x-iso9660-image',
+  'application/x-apple-diskimage',
+  'application/java-archive',
+]);
 
 export function getFileIconType(filename, mimeType) {
   if (mimeType) {
@@ -71,6 +99,7 @@ export function getFileIconType(filename, mimeType) {
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
+    if (ARCHIVE_MIME_TYPES.has(mimeType)) return 'archive';
     if (
       mimeType.includes('spreadsheet') ||
       mimeType === 'application/vnd.ms-excel' ||

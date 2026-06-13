@@ -5,6 +5,6 @@
 	 width="40px" height="40px" viewBox="0 0 40 40" enable-background="new 0 0 40 40" xml:space="preserve">
 <path fill="#F5F5F5" d="M4,4c0-2.209,1.791-4,4-4h16l12,12v24c0,2.209-1.791,4-4,4H8c-2.209,0-4-1.791-4-4V4z"/>
 <path fill="#BCBFC1" d="M24,0l12,12h-8c-2.209,0-4-1.791-4-4V0z"/>
-<path fill="none" stroke="#414651" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M10.639,18.559h18.724
-	 M10.639,22.72h18.724 M10.639,26.881h18.724 M10.639,31.04h14.563"/>
+<path fill="none" stroke="#414651" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10.639,19.456h18.724
+	 M10.639,23.417h18.724 M10.639,27.429h18.724 M10.639,31.389h14.563"/>
 </svg>
