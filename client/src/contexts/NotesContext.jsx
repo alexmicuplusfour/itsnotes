@@ -139,7 +139,14 @@ export const NotesProvider = ({ children }) => {
   // --- State ---
 
   // View state - managed by NavigationService via pathname, exposed here for business logic
-  const [view, setView] = useState('main');
+  // Initialize from URL so direct navigation to /archive or /trash loads the correct notes on first render
+  // (otherwise the initial-load effect races with the path-change effect — the first loadNotes('main')
+  // is still in flight when the path-change effect re-runs it, so the archive/trash fetch gets aborted)
+  const [view, setView] = useState(() => {
+    if (typeof window === 'undefined') return 'main';
+    const pathname = window.location.pathname;
+    return pathname === '/archive' ? 'archive' : pathname === '/trash' ? 'trash' : 'main';
+  });
 
   // Core Data State
   const [notes, setNotes] = useState([]); // Main list of notes for the current view
