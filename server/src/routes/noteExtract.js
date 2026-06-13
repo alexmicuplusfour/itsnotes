@@ -49,6 +49,68 @@ function looksLikeChallenge(title, content) {
     return false;
 }
 
+// Tracking params that prevent archive.org from finding a snapshot. The
+// Wayback availability API matches on the full URL string, so a path with
+// ?utm_source=rss-feed appended will miss the canonical snapshot even when
+// one exists. Strip these before querying, but leave any other query params
+// alone (some article URLs use ?id=123 meaningfully).
+const TRACKING_PARAMS = new Set([
+    'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+    'utm_id', 'utm_brand', 'utm_social', 'utm_social-type',
+    'fbclid', 'gclid', 'msclkid', 'dclid', 'yclid',
+    'mc_cid', 'mc_eid',
+    'ref', 'ref_src', 'ref_url', 'refsrc',
+    '_ga', '_gl',
+    'igshid', 'twclid', 'ttclid',
+]);
+
+function stripTrackingParams(url) {
+    try {
+        const u = new URL(url);
+        const keep = new URLSearchParams();
+        for (const [k, v] of u.searchParams) {
+            if (!TRACKING_PARAMS.has(k.toLowerCase())) keep.set(k, v);
+        }
+        u.search = keep.toString();
+        u.hash = '';
+        return u.toString();
+    } catch (_) {
+        return url;
+    }
+}
+
+// Wayback Machine snapshot lookup. Cleans the URL first so utm_* etc. don't
+// prevent the availability API from matching. The `if_` flag on the snapshot
+// URL strips the Wayback toolbar injection so Readability sees the original
+// page markup, not the wrapped frame.
+async function extractViaArchive(url) {
+    const cleaned = stripTrackingParams(url);
+    const avail = await axios.get('https://archive.org/wayback/available', {
+        params: { url: cleaned },
+        timeout: 10000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)' },
+    });
+    const snap = avail.data?.archived_snapshots?.closest;
+    if (!snap?.available || !snap?.url) {
+        throw new Error('No archive.org snapshot available.');
+    }
+    const rawSnapUrl = snap.url.replace(/\/web\/(\d+)\//, '/web/$1if_/');
+    const response = await axios.get(rawSnapUrl, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        },
+        timeout: 30000,
+        maxRedirects: 5,
+    });
+    const doc = new JSDOM(response.data, { url: cleaned });
+    const reader = new Readability(doc.window.document.cloneNode(true));
+    const article = reader.parse();
+    if (article && article.content) {
+        return { title: article.title || '', content: article.content };
+    }
+    throw new Error('Readability could not parse the archive snapshot.');
+}
+
 // Jina Reader proxies the URL through its own headless renderer and returns
 // clean markdown + title in JSON. Keyless (with rate limits) and bypasses
 // Vercel/Cloudflare from our side because the request originates from Jina's
@@ -219,10 +281,30 @@ router.post('/extract-url', async (req, res) => {
         }
     }
 
-    // --- Attempt 3: Jina Reader (server-side renderer) ---
-    // Reaches here only if Playwright + Axios both failed or got challenged.
-    // Jina renders the page from its own infra, so challenges aimed at our
-    // droplet's IP don't apply.
+    // --- Attempt 3: Wayback Machine snapshot ---
+    // Cheaper than Jina and often works for popular sites. Tracking params
+    // are stripped before lookup since the availability API matches the
+    // full URL string.
+    if (extractedContent === null) {
+        console.log(`Attempting archive.org fallback for ${url}...`);
+        try {
+            const arch = await extractViaArchive(url);
+            if (looksLikeChallenge(arch.title, arch.content)) {
+                throw new Error('archive.org snapshot looks like a challenge page.');
+            }
+            extractedContent = arch.content;
+            extractedTitle = arch.title;
+            finalError = null;
+            console.log(`Extraction successful via archive.org for ${url}.`);
+        } catch (archiveError) {
+            console.error(`archive.org fallback failed for ${url}:`, archiveError.message);
+            if (!finalError) finalError = archiveError;
+        }
+    }
+
+    // --- Attempt 4: Jina Reader (server-side renderer) ---
+    // Reaches here only if every earlier tier failed. Jina renders the page
+    // from its own infra, so challenges aimed at our droplet's IP don't apply.
     if (extractedContent === null) {
         console.log(`Attempting Jina Reader fallback for ${url}...`);
         try {
