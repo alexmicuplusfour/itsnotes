@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import './AuthPage.css';
 import logo from '../assets/images/loom.png';
@@ -12,6 +12,22 @@ const AuthPage = () => {
   });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Auto-login for ?auto=1 (used when the demo is iframed on the landing page).
+  // Only runs in demo mode to prevent abuse on non-demo deployments.
+  const autoLoginAttempted = useRef(false);
+  const wantsAutoLogin = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('auto') === '1';
+
+  useEffect(() => {
+    if (!wantsAutoLogin || !isDemoMode || requiresSetup || autoLoginAttempted.current) return;
+    autoLoginAttempted.current = true;
+    setIsLoading(true);
+    login('itsnotes', 'itspassword').then(result => {
+      if (!result.success) setError(result.error || 'Auto-login failed');
+      setIsLoading(false);
+    });
+  }, [wantsAutoLogin, isDemoMode, requiresSetup, login]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -68,14 +84,25 @@ const AuthPage = () => {
     }
   };
 
+  // Suppress the form chrome while an auto-login is being attempted
+  const autoLoginInFlight = wantsAutoLogin && isDemoMode && !error;
+
+  if (autoLoginInFlight) {
+    return (
+      <div className="auth-page">
+        <img src={logo} alt="itsnotes Logo" className="auth-logo" />
+      </div>
+    );
+  }
+
   return (
     <div className="auth-page">
-      <img src={logo} alt="itsnotes Logo" className="auth-logo" />          
+      <img src={logo} alt="itsnotes Logo" className="auth-logo" />
       <div className="auth-container">
         <div className="auth-header">
           <h1>{requiresSetup ? 'Setup itsnotes' : 'Sign In'}</h1>
           <p>
-            {requiresSetup 
+            {requiresSetup
               ? 'Create your admin account to get started'
               : ''
             }
