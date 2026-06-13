@@ -77,9 +77,13 @@ class SchedulerService {
             // 3. Handle Recurrence
             if (reminder.rrule) {
                 try {
-                    const rule = RRule.fromString(reminder.rrule);
-                    const now = new Date();
-                    const nextRun = rule.after(now);
+                    const currentNextRun = new Date(reminder.next_run_at);
+                    // Anchor DTSTART to the previous scheduled time so INTERVAL-based
+                    // rules advance from the original series, not "now". Mirrors the
+                    // skip route's behavior.
+                    const dtstart = currentNextRun.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+                    const rule = RRule.fromString(`DTSTART:${dtstart}\n${reminder.rrule}`);
+                    const nextRun = rule.after(currentNextRun, false);
 
                     if (nextRun) {
                         console.log(`SchedulerService: Updating recurring reminder ${reminder.id} to next run at ${nextRun.toISOString()}`);

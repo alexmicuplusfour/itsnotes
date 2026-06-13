@@ -65,7 +65,6 @@ router.post('/create', async (req, res) => {
 
         res.json({
             reminder,
-            reminder,
             matched_text: result.matched_text,
             reformatted_content: result.reformatted_content,
             schedule_summary: result.schedule_summary // Return the summary
