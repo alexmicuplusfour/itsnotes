@@ -116,22 +116,56 @@ function stripTrackingParams(url) {
     }
 }
 
+// Two ways to ask Wayback "do you have this URL?":
+//   1) Availability API — fast but misses a lot, even for URLs that ARE archived
+//   2) CDX server — slower but authoritative
+// We try (1) first and fall back to (2) before giving up.
+async function findWaybackSnapshotUrl(cleanedUrl) {
+    try {
+        const avail = await axios.get('https://archive.org/wayback/available', {
+            params: { url: cleanedUrl },
+            timeout: 8000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)' },
+        });
+        const snap = avail.data?.archived_snapshots?.closest;
+        if (snap?.available && snap?.url) return snap.url;
+    } catch (e) {
+        console.warn(`[archive] availability API errored: ${e.message}`);
+    }
+
+    try {
+        const cdx = await axios.get('https://web.archive.org/cdx/search/cdx', {
+            params: {
+                url: cleanedUrl,
+                output: 'json',
+                limit: '-1',                // most recent first
+                filter: 'statuscode:200',   // only real 200s, no error captures
+                fl: 'timestamp,original',
+            },
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)' },
+        });
+        const rows = cdx.data;
+        if (Array.isArray(rows) && rows.length > 1) {
+            const [timestamp, original] = rows[1]; // row[0] is the header row
+            return `https://web.archive.org/web/${timestamp}/${original}`;
+        }
+    } catch (e) {
+        console.warn(`[archive] CDX API errored: ${e.message}`);
+    }
+
+    return null;
+}
+
 // Wayback Machine snapshot lookup. Cleans the URL first so utm_* etc. don't
-// prevent the availability API from matching. The `if_` flag on the snapshot
-// URL strips the Wayback toolbar injection so Readability sees the original
-// page markup, not the wrapped frame.
+// prevent matching. The `if_` flag on the snapshot URL strips the Wayback
+// toolbar injection so Readability sees the original page markup.
 async function extractViaArchive(url) {
     const cleaned = stripTrackingParams(url);
-    const avail = await axios.get('https://archive.org/wayback/available', {
-        params: { url: cleaned },
-        timeout: 10000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)' },
-    });
-    const snap = avail.data?.archived_snapshots?.closest;
-    if (!snap?.available || !snap?.url) {
-        throw new Error('No archive.org snapshot available.');
-    }
-    const rawSnapUrl = snap.url.replace(/\/web\/(\d+)\//, '/web/$1if_/');
+    const snapUrl = await findWaybackSnapshotUrl(cleaned);
+    if (!snapUrl) throw new Error('No archive.org snapshot available.');
+
+    const rawSnapUrl = snapUrl.replace(/\/web\/(\d+)\//, '/web/$1if_/');
     const response = await axios.get(rawSnapUrl, {
         headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -149,18 +183,23 @@ async function extractViaArchive(url) {
 }
 
 // Jina Reader proxies the URL through its own headless renderer and returns
-// clean markdown + title in JSON. Keyless (with rate limits) and bypasses
-// Vercel/Cloudflare from our side because the request originates from Jina's
-// IPs, not the droplet. Last-resort tier.
+// clean markdown + title in JSON. Keyless works but is rate-limited and uses
+// shared infra Vercel sometimes flags; a JINA_API_KEY (set in env) unlocks
+// the premium tier which is much more aggressive about clearing challenges.
 async function extractViaJina(url) {
     const jinaUrl = `https://r.jina.ai/${url}`;
-    const response = await axios.get(jinaUrl, {
-        headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)',
-        },
-        timeout: 30000,
-    });
+    const headers = {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; itsnotes/1.0)',
+        // Force the browser engine so JS challenges have a chance of clearing.
+        'X-Engine': 'browser',
+        // Skip Jina's response cache so we don't get a stale challenge page.
+        'X-No-Cache': 'true',
+    };
+    if (process.env.JINA_API_KEY) {
+        headers['Authorization'] = `Bearer ${process.env.JINA_API_KEY}`;
+    }
+    const response = await axios.get(jinaUrl, { headers, timeout: 45000 });
     const data = response.data?.data || response.data;
     const title = data?.title || '';
     const markdown = data?.content || '';
@@ -351,6 +390,8 @@ router.post('/extract-url', async (req, res) => {
             const jina = await extractViaJina(url);
             const blockerJina = detectBlocker(jina.title, jina.content);
             if (blockerJina) {
+                const textLen = String(jina.content || '').replace(/<[^>]+>/g, '').trim().length;
+                console.warn(`[Jina blocker] kind=${blockerJina} title="${jina.title}" textLen=${textLen} preview="${String(jina.content || '').replace(/<[^>]+>/g, '').trim().slice(0, 300)}"`);
                 throw new Error(`Jina Reader also returned a ${blockerJina} page.`);
             }
             extractedContent = jina.content;
