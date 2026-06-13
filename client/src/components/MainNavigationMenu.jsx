@@ -153,6 +153,28 @@ const SidebarMenuItem = styled.button`
   }
 `;
 
+const GithubLink = styled.a`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-color-contrast);
+  opacity: 0.5;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+  align-self: flex-start;
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+`;
+
 const SidebarCloseButton = styled.button`
   display: flex;
   align-items: center;
@@ -326,6 +348,15 @@ const MainNavigationMenu = memo(({
           <Icon name="signOut" size={20} />
           <span>Sign Out</span>
         </SidebarMenuItem>
+        <GithubLink
+          href="https://github.com/alexmicuplusfour/itsnotes"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Icon name="github" size={12} />
+          <span>GitHub</span>
+        </GithubLink>
       </SidebarMenuList>
     </SidebarContainer>
     </>
