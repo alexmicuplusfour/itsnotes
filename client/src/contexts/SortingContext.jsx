@@ -33,12 +33,12 @@ const SORT_OPTIONS = {
 };
 
 const SORT_LABELS = {
-  [SORT_OPTIONS.CREATED_DESC]: 'Created Latest',
-  [SORT_OPTIONS.CREATED_ASC]: 'Created Oldest',
-  [SORT_OPTIONS.ARCHIVED_DESC]: 'Archived Latest',
-  [SORT_OPTIONS.TRASHED_DESC]: 'Trashed Latest',
-  [SORT_OPTIONS.UPDATED_DESC]: 'Updated Latest',
-  [SORT_OPTIONS.UPDATED_ASC]: 'Updated Oldest'
+  [SORT_OPTIONS.CREATED_DESC]: 'Newest',
+  [SORT_OPTIONS.CREATED_ASC]: 'Oldest',
+  [SORT_OPTIONS.ARCHIVED_DESC]: 'Recently Archived',
+  [SORT_OPTIONS.TRASHED_DESC]: 'Recently Trashed',
+  [SORT_OPTIONS.UPDATED_DESC]: 'Recently Updated',
+  [SORT_OPTIONS.UPDATED_ASC]: 'Oldest Updated'
 };
 
 const VIEW_DEFAULT_SORTS = {
