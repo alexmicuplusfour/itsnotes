@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NodeViewWrapper } from '@tiptap/react';
 import styled, { keyframes } from 'styled-components';
 import Icon from './Icons';
+import { getFileIcon } from '../utils/fileTypeIcon';
 import env from '../../env.js';
 
 const CardContainer = styled.div`
@@ -29,6 +30,15 @@ const IconWrapper = styled.div`
   justify-content: center;
   margin-right: 12px;
   color: var(--text-color, #e8eaed);
+  flex-shrink: 0;
+`;
+
+const FileIconImg = styled.img`
+  height: 36px;
+  width: auto;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
 `;
 
 const InfoWrapper = styled.div`
@@ -102,6 +112,20 @@ const DeleteButton = styled.button.attrs({ type: 'button' })`
 const AttachmentCard = (props) => {
   const { node, updateAttributes, deleteNode } = props;
   const { filename, size, mimeType, id, uploading, progress } = node.attrs;
+
+  const [isDarkTheme, setIsDarkTheme] = useState(
+    () => !document.documentElement.classList.contains('light-theme')
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const iconSrc = getFileIcon(filename, mimeType, isDarkTheme);
 
   const handleDelete = async (e) => {
     e.preventDefault(); // Prevent form submission
@@ -185,7 +209,7 @@ const AttachmentCard = (props) => {
         }}
       >
         <IconWrapper>
-          <Icon name="attachment" size={24} />
+          <FileIconImg src={iconSrc} alt="" draggable={false} />
         </IconWrapper>
         <InfoWrapper>
           <FileName title={filename}>{filename}</FileName>
