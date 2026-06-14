@@ -273,6 +273,12 @@ const ImportExportSettings = () => {
             if (eventSourceRef.current) {
               eventSourceRef.current.close();
             }
+            // Match the /restore flow: imported notes/tags live in the DB but
+            // the running app has no idea they exist. A page reload picks them
+            // all up cleanly. 5s lets the user read the import stats first.
+            setTimeout(() => {
+              window.location.reload();
+            }, 5000);
             break;
           case 'error':
             setError(data.data.message);
@@ -400,6 +406,9 @@ const ImportExportSettings = () => {
                 <li>Failed imports: {importResult.failed}</li>
               </ResultsList>
             )}
+            <div style={{ fontSize: '12px', marginTop: '8px', opacity: 0.8 }}>
+              Reloading in a few seconds to show your imported notes...
+            </div>
           </SuccessMessage>
         )}
       </Section>
