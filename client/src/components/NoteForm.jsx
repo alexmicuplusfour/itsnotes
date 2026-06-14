@@ -1423,18 +1423,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         console.log("Image added/previewed successfully via hook.");
         markAsModified();
 
-        // Also insert the image inline at the cursor position
+        // Insert the image inline at the cursor position. We route through
+        // the imperative ref so it handles the NodeSelection collapse and
+        // skips the keyboard-popping .focus() — this image-add path is
+        // triggered by the action-bar button.
         if (contentInputRef.current && result.image) {
-          const editor = contentInputRef.current.getEditor?.();
-          if (editor && !editor.isDestroyed) {
-            const success = editor.chain().focus().insertImage({
-              src: result.image.data || result.image.thumbnail,
-              alt: result.image.name,
-              title: result.image.name,
-              'data-image-id': result.image.id,
-            }).run();
-            console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
-          }
+          const success = contentInputRef.current.insertInlineImage(result.image);
+          console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
         }
       } else {
         console.error("Failed to add image via hook:", result.error);
@@ -2187,18 +2182,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       console.log(`[NoteForm] Image added via paste: ${file.name}`);
       markAsModified();
 
-      // Also insert the image inline at the cursor position
+      // Insert the image inline at the cursor position. Route through the
+      // imperative ref so the NodeSelection left by the block-atom insert
+      // gets collapsed to a TextSelection — otherwise the bubble menu
+      // would pop up and the next keystroke would replace the image.
       if (contentInputRef.current && result.image) {
-        const editor = contentInputRef.current.getEditor?.();
-        if (editor && !editor.isDestroyed) {
-          const success = editor.commands.insertImage({
-            src: result.image.data || result.image.thumbnail,
-            alt: result.image.name,
-            title: result.image.name,
-            'data-image-id': result.image.id,
-          });
-          console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
-        }
+        const success = contentInputRef.current.insertInlineImage(result.image);
+        console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
       }
     } else {
       console.error(`[NoteForm] Failed to add image via paste: ${file.name}`, result.error);

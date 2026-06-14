@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { NodeSelection } from 'prosemirror-state';
 import styled from 'styled-components';
 import Icon from "./Icons";
 
@@ -147,7 +148,16 @@ const TiptapFixedMenu = ({ editor }) => {
     
     // Set up a listener to check for text selection
     const handleSelectionUpdate = () => {
-      const { from, to } = editor.state.selection;
+      const selection = editor.state.selection;
+      // Skip NodeSelection — block atom inserts (image, attachment, AI
+      // placeholder) leave a NodeSelection that isn't a "user picked text
+      // to format" intent. Otherwise the keyboard would dismiss and the
+      // menu would pop up every time something gets inserted on mobile.
+      if (selection instanceof NodeSelection) {
+        if (visible) setVisible(false);
+        return;
+      }
+      const { from, to } = selection;
       const hasSelection = from !== to && to - from > 0;
       const shouldBeVisible = hasSelection && editor.isFocused;
       

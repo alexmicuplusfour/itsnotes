@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BubbleMenu } from '@tiptap/react';
+import { NodeSelection } from 'prosemirror-state';
 import styled from 'styled-components';
 import Icon from "./Icons";
 
@@ -233,12 +234,16 @@ const TiptapBubbleMenu = ({ editor }) => {
         }
       }}
       shouldShow={({ editor, view, state, oldState, from, to }) => {
+        // Don't treat a NodeSelection (left behind by inserting a block atom
+        // — image, attachment, AI placeholder) as a "user wants formatting"
+        // selection. Otherwise the menu pops up on every insert.
+        if (state.selection instanceof NodeSelection) return false;
         // Only show when there's a text selection and editor is focused
         // Check the selection is valid and has actual content
-        return from !== to && 
-               editor.isFocused && 
+        return from !== to &&
+               editor.isFocused &&
                to - from > 0 &&
-               editor.view && 
+               editor.view &&
                editor.view.hasFocus();
       }}
       onClick={(e) => {

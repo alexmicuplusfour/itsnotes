@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { NodeSelection } from 'prosemirror-state';
 import api from '../services/api';
+import { scrollEditorSelectionIntoView, findScrollableAncestor } from '../utils/editorScroll';
 
 export const useAttachmentManager = (noteId) => {
   const handleAddAttachment = useCallback(async (files, editor) => {
@@ -29,10 +31,20 @@ export const useAttachmentManager = (noteId) => {
       };
     });
 
-    // 2. Insert all placeholders at once
-    // This ensures they all appear immediately in the editor
+    // 2. Insert all placeholders at once.
+    // No .focus() — this is triggered by an action-bar button; focusing
+    // would pop the mobile keyboard. After the block-atom insert we
+    // collapse the NodeSelection so the bubble menu doesn't appear and
+    // the next keystroke doesn't replace the attachment. The manual
+    // scroll (deferred to next frame so React node views finish rendering)
+    // brings the new content into view without focusing.
     if (contentToInsert.length > 0) {
-        editor.chain().focus().insertContent(contentToInsert).run();
+        editor.commands.insertContent(contentToInsert);
+        if (editor.state.selection instanceof NodeSelection) {
+          editor.commands.setTextSelection(editor.state.selection.to);
+        }
+        const scrollEl = findScrollableAncestor(editor.view.dom);
+        scrollEditorSelectionIntoView(editor, scrollEl);
     }
 
     // 3. Process uploads in parallel

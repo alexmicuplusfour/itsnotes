@@ -7,6 +7,8 @@ import { setOpenNoteHandler } from './TiptapNoteReferenceMark';
 import { useNotes } from "../contexts/NotesContext";
 import { useNavigation } from '../navigation'; // NEW: Use centralized navigation
 import { DOMParser } from 'prosemirror-model';
+import { NodeSelection } from 'prosemirror-state';
+import { scrollEditorSelectionIntoView } from '../utils/editorScroll';
 
 const EditorWrapper = styled.div`
   width: 100%;
@@ -287,7 +289,23 @@ const TiptapNoteContent = React.memo(forwardRef(({
     insertContent: (content) => {
       const editor = editorRef.current?.getEditor();
       if (editor && !editor.isDestroyed) {
-        editor.chain().focus().insertContent(content).run();
+        // No .focus() — these inserts are triggered by action-bar buttons
+        // (AI summarize, OCR, clipboard snippet). On mobile, focusing the
+        // editor pops the keyboard, which is not what the user asked for.
+        editor.commands.insertContent(content);
+        // Block atom inserts (e.g. aiPlaceholder) leave a NodeSelection
+        // covering the new node. Collapse so (a) the bubble/fixed menu
+        // doesn't appear and (b) the next keystroke doesn't replace the
+        // node.
+        if (editor.state.selection instanceof NodeSelection) {
+          editor.commands.setTextSelection(editor.state.selection.to);
+        }
+        // Scroll the new content into view. Deferred to next frame so
+        // React-rendered node views have time to commit before we read
+        // their DOM coords. Using scrollableRef directly is more reliable
+        // than ProseMirror's scrollIntoView() — that one can scroll the
+        // wrong ancestor when there are nested overflow rules.
+        scrollEditorSelectionIntoView(editor, scrollableRef?.current);
         return true;
       }
       return false;
@@ -402,12 +420,20 @@ const TiptapNoteContent = React.memo(forwardRef(({
     insertInlineImage: (imageData) => {
       const editor = editorRef.current?.getEditor?.();
       if (editor && !editor.isDestroyed) {
-        return editor.commands.insertImage({
+        const result = editor.commands.insertImage({
           src: imageData.src || imageData.data || imageData.thumbnail,
           alt: imageData.alt || imageData.name || 'Image',
           title: imageData.title || imageData.name,
           'data-image-id': imageData.id,
         });
+        // Block atom — collapse the NodeSelection so the bubble menu
+        // doesn't pop and the cursor lands after the image.
+        if (editor.state.selection instanceof NodeSelection) {
+          editor.commands.setTextSelection(editor.state.selection.to);
+        }
+        // Scroll the new image into view (without focusing).
+        scrollEditorSelectionIntoView(editor, scrollableRef?.current);
+        return result;
       }
       return false;
     },
