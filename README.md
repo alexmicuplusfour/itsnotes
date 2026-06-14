@@ -67,7 +67,7 @@ If you're moving over from Google Keep, you can bring your notes with you:
 
 1. Go to [Google Takeout](https://takeout.google.com/) and request an export of just **Keep**.
 2. Download the resulting `.zip` when it's ready.
-3. In itsnotes, open **Settings → Import / Export → Import from Takeout** and select the `.zip`.
+3. In itsnotes, open **Settings → Backup & Restore → Import from Google Keep → Import from Takeout** and select the `.zip`.
 
 Notes, labels, colors, images, and pin state come across. The page reloads once the import completes so the new notes show up immediately.
 
