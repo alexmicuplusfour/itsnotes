@@ -61,6 +61,16 @@ All configuration is via `.env`. See `.env.example` for available options.
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
+## Importing from Google Keep
+
+If you're moving over from Google Keep, you can bring your notes with you:
+
+1. Go to [Google Takeout](https://takeout.google.com/) and request an export of just **Keep**.
+2. Download the resulting `.zip` when it's ready.
+3. In itsnotes, open **Settings → Import / Export → Import from Takeout** and select the `.zip`.
+
+Notes, labels, colors, images, and pin state come across. The page reloads once the import completes so the new notes show up immediately.
+
 ---
 
 This project is entirely vibecoded.
