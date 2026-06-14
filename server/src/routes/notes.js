@@ -424,15 +424,24 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Re-fetch a note with tags/images/objects so socket broadcasts carry the full
+// shape clients need to render correctly in cross-view scenarios (archiving on
+// one device while another is sitting in the archive view, etc.).
+async function loadNoteWithDetails(id) {
+  const note = await Note.findById(id, true);
+  if (note) await Note.addObjects([note]);
+  return note;
+}
+
 // Archive a note
 router.patch('/:id/archive', async (req, res) => {
   try {
-    const note = await Note.update(req.params.id, { is_archived: true });
-    if (!note) {
+    const updated = await Note.update(req.params.id, { is_archived: true });
+    if (!updated) {
       return res.status(404).json({ message: 'Note not found' });
     }
+    const note = await loadNoteWithDetails(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note archived:', note);
     req.app.get('io').emit('note_updated', note);
 
@@ -446,12 +455,12 @@ router.patch('/:id/archive', async (req, res) => {
 // Unarchive a note
 router.patch('/:id/unarchive', async (req, res) => {
   try {
-    const note = await Note.update(req.params.id, { is_archived: false });
-    if (!note) {
+    const updated = await Note.update(req.params.id, { is_archived: false });
+    if (!updated) {
       return res.status(404).json({ message: 'Note not found' });
     }
+    const note = await loadNoteWithDetails(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note unarchived:', note);
     req.app.get('io').emit('note_updated', note);
 
@@ -465,12 +474,12 @@ router.patch('/:id/unarchive', async (req, res) => {
 // Move a note to trash
 router.patch('/:id/trash', async (req, res) => {
   try {
-    const note = await Note.update(req.params.id, { is_deleted: true });
-    if (!note) {
+    const updated = await Note.update(req.params.id, { is_deleted: true });
+    if (!updated) {
       return res.status(404).json({ message: 'Note not found' });
     }
+    const note = await loadNoteWithDetails(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note trashed:', note);
     req.app.get('io').emit('note_updated', note);
 
@@ -484,12 +493,12 @@ router.patch('/:id/trash', async (req, res) => {
 // Restore a note from trash
 router.patch('/:id/restore', async (req, res) => {
   try {
-    const note = await Note.update(req.params.id, { is_deleted: false });
-    if (!note) {
+    const updated = await Note.update(req.params.id, { is_deleted: false });
+    if (!updated) {
       return res.status(404).json({ message: 'Note not found' });
     }
+    const note = await loadNoteWithDetails(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note restored:', note);
     req.app.get('io').emit('note_updated', note);
 
@@ -572,10 +581,8 @@ router.patch('/:id/color', async (req, res) => {
 
     await Note.update(req.params.id, { color });
 
-    // Fetch the complete note with details (tags, images, metadata) for socket event
-    const updatedNoteWithDetails = await Note.findById(req.params.id, true);
+    const updatedNoteWithDetails = await loadNoteWithDetails(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note color changed:', updatedNoteWithDetails);
     req.app.get('io').emit('note_updated', updatedNoteWithDetails);
 
