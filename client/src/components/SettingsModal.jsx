@@ -1246,33 +1246,35 @@ const SettingsModal = ({ isOpen, onClose }) => {
                       />
                     </FormGroup>
                     {(settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true') && (
-                      <FormGroup>
-                        <Label>Snooper URL</Label>
-                        <Input 
-                          type="text" 
-                          name="FOXIT_SNOOPER_URL"
-                          value={settings.FOXIT_SNOOPER_URL || ''}
-                          onChange={handleChange}
-                          placeholder="http://192.168.100.110:3456"
-                        />
-                        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
-                          Leave empty to use the server default. Enter the IP:port where the Foxit Snooper is running.
-                        </p>
-                      </FormGroup>
-                      <FormGroup>
-                        <Label>Snooper Token</Label>
-                        <Input
-                          type="password"
-                          name="FOXIT_SNOOPER_TOKEN"
-                          value={settings.FOXIT_SNOOPER_TOKEN || ''}
-                          onChange={handleChange}
-                          placeholder="Optional shared token"
-                          autoComplete="off"
-                        />
-                        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
-                          When set, the snooper must send the same value as <code>X-Snooper-Token</code> on its requests. Leave empty to keep the endpoints open.
-                        </p>
-                      </FormGroup>
+                      <>
+                        <FormGroup>
+                          <Label>Snooper URL</Label>
+                          <Input
+                            type="text"
+                            name="FOXIT_SNOOPER_URL"
+                            value={settings.FOXIT_SNOOPER_URL || ''}
+                            onChange={handleChange}
+                            placeholder="http://192.168.100.110:3456"
+                          />
+                          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                            Leave empty to use the server default. Enter the IP:port where the Foxit Snooper is running.
+                          </p>
+                        </FormGroup>
+                        <FormGroup>
+                          <Label>Snooper Token</Label>
+                          <Input
+                            type="password"
+                            name="FOXIT_SNOOPER_TOKEN"
+                            value={settings.FOXIT_SNOOPER_TOKEN || ''}
+                            onChange={handleChange}
+                            placeholder="Optional shared token"
+                            autoComplete="off"
+                          />
+                          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                            When set, the snooper must send the same value as <code>X-Snooper-Token</code> on its requests. Leave empty to keep the endpoints open.
+                          </p>
+                        </FormGroup>
+                      </>
                     )}
                   </SectionContainer>
                   </>
