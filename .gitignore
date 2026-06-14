@@ -109,3 +109,6 @@ pids
 
 # Production
 build
+
+# Local bug tracking
+bugs/
