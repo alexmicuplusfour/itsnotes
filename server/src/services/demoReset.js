@@ -1,12 +1,10 @@
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
 const os = require('os');
 const unzipper = require('unzipper');
 const settingsService = require('./settings');
+const { execFileAsync } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
 
@@ -51,20 +49,26 @@ async function restoreFromZip(zipFilePath) {
 
     console.log('[DEMO RESET] Restoring database...');
     if (dockerContainer) {
-      const containerSqlPath = `/tmp/itsnotes-demo-restore.sql`;
-      await execPromise(`docker cp "${sqlFilePath}" ${dockerContainer}:${containerSqlPath}`);
-      const result = await execPromise(
-        `docker exec ${dockerContainer} psql -U ${config.user} -d ${config.database} -f ${containerSqlPath}`,
-        { maxBuffer: 100 * 1024 * 1024 }
-      );
-      if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
-      await execPromise(`docker exec ${dockerContainer} rm ${containerSqlPath}`);
+      const containerSqlPath = `/tmp/itsnotes-demo-restore-${Date.now()}.sql`;
+      await execFileAsync('docker', ['cp', sqlFilePath, `${dockerContainer}:${containerSqlPath}`]);
+      try {
+        const result = await execFileAsync('docker', [
+          'exec', dockerContainer,
+          'psql', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
+        ], { maxBuffer: 100 * 1024 * 1024 });
+        if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
+      } finally {
+        await execFileAsync('docker', ['exec', dockerContainer, 'rm', '-f', containerSqlPath]).catch(() => {});
+      }
     } else {
       const psqlPath = process.env.PSQL_PATH || 'psql';
-      const result = await execPromise(
-        `PGPASSWORD="${config.password}" ${psqlPath} -h ${config.host} -p ${config.port} -U ${config.user} -d ${config.database} -f "${sqlFilePath}"`,
-        { maxBuffer: 100 * 1024 * 1024 }
-      );
+      const result = await execFileAsync(psqlPath, [
+        '-h', config.host, '-p', String(config.port),
+        '-U', config.user, '-d', config.database, '-f', sqlFilePath,
+      ], {
+        maxBuffer: 100 * 1024 * 1024,
+        env: { ...process.env, PGPASSWORD: config.password },
+      });
       if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
     }
 

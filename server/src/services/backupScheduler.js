@@ -3,10 +3,8 @@ const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 const os = require('os');
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
 const archiver = require('archiver');
+const { spawnToFile } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
 
@@ -20,14 +18,23 @@ const getDbConfig = () => ({
   database: process.env.DB_NAME || 'itsnotes'
 });
 
-const buildPgDumpCommand = (config) => {
+const PG_DUMP_FLAGS = ['--clean', '--if-exists', '--no-owner', '--no-privileges'];
+
+async function runPgDump(config, outPath) {
   const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   if (dockerContainer) {
-    return `docker exec ${dockerContainer} pg_dump -U ${config.user} -d ${config.database} --clean --if-exists --no-owner --no-privileges`;
+    await spawnToFile('docker', [
+      'exec', dockerContainer,
+      'pg_dump', '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
+    ], outPath);
+  } else {
+    const pgDumpPath = process.env.PG_DUMP_PATH || 'pg_dump';
+    await spawnToFile(pgDumpPath, [
+      '-h', config.host, '-p', String(config.port),
+      '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
+    ], outPath, { env: { ...process.env, PGPASSWORD: config.password } });
   }
-  const pgDumpPath = process.env.PG_DUMP_PATH || 'pg_dump';
-  return `PGPASSWORD="${config.password}" ${pgDumpPath} -h ${config.host} -p ${config.port} -U ${config.user} -d ${config.database} --clean --if-exists --no-owner --no-privileges`;
-};
+}
 
 const intervalToCron = (hours) => {
   const h = parseInt(hours) || 24;
@@ -80,8 +87,7 @@ class BackupScheduler {
     try {
       console.log(`[BACKUP SCHEDULER] Running backup: ${zipFilename}`);
 
-      const command = `${buildPgDumpCommand(config)} > "${tempSqlPath}"`;
-      await execPromise(command, { maxBuffer: 100 * 1024 * 1024 });
+      await runPgDump(config, tempSqlPath);
       console.log('[BACKUP SCHEDULER] SQL dump created');
 
       let includeUploads = false;

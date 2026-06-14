@@ -1,8 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const { exec } = require('child_process');
-const util = require('util');
-const execPromise = util.promisify(exec);
 const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
@@ -12,6 +9,7 @@ const unzipper = require('unzipper');
 const settingsService = require('../services/settings');
 const backupScheduler = require('../services/backupScheduler');
 const { blockInDemo } = require('../middleware/demoGuard');
+const { execFileAsync, spawnToFile } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
 const getAutoBackupPath = () => process.env.BACKUP_PATH || path.join(__dirname, '../../backups');
@@ -44,17 +42,50 @@ const getDbConfig = () => {
   };
 };
 
-// Helper to build pg_dump command
-const buildPgDumpCommand = (config) => {
-  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
+// pg_dump args common to docker + native modes. The DB credentials reach
+// pg_dump as argv (no shell), and PGPASSWORD is passed via env on the native
+// path — so special characters in DB_PASSWORD/DB_NAME/etc. are safe.
+const PG_DUMP_FLAGS = ['--clean', '--if-exists', '--no-owner', '--no-privileges'];
 
+async function runPgDump(config, outPath) {
+  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   if (dockerContainer) {
-    return `docker exec ${dockerContainer} pg_dump -U ${config.user} -d ${config.database} --clean --if-exists --no-owner --no-privileges`;
+    await spawnToFile('docker', [
+      'exec', dockerContainer,
+      'pg_dump', '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
+    ], outPath);
   } else {
     const pgDumpPath = process.env.PG_DUMP_PATH || 'pg_dump';
-    return `PGPASSWORD="${config.password}" ${pgDumpPath} -h ${config.host} -p ${config.port} -U ${config.user} -d ${config.database} --clean --if-exists --no-owner --no-privileges`;
+    await spawnToFile(pgDumpPath, [
+      '-h', config.host, '-p', String(config.port),
+      '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
+    ], outPath, { env: { ...process.env, PGPASSWORD: config.password } });
   }
-};
+}
+
+async function runPsqlFile(config, sqlFilePath) {
+  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
+  if (dockerContainer) {
+    const containerSqlPath = `/tmp/itsnotes-restore-${Date.now()}.sql`;
+    await execFileAsync('docker', ['cp', sqlFilePath, `${dockerContainer}:${containerSqlPath}`]);
+    try {
+      return await execFileAsync('docker', [
+        'exec', dockerContainer,
+        'psql', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
+      ], { maxBuffer: 100 * 1024 * 1024 });
+    } finally {
+      await execFileAsync('docker', ['exec', dockerContainer, 'rm', '-f', containerSqlPath]).catch(() => {});
+    }
+  }
+  const psqlPath = process.env.PSQL_PATH || 'psql';
+  return execFileAsync(psqlPath, [
+    '-h', config.host, '-p', String(config.port),
+    '-U', config.user, '-d', config.database, '-f', sqlFilePath,
+  ], {
+    maxBuffer: 100 * 1024 * 1024,
+    env: { ...process.env, PGPASSWORD: config.password },
+  });
+}
 
 // Recursively copy a directory
 async function copyDir(src, dest) {
@@ -81,9 +112,7 @@ router.post('/export', async (req, res) => {
   try {
     console.log('[BACKUP] Starting export...');
 
-    // Generate the SQL dump
-    const command = `${buildPgDumpCommand(config)} > "${tempSqlPath}"`;
-    await execPromise(command, { maxBuffer: 100 * 1024 * 1024 });
+    await runPgDump(config, tempSqlPath);
     console.log('[BACKUP] SQL dump created');
 
     res.setHeader('Content-Type', 'application/zip');
@@ -136,7 +165,6 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
   }
 
   const config = getDbConfig();
-  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   const extractDir = path.join(os.tmpdir(), `itsnotes-restore-${Date.now()}`);
 
   try {
@@ -159,23 +187,9 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
 
     // Restore database
     console.log('[RESTORE] Restoring database...');
-    if (dockerContainer) {
-      const containerSqlPath = `/tmp/itsnotes-restore-db.sql`;
-      await execPromise(`docker cp "${sqlFilePath}" ${dockerContainer}:${containerSqlPath}`);
-      const result = await execPromise(
-        `docker exec ${dockerContainer} psql -U ${config.user} -d ${config.database} -f ${containerSqlPath}`,
-        { maxBuffer: 100 * 1024 * 1024 }
-      );
-      if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
-      if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
-      await execPromise(`docker exec ${dockerContainer} rm ${containerSqlPath}`);
-    } else {
-      const psqlPath = process.env.PSQL_PATH || 'psql';
-      const command = `PGPASSWORD="${config.password}" ${psqlPath} -h ${config.host} -p ${config.port} -U ${config.user} -d ${config.database} -f "${sqlFilePath}"`;
-      const result = await execPromise(command, { maxBuffer: 100 * 1024 * 1024 });
-      if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
-      if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
-    }
+    const result = await runPsqlFile(config, sqlFilePath);
+    if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
+    if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
     console.log('[RESTORE] Database restored successfully');
 
     // Re-initialize settings from the restored DB so process.env reflects the restored state
@@ -233,7 +247,6 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
 // POST /api/backup/reset - Truncate all tables and clear uploads
 router.post('/reset', blockInDemo, async (req, res) => {
   const config = getDbConfig();
-  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   const tempSqlPath = path.join(os.tmpdir(), `itsnotes-reset-${Date.now()}.sql`);
 
   try {
@@ -242,19 +255,7 @@ router.post('/reset', blockInDemo, async (req, res) => {
     const sql = `DO $$ DECLARE r RECORD; BEGIN FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE'; END LOOP; END $$;\n`;
     await fs.writeFile(tempSqlPath, sql);
 
-    if (dockerContainer) {
-      const containerSqlPath = `/tmp/itsnotes-reset.sql`;
-      await execPromise(`docker cp "${tempSqlPath}" ${dockerContainer}:${containerSqlPath}`);
-      await execPromise(
-        `docker exec ${dockerContainer} psql -U ${config.user} -d ${config.database} -f ${containerSqlPath}`,
-        { maxBuffer: 10 * 1024 * 1024 }
-      );
-      await execPromise(`docker exec ${dockerContainer} rm ${containerSqlPath}`);
-    } else {
-      const psqlPath = process.env.PSQL_PATH || 'psql';
-      const command = `PGPASSWORD="${config.password}" ${psqlPath} -h ${config.host} -p ${config.port} -U ${config.user} -d ${config.database} -f "${tempSqlPath}"`;
-      await execPromise(command, { maxBuffer: 10 * 1024 * 1024 });
-    }
+    await runPsqlFile(config, tempSqlPath);
 
     try { await fs.unlink(tempSqlPath); } catch {}
 
@@ -293,18 +294,18 @@ router.get('/info', async (req, res) => {
     if (dockerContainer) {
       mode = 'docker';
       try {
-        await execPromise('docker --version');
+        await execFileAsync('docker', ['--version']);
         dockerAvailable = true;
 
         try {
-          await execPromise(`docker exec ${dockerContainer} pg_dump --version`);
+          await execFileAsync('docker', ['exec', dockerContainer, 'pg_dump', '--version']);
           pgDumpAvailable = true;
         } catch (err) {
           console.log('[BACKUP INFO] pg_dump not found in container');
         }
 
         try {
-          await execPromise(`docker exec ${dockerContainer} psql --version`);
+          await execFileAsync('docker', ['exec', dockerContainer, 'psql', '--version']);
           psqlAvailable = true;
         } catch (err) {
           console.log('[BACKUP INFO] psql not found in container');
@@ -317,14 +318,14 @@ router.get('/info', async (req, res) => {
       const psqlPath = process.env.PSQL_PATH || 'psql';
 
       try {
-        await execPromise(`${pgDumpPath} --version`);
+        await execFileAsync(pgDumpPath, ['--version']);
         pgDumpAvailable = true;
       } catch (err) {
         console.log('[BACKUP INFO] pg_dump not found');
       }
 
       try {
-        await execPromise(`${psqlPath} --version`);
+        await execFileAsync(psqlPath, ['--version']);
         psqlAvailable = true;
       } catch (err) {
         console.log('[BACKUP INFO] psql not found');

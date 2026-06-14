@@ -3,9 +3,8 @@ const router = express.Router();
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
 const os = require('os');
+const unzipper = require('unzipper');
 const { processGoogleKeepImport } = require('../import-notes');
 const { blockInDemo } = require('../middleware/demoGuard');
 
@@ -55,11 +54,14 @@ const ensureDir = (dirPath) => {
   return dirPath;
 };
 
-// Helper function to extract the zip file
-const execPromise = promisify(exec);
+// Helper function to extract the zip file using the unzipper library —
+// avoids shelling out, so paths can contain spaces / quotes / shell metachars
+// without breaking, and there's no dependency on `unzip` being installed.
 const extractZip = async (zipPath, destPath) => {
   try {
-    await execPromise(`unzip -o "${zipPath}" -d "${destPath}"`);
+    await fs.createReadStream(zipPath)
+      .pipe(unzipper.Extract({ path: destPath }))
+      .promise();
     return true;
   } catch (error) {
     console.error('Error extracting zip:', error);
