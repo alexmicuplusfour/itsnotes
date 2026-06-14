@@ -29,21 +29,32 @@ const storage = multer.diskStorage({
   }
 });
 
-const demoFileFilter = (req, file, cb) => {
-  if (DEMO_ALLOWED_MIMES.has(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('This file type is not allowed in demo mode.'));
-  }
-};
-
+// multer captures `limits` and `fileFilter` at construction time, but
+// demoReset.init() runs after this module is required — so we can't read
+// demoReset.isEnabled() here. Use a runtime fileFilter and a pre-multer
+// guard instead.
 const upload = multer({
   storage,
   limits: {
-    fileSize: demoReset.isEnabled() ? DEMO_MAX_FILE_SIZE : 1024 * 1024 * 1024
+    fileSize: 1024 * 1024 * 1024
   },
-  fileFilter: demoReset.isEnabled() ? demoFileFilter : undefined
+  fileFilter: (req, file, cb) => {
+    if (demoReset.isEnabled() && !DEMO_ALLOWED_MIMES.has(file.mimetype)) {
+      return cb(new Error('This file type is not allowed in demo mode.'));
+    }
+    cb(null, true);
+  }
 });
+
+// Reject oversized demo uploads before multer buffers the body.
+const demoSizeGuard = (req, res, next) => {
+  if (!demoReset.isEnabled()) return next();
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (contentLength > DEMO_MAX_FILE_SIZE) {
+    return res.status(413).json({ message: 'File too large. Maximum size in demo mode is 10MB.' });
+  }
+  next();
+};
 
 // Clean up any partially-written file when multer itself errors (e.g. size limit, fileFilter rejection)
 const handleUploadError = (err, req, res, next) => {
@@ -51,13 +62,16 @@ const handleUploadError = (err, req, res, next) => {
     try { fs.unlinkSync(req.file.path); } catch (_) {}
   }
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(413).json({ message: `File too large. Maximum size in demo mode is 10MB.` });
+    const message = demoReset.isEnabled()
+      ? 'File too large. Maximum size in demo mode is 10MB.'
+      : 'File too large.';
+    return res.status(413).json({ message });
   }
   return res.status(400).json({ message: err.message || 'Upload rejected.' });
 };
 
 // Upload attachment
-router.post('/notes/:noteId/attachments', upload.single('file'), async (req, res) => {
+router.post('/notes/:noteId/attachments', demoSizeGuard, upload.single('file'), async (req, res) => {
   try {
     const { noteId } = req.params;
     
