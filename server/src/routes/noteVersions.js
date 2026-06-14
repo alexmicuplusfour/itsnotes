@@ -1,6 +1,7 @@
 const express = require('express');
 const archiver = require('archiver');
 const db = require('../db');
+const { renderNoteHtml } = require('../utils/renderNoteHtml');
 
 const router = express.Router();
 
@@ -45,44 +46,12 @@ router.get('/:id/versions/:version_id/download', async (req, res) => {
     if (format === 'html') {
       // Download as HTML with full formatting
       const filename = `note_${noteId}_version_${timestamp}.html`;
-      const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${version.title || 'Note Version'}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 20px;
-      line-height: 1.6;
-      color: #333;
-    }
-    h1 {
-      border-bottom: 2px solid #e0e0e0;
-      padding-bottom: 10px;
-      margin-bottom: 20px;
-    }
-    .timestamp {
-      color: #666;
-      font-size: 0.9em;
-      margin-bottom: 20px;
-    }
-    .content {
-      margin-top: 20px;
-    }
-  </style>
-</head>
-<body>
-  <h1>${version.title || 'Untitled'}</h1>
-  <div class="timestamp">Version created: ${new Date(version.created_at).toLocaleString()}</div>
-  <div class="content">
-    ${version.raw_content || version.content || '<p><em>No content</em></p>'}
-  </div>
-</body>
-</html>`;
+      const htmlContent = renderNoteHtml({
+        title: version.title,
+        content: version.raw_content || version.content,
+        timestamp: version.created_at,
+        timestampLabel: 'Version created',
+      });
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -255,45 +224,11 @@ router.post('/bulk-download', async (req, res) => {
     const usedFilenames = new Set();
 
     for (const note of notes) {
-      // Create HTML content (same format as individual note download)
-      const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${note.title || 'Untitled Note'}</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      max-width: 800px;
-      margin: 40px auto;
-      padding: 20px;
-      line-height: 1.6;
-      color: #333;
-    }
-    h1 {
-      border-bottom: 2px solid #e0e0e0;
-      padding-bottom: 10px;
-      margin-bottom: 20px;
-    }
-    .timestamp {
-      color: #666;
-      font-size: 0.9em;
-      margin-bottom: 20px;
-    }
-    .content {
-      margin-top: 20px;
-    }
-  </style>
-</head>
-<body>
-  <h1>${note.title || 'Untitled'}</h1>
-  <div class="timestamp">Created: ${new Date(note.created_at).toLocaleString()}</div>
-  <div class="content">
-    ${note.content || '<p><em>No content</em></p>'}
-  </div>
-</body>
-</html>`;
+      const htmlContent = renderNoteHtml({
+        title: note.title,
+        content: note.content,
+        timestamp: note.created_at,
+      });
 
       // Create a filename
       let baseFilename = note.title ? note.title.replace(/[^a-z0-9]/gi, '_').substring(0, 50) : `note_${note.id}`;
