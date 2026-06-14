@@ -94,12 +94,13 @@ class SearchQueryBuilder {
 
   /**
    * Apply OR group conditions
-   */  applyOrGroups(orGroups) {
+   */
+  async applyOrGroups(orGroups) {
     if (!orGroups || orGroups.length === 0) return this;
 
-    orGroups.forEach(async (group) => {
+    for (const group of orGroups) {
       await this.applyOrGroup(group);
-    });
+    }
 
     return this;
   }
