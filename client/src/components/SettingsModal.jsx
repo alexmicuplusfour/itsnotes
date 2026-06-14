@@ -547,6 +547,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
     TMDB_API_KEY: '',
     FOXIT_ENABLED: false,
     FOXIT_SNOOPER_URL: '',
+    FOXIT_SNOOPER_TOKEN: '',
     CACHE_MAX_SIZE: '200',
     PREFETCH_BATCH_SIZE: '10',
     BATCH_DELAY_MS: '500',
@@ -1256,6 +1257,20 @@ const SettingsModal = ({ isOpen, onClose }) => {
                         />
                         <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
                           Leave empty to use the server default. Enter the IP:port where the Foxit Snooper is running.
+                        </p>
+                      </FormGroup>
+                      <FormGroup>
+                        <Label>Snooper Token</Label>
+                        <Input
+                          type="password"
+                          name="FOXIT_SNOOPER_TOKEN"
+                          value={settings.FOXIT_SNOOPER_TOKEN || ''}
+                          onChange={handleChange}
+                          placeholder="Optional shared token"
+                          autoComplete="off"
+                        />
+                        <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                          When set, the snooper must send the same value as <code>X-Snooper-Token</code> on its requests. Leave empty to keep the endpoints open.
                         </p>
                       </FormGroup>
                     )}
