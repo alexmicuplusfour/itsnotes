@@ -275,10 +275,10 @@ const ImportExportSettings = () => {
             }
             // Match the /restore flow: imported notes/tags live in the DB but
             // the running app has no idea they exist. A page reload picks them
-            // all up cleanly. 5s lets the user read the import stats first.
+            // all up cleanly.
             setTimeout(() => {
               window.location.reload();
-            }, 5000);
+            }, 2000);
             break;
           case 'error':
             setError(data.data.message);
