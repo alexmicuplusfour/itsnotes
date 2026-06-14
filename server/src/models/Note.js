@@ -1468,7 +1468,7 @@ class Note {
    */
   static async bulkUpdate(noteIds, updates) {
     if (!noteIds || noteIds.length === 0) {
-      return [];
+      return 0;
     }
 
     const updateData = { ...updates };
@@ -1501,16 +1501,13 @@ class Note {
       updateData.trashed_at = null;
     }
 
-    const result = await db('notes')
+    return db('notes')
       .whereIn('id', noteIds)
-      .update(updateData)
-      .returning('*');
-
-    return result;
+      .update(updateData);
   }
   static async bulkDelete(noteIds) {
     if (!noteIds || noteIds.length === 0) {
-      return [];
+      return 0;
     }
 
     return db.transaction(async trx => {
@@ -1524,12 +1521,9 @@ class Note {
       await trx('note_versions').whereIn('note_id', noteIds).del();
 
       // Finally delete the notes themselves
-      const deletedNotes = await trx('notes')
+      return trx('notes')
         .whereIn('id', noteIds)
-        .del()
-        .returning('*');
-
-      return deletedNotes;
+        .del();
     });
   }
 }
