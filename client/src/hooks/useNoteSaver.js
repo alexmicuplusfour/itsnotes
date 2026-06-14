@@ -108,9 +108,15 @@ export function useNoteSaver(
       }
     }
 
-    // Determine if it's create or update
-    const action = noteData.id ? 'update' : 'create';
-    return { shouldSave: true, action };
+    // NoteForm always opens with an already-created note ID (the "+" button
+    // and other entry points create the note via context.createNote first),
+    // so useNoteSaver only handles updates. If id is missing, skip — callers
+    // shouldn't be reaching us in that state.
+    if (!noteData.id) {
+      console.warn('[useNoteSaver] Skipping save: noteData.id missing — useNoteSaver does not create notes');
+      return { shouldSave: false, action: 'none' };
+    }
+    return { shouldSave: true, action: 'update' };
   }, [initialNote]);
 
   /**
@@ -145,10 +151,8 @@ export function useNoteSaver(
       onSaveSuccess,
       onSaveError,
       onDeleteSuccess,
-      createNote,
       updateNote,
       deleteNote,
-      uploadTemporaryImages,
       clearUnsavedIds,
       resetImageState,
     } = callbacksRef.current;
@@ -171,29 +175,6 @@ export function useNoteSaver(
         setIsModified(false);
 
         result = { success: true, action: 'delete' };
-      } else if (action === 'create') {
-        // Create new note
-        console.log('[useNoteSaver] Creating new note');
-
-        const response = await createNote({
-          title: noteData.title,
-          content: noteData.content,
-          color: noteData.color,
-        });
-
-        if (response?.note?.id) {
-          const newNoteId = response.note.id;
-          console.log(`[useNoteSaver] New note created with ID: ${newNoteId}`);
-
-          // Upload temporary images
-          if (uploadTemporaryImages) {
-            await uploadTemporaryImages(newNoteId);
-          }
-
-          result = { success: true, action: 'create', note: response.note };
-        } else {
-          throw new Error('Failed to get new note ID after creation');
-        }
       } else if (action === 'update') {
         // Update existing note
         console.log('[useNoteSaver] Updating existing note:', noteData.id);
