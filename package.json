@@ -2,6 +2,7 @@
   "name": "itsnotes",
   "version": "1.0.0",
   "description": "itsnotes — a personal notes app built with Node.js and PostgreSQL",
+  "license": "MIT",
   "main": "index.js",
   "scripts": {
     "server": "cd server && npm start",
