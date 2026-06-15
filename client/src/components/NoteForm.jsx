@@ -275,6 +275,36 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     isMobile: window.innerWidth <= 768 // Use window width directly for now
   });
 
+  // Hoisted above handleAddReminder so that callback can list addSuggestedTags in its deps.
+  const dynamicActionBarsRef = useRef(null); // Ref for the action-bar wrapper component
+
+  // Monotonic signal incremented on each addSuggestedTags call. Drives the
+  // showActionBar effect below — using an effect (not a sync call) lets us win
+  // against the focus-driven hide that Goodreads/IMDb trigger when they
+  // editor.focus() right before suggesting a tag.
+  const [surfaceActionBarSignal, setSurfaceActionBarSignal] = useState(0);
+
+  // Single entry point for "I want to surface a suggested tag." Dedups against
+  // current suggestions and applied tags, but always pulses the surface signal
+  // so the action bar comes up even when every input tag is already present.
+  const addSuggestedTags = useCallback((newSuggestions) => {
+    if (!newSuggestions || newSuggestions.length === 0) return;
+    setSurfaceActionBarSignal(s => s + 1);
+    setSuggestedTags(prev => {
+      const filtered = newSuggestions.filter(s =>
+        !prev.some(p => p.id === s.id) &&
+        !noteTags.some(t => t.id === s.id)
+      );
+      return filtered.length > 0 ? [...prev, ...filtered] : prev;
+    });
+  }, [noteTags]);
+
+  useEffect(() => {
+    if (surfaceActionBarSignal > 0) {
+      dynamicActionBarsRef.current?.showActionBar?.();
+    }
+  }, [surfaceActionBarSignal]);
+
   // handleAddReminder must be defined AFTER useNoteTagsModal since it uses noteTags and refreshTags
   const handleAddReminder = useCallback(async (e) => {
     console.log("[NoteForm] handleAddReminder called");
@@ -334,23 +364,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
                 refreshTags();
               }
             } else if (shouldSuggestTag(AUTO_TAG_FEATURES.REMINDERS)) {
-              // Add all tags to suggested tags
-              setSuggestedTags(prev => {
-                const newSuggestions = [...prev];
-                for (const tagId of reminderTagIds) {
-                  const alreadySuggested = newSuggestions.some(t => t.id === tagId);
-                  const alreadyApplied = noteTags.some(t => t.id === tagId);
-                  if (!alreadySuggested && !alreadyApplied) {
-                    const actualTag = tags.find(t => t.id === tagId);
-                    newSuggestions.push({
-                      id: tagId,
-                      name: actualTag?.name || 'Unknown',
-                      featureId: AUTO_TAG_FEATURES.REMINDERS
-                    });
-                  }
-                }
-                return newSuggestions;
-              });
+              addSuggestedTags(reminderTagIds.map(tagId => ({
+                id: tagId,
+                name: tags.find(t => t.id === tagId)?.name || 'Unknown',
+                featureId: AUTO_TAG_FEATURES.REMINDERS,
+              })));
               console.log("Suggested reminder tags:", reminderTagIds.length, "tags");
             }
           }
@@ -362,7 +380,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         setIsCreatingReminder(false);
       }
     }
-  }, [internalNoteId, shouldAutoApply, shouldSuggestTag, getFeatureTags, noteTags, refreshTags, tags]);
+  }, [internalNoteId, shouldAutoApply, shouldSuggestTag, getFeatureTags, refreshTags, tags, addSuggestedTags]);
 
   // Initialize UI interactions hook with all refs including tag picker refs
   const {
@@ -439,7 +457,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
   const latestStateRef = useRef({});
   const highlightContainerRef = useRef(null);
-  const dynamicActionBarsRef = useRef(null); // Ref for the new wrapper component
 
   // --- Use the custom hook ---
   const {
@@ -1048,23 +1065,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
               refreshTags();
             }
           } else if (shouldSuggestTag(AUTO_TAG_FEATURES.URL_CONTENT)) {
-            // Add all tags to suggested tags
-            setSuggestedTags(prev => {
-              const newSuggestions = [...prev];
-              for (const tagId of urlContentTagIds) {
-                const alreadySuggested = newSuggestions.some(t => t.id === tagId);
-                const alreadyApplied = noteTags.some(t => t.id === tagId);
-                if (!alreadySuggested && !alreadyApplied) {
-                  const actualTag = tags.find(t => t.id === tagId);
-                  newSuggestions.push({
-                    id: tagId,
-                    name: actualTag?.name || 'Unknown',
-                    featureId: AUTO_TAG_FEATURES.URL_CONTENT
-                  });
-                }
-              }
-              return newSuggestions;
-            });
+            addSuggestedTags(urlContentTagIds.map(tagId => ({
+              id: tagId,
+              name: tags.find(t => t.id === tagId)?.name || 'Unknown',
+              featureId: AUTO_TAG_FEATURES.URL_CONTENT,
+            })));
             console.log("Suggested URL content tags:", urlContentTagIds.length, "tags");
           }
       }
@@ -1100,24 +1105,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     const tagIds = getFeatureTags(featureId);
     if (tagIds.length === 0 || !shouldSuggestTag(featureId)) return;
 
-    setSuggestedTags(prev => {
-      const newSuggestions = [...prev];
-      for (const tagId of tagIds) {
-        const alreadySuggested = newSuggestions.some(t => t.id === tagId);
-        const alreadyApplied = noteTags.some(t => t.id === tagId);
-        if (!alreadySuggested && !alreadyApplied) {
-          const actualTag = tags.find(t => t.id === tagId);
-          newSuggestions.push({
-            id: tagId,
-            name: actualTag?.name || 'Unknown',
-            featureId
-          });
-        }
-      }
-      return newSuggestions;
-    });
+    addSuggestedTags(tagIds.map(tagId => ({
+      id: tagId,
+      name: tags.find(t => t.id === tagId)?.name || 'Unknown',
+      featureId,
+    })));
     console.log(`Suggested ${featureId} tags:`, tagIds.length, "tags");
-  }, [getFeatureTags, shouldSuggestTag, noteTags, tags]);
+  }, [getFeatureTags, shouldSuggestTag, tags, addSuggestedTags]);
 
   // --- Use Note Content Actions Hook ---
   const {
@@ -1939,21 +1933,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         console.warn(`[NoteForm] handleAddSuggestedTag: Tag ${tagId} not found`);
         return;
       }
-      setSuggestedTags(prev => {
-        const alreadySuggested = prev.some(t => t.id === tagId);
-        const alreadyApplied = noteTags.some(t => t.id === tagId);
-        if (alreadySuggested || alreadyApplied) {
-          return prev;
-        }
-        dynamicActionBarsRef.current?.showActionBar?.();
-        return [...prev, {
-          id: tagId,
-          name: actualTag.name,
-          featureId: featureId || 'unknown'
-        }];
-      });
+      addSuggestedTags([{
+        id: tagId,
+        name: actualTag.name,
+        featureId: featureId || 'unknown',
+      }]);
     },
-    [tags, noteTags],
+    [tags, addSuggestedTags],
   );
 
   // Handler for ObjectCard to directly apply a tag (used via NoteFormContext)
@@ -1995,20 +1981,20 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Clear suggested tags when note changes, and add any suggested tags from note creation
   useEffect(() => {
     const noteIdChanged = note?.id !== prevNoteIdForSuggestionsRef.current;
-    
-    // Check if the note has suggested tags from tag search
-    if (note?.suggestedTags && note.suggestedTags.length > 0) {
-      console.log('[NoteForm] Note has suggested tags from context:', note.suggestedTags);
-      setSuggestedTags(note.suggestedTags);
-    } else if (noteIdChanged) {
-      // Only clear suggested tags when switching to a different note
-      console.log('[NoteForm] Note ID changed, clearing suggested tags');
+
+    // Wipe previous note's suggestions before routing the new ones through
+    // addSuggestedTags, so its dedup doesn't suppress them.
+    if (noteIdChanged) {
       setSuggestedTags([]);
     }
-    // Don't clear if same note is re-fetched without suggestedTags
-    
+
+    if (note?.suggestedTags && note.suggestedTags.length > 0) {
+      console.log('[NoteForm] Note has suggested tags from context:', note.suggestedTags);
+      addSuggestedTags(note.suggestedTags);
+    }
+
     prevNoteIdForSuggestionsRef.current = note?.id;
-  }, [note?.id, note?.suggestedTags]);
+  }, [note?.id, note?.suggestedTags, addSuggestedTags]);
 
   // Search handlers - Custom handleSearchToggle with scroll position management
   const customHandleSearchToggle = useCallback(() => {
@@ -2621,17 +2607,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           refreshTags={refreshTags} // Pass the refresh function
           prefetchedNoteTags={noteTags} // Pass pre-fetched tags to avoid loading delay
           noteColor={color} // Pass note color for mobile background
-          onSuggestTags={(tags) => {
-            setSuggestedTags(prev => {
-              const uniqueNewTags = tags.filter(newTag =>
-                !prev.some(existing => existing.id === newTag.id)
-              );
-              if (uniqueNewTags.length > 0) {
-                dynamicActionBarsRef.current?.showActionBar?.();
-              }
-              return [...prev, ...uniqueNewTags];
-            });
-          }}
+          onSuggestTags={addSuggestedTags}
         />
       )}
 
