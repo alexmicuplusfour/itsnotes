@@ -1,38 +1,28 @@
-const axios = require('axios');
 const sharp = require('sharp');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 const NoteImage = require('../models/NoteImage');
+const { safeFetchImage } = require('./safeFetchImage');
 
 /**
- * Download an image from a URL and convert to base64
+ * Download an image from a URL and convert to base64. Rejects private-network
+ * targets, oversized bodies, non-image responses, and excessive redirects.
  */
 async function downloadImageAsBase64(imageUrl, maxSize = 5 * 1024 * 1024) {
     try {
-        const response = await axios.get(imageUrl, {
-            responseType: 'arraybuffer',
-            timeout: 15000,
-            maxContentLength: maxSize,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'
-            }
+        const { buffer, contentType } = await safeFetchImage(imageUrl, {
+            maxBytes: maxSize,
+            maxRedirects: 3,
+            timeoutMs: 15000,
         });
 
-        // Check if it's actually an image by content type
-        const contentType = response.headers['content-type'];
-        if (!contentType || !contentType.startsWith('image/')) {
-            console.warn(`Invalid content type for image ${imageUrl}: ${contentType}`);
-            return null;
-        }
-
-        // Convert to base64
-        const base64 = Buffer.from(response.data).toString('base64');
+        const base64 = buffer.toString('base64');
         const dataUrl = `data:${contentType};base64,${base64}`;
 
         return {
             data: dataUrl,
             type: contentType,
-            size: response.data.length
+            size: buffer.length,
         };
     } catch (error) {
         console.error(`Failed to download image ${imageUrl}:`, error.message);
