@@ -5,11 +5,11 @@ const net = require('net');
 const { URL } = require('url');
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
-const DEFAULT_MAX_REDIRECTS = 3;
+const DEFAULT_MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 10000;
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36';
+  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 function isPrivateIPv4(ip) {
   const parts = ip.split('.').map(Number);

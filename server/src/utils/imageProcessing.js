@@ -12,7 +12,6 @@ async function downloadImageAsBase64(imageUrl, maxSize = 5 * 1024 * 1024) {
     try {
         const { buffer, contentType } = await safeFetchImage(imageUrl, {
             maxBytes: maxSize,
-            maxRedirects: 3,
             timeoutMs: 15000,
         });
 

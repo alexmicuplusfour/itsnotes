@@ -34,7 +34,6 @@ async function downloadObjectImage(imageUrl, objectType, objectId) {
 
     const { buffer } = await safeFetchImage(imageUrl, {
       maxBytes: 5 * 1024 * 1024,
-      maxRedirects: 3,
       timeoutMs: 10000,
     });
 
