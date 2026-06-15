@@ -173,6 +173,14 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
     setActionBarClass("visible");
   }, []);
 
+  // While there are pending suggested tags, force the action bar visible —
+  // suggestions are user-actionable and shouldn't be hidden by focus, scroll,
+  // or other event-driven setActionBarClass("hidden") calls. Once the user
+  // accepts/dismisses them all, normal hide behavior resumes.
+  const effectiveActionBarClass = (suggestedTags && suggestedTags.length > 0)
+    ? 'visible'
+    : actionBarClass;
+
   // Compute inline style for bottom action container color - avoids styled-components class regeneration
   const bottomActionStyle = React.useMemo(() => {
     if (color && color !== 'default') {
@@ -215,7 +223,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
       note={note} color={color} images={images} noteTags={noteTags}
       noteUrls={noteUrls} bookReferences={bookReferences} noteReferences={noteReferences}
       isModified={isModified} isAutoSaving={isAutoSaving} isDarkTheme={isDarkTheme}
-      isMobile={isMobile} actionBarClass={actionBarClass} unsavedImageIds={unsavedImageIds}
+      isMobile={isMobile} actionBarClass={effectiveActionBarClass} unsavedImageIds={unsavedImageIds}
       onRemoveImage={onRemoveImage} onTagClick={onTagClick} onRemoveTag={onRemoveTag} onBookClick={onBookClick}
       onNoteReferenceClick={onNoteReferenceClick} onAddImageClick={onAddImageClick}
       onClose={onClose}
@@ -260,7 +268,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
     />
       <BottomActionContainer
         style={bottomActionStyle}
-        $visible={actionBarClass === "hidden" && !showTagsModal && !showColorPicker}
+        $visible={effectiveActionBarClass === "hidden" && !showTagsModal && !showColorPicker}
         $isTyping={isTyping}
         $isDarkTheme={isDarkTheme}
       >

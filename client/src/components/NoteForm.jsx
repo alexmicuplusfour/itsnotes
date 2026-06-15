@@ -278,18 +278,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Hoisted above handleAddReminder so that callback can list addSuggestedTags in its deps.
   const dynamicActionBarsRef = useRef(null); // Ref for the action-bar wrapper component
 
-  // Monotonic signal incremented on each addSuggestedTags call. Drives the
-  // showActionBar effect below — using an effect (not a sync call) lets us win
-  // against the focus-driven hide that Goodreads/IMDb trigger when they
-  // editor.focus() right before suggesting a tag.
-  const [surfaceActionBarSignal, setSurfaceActionBarSignal] = useState(0);
-
   // Single entry point for "I want to surface a suggested tag." Dedups against
-  // current suggestions and applied tags, but always pulses the surface signal
-  // so the action bar comes up even when every input tag is already present.
+  // current suggestions and applied tags. The action bar surfacing itself is
+  // handled by DynamicActionBarsWrapper, which forces visible while
+  // suggestedTags is non-empty (so focus/scroll/hide races can't suppress it).
   const addSuggestedTags = useCallback((newSuggestions) => {
     if (!newSuggestions || newSuggestions.length === 0) return;
-    setSurfaceActionBarSignal(s => s + 1);
     setSuggestedTags(prev => {
       const filtered = newSuggestions.filter(s =>
         !prev.some(p => p.id === s.id) &&
@@ -298,12 +292,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       return filtered.length > 0 ? [...prev, ...filtered] : prev;
     });
   }, [noteTags]);
-
-  useEffect(() => {
-    if (surfaceActionBarSignal > 0) {
-      dynamicActionBarsRef.current?.showActionBar?.();
-    }
-  }, [surfaceActionBarSignal]);
 
   // handleAddReminder must be defined AFTER useNoteTagsModal since it uses noteTags and refreshTags
   const handleAddReminder = useCallback(async (e) => {
