@@ -73,4 +73,4 @@ Notes, labels, colors, archive/trash/pin state, and original timestamps come acr
 
 ---
 
-This project is entirely vibecoded.
+This project is entirely 𝚟𝚒𝚋𝚎𝚌𝚘𝚍𝚎𝚍.
