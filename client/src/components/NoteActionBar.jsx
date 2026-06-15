@@ -404,8 +404,8 @@ const SuggestedTagIcon = styled.span`
   margin-right: 4px;
 `;
 
-const UrlLink = styled(TagComponent)`
-
+const UrlLink = styled(TagComponent).attrs({ as: 'a' })`
+  text-decoration: none;
 `;
 
 const BookReference = styled(TagComponent)`

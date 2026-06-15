@@ -189,45 +189,52 @@ const prioritizeUrlsByDiversity = (urls, maxUrls = 8) => {
   return result;
 };
 
+// Reduce a hostname to its registrable domain for chip display
+// (e.g. web.archive.org -> archive.org, www.nature.com -> nature.com).
+// Handles common two-part public suffixes like .co.uk, .com.au.
+const TWO_PART_SLDS = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac']);
+const toDisplayDomain = (hostname) => {
+  const labels = hostname.replace(/^www\./, '').split('.');
+  if (labels.length <= 2) return labels.join('.');
+  const last = labels[labels.length - 1];
+  const secondLast = labels[labels.length - 2];
+  if (last.length === 2 && TWO_PART_SLDS.has(secondLast)) {
+    return labels.slice(-3).join('.');
+  }
+  return labels.slice(-2).join('.');
+};
+
 // URL extraction function
 export const extractUrls = (text) => {
   if (!text) return [];
-  
+
   // Regular expression to match URLs - more strict pattern
   // Matches URLs with proper domain structure
   const urlRegex = /(https?:\/\/(?:[-\w.])+(?:\:[0-9]+)?(?:\/(?:[\w\/_.-])*)?(?:\?(?:[\w&=%.#-])*)?(?:\#(?:[\w.-])*)?|www\.(?:[-\w.])+(?:\/(?:[\w\/_.-])*)?(?:\?(?:[\w&=%.#-])*)?(?:\#(?:[\w.-])*)?)/gi;
-  
+
   // Extract URLs and return unique values
   const urls = text.match(urlRegex) || [];
   const urlItems = [...new Set(urls)].map(url => {
     // Clean the URL by trimming whitespace and removing trailing punctuation
     const cleanUrl = url.trim().replace(/[.,;:)]+$/, '');
-    
+
     // Ensure URL has a protocol for the href attribute
     const href = cleanUrl.startsWith('www.') ? `https://${cleanUrl}` : cleanUrl;
-    
+
     // Basic validation - must have at least a domain with a dot
     if (!href.includes('.') || href.length < 7) {
       console.warn('Skipping invalid URL (too short or no domain):', cleanUrl);
       return null;
     }
-    
-    // Get domain name for display
-    let domain = cleanUrl;
+
+    let domain;
     try {
-      // Parse the URL to extract the hostname
-      if (cleanUrl.startsWith('www.')) {
-        domain = cleanUrl; // Keep as is for display
-      } else {
-        const urlObj = new URL(href);
-        domain = urlObj.hostname.replace(/^www\./, '');
-      }
+      domain = toDisplayDomain(new URL(href).hostname);
     } catch (e) {
-      // If URL parsing fails, skip this URL entirely
       console.warn('Skipping invalid URL:', cleanUrl, e.message);
       return null;
     }
-    
+
     return { url: href, domain };
   }).filter(Boolean); // Remove null entries
   
