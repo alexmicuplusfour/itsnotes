@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { useNoteActions } from '../contexts/NoteActionsContext'; // Use stable actions context
 import { selectionModeRef } from '../contexts/NoteSelectionContext';
@@ -137,6 +137,21 @@ const Card = styled.div`
         border: 2px solid var(--foreground-color);
       }
     }
+`;
+
+// Tiny dot in the top-right corner shown while a note is not yet prefetched.
+// Fades out the moment the note lands in the cache.
+const PrefetchIndicator = styled.div`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--text-color);
+  opacity: ${props => (props.$visible ? 0.18 : 0)};
+  transition: opacity 0.4s ease;
+  pointer-events: none;
 `;
 
 const Title = styled.h3`
@@ -727,7 +742,54 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
     searchMode,
     openNote, // NEW: Stable wrapper for new navigation system
     openReferencedNote, // NEW: Stable wrapper for new navigation system
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
+    prefetchNoteToCache,
+    getViewportPrefetchDelay,
   } = useNoteActions();
+
+  // Subscribe to this note's prefetch-status; only re-renders when it flips.
+  const subscribeCacheStatus = useCallback(
+    (cb) => subscribeToCacheStatus(note.id, cb),
+    [subscribeToCacheStatus, note.id]
+  );
+  const getCacheStatusSnapshot = useCallback(
+    () => getNoteCacheStatus(note.id),
+    [getNoteCacheStatus, note.id]
+  );
+  const isCached = useSyncExternalStore(subscribeCacheStatus, getCacheStatusSnapshot);
+
+  // Viewport-triggered prefetch with a per-card debounce: only fetch when a
+  // card stays in view past BATCH_DELAY_MS, so fast scroll-past doesn't fire
+  // requests. Cancelled when scrolling away before the timer elapses.
+  const cardRef = useRef(null);
+  useEffect(() => {
+    if (isCached) return;
+    const el = cardRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+
+    let pendingTimer = null;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          if (pendingTimer) return;
+          pendingTimer = setTimeout(() => {
+            pendingTimer = null;
+            prefetchNoteToCache(note.id);
+          }, getViewportPrefetchDelay());
+        } else if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(el);
+    return () => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      obs.disconnect();
+    };
+  }, [isCached, note.id, prefetchNoteToCache, getViewportPrefetchDelay]);
 
   // Check if the current search query is a direct match for this note's ID
   const isDirectIdMatch = useMemo(() => {
@@ -1023,6 +1085,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   return (
     <>
       <Card
+        ref={cardRef}
         style={cardColorStyle}
         $isPinned={note.is_pinned}
         $hasImages={images.length > 0}
@@ -1048,6 +1111,8 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         >
           {isSelected && <Icon name="check" size={16} strokeWidth="3"/>}
         </SelectionCheckbox>
+
+        <PrefetchIndicator $visible={!isCached} aria-hidden="true" />
 
         {/* Compact Object Card Preview */}
         {noteObjects.length > 0 && noteObjects[0].type === 'book' && (

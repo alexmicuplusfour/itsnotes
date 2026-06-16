@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import api from '../services/api';
 
 /**
- * Custom hook for prefetching and caching full note content
- * Implements LRU cache eviction and batch prefetching with configurable delays
+ * Custom hook for prefetching and caching full note content.
+ * Caching is LRU-bounded; prefetching is on-demand (viewport-triggered) with
+ * a concurrency limit so a burst of intersections can't flood the server.
  */
 export const usePrefetch = (cacheSettings) => {
   // Refs to avoid recreating callbacks when settings change
@@ -15,17 +16,20 @@ export const usePrefetch = (cacheSettings) => {
   // Cache state - using ref to avoid re-renders on cache updates
   const fullNotesCacheRef = useRef({});
 
-  // Prefetch queue state
-  const [isPrefetching, setIsPrefetching] = useState(false);
-  const [prefetchQueue, setPrefetchQueue] = useState([]);
-  const prefetchTimerRef = useRef(null);
-  const prefetchAbortControllerRef = useRef(null);
-  const currentBatchIndexRef = useRef(0);
-  const lastPrefetchedPageRef = useRef(0);
+  // Per-note cache-status subscribers (Map<noteId, Set<callback>>) — drives
+  // the cached/uncached UI indicator on note cards via useSyncExternalStore.
+  // Only cards whose own status flips re-render.
+  const cacheStatusSubscribersRef = useRef(new Map());
+
+  const notifyCacheStatus = (noteId) => {
+    const subs = cacheStatusSubscribersRef.current.get(noteId);
+    if (subs) subs.forEach(cb => cb());
+  };
 
   // Add note to cache with LRU eviction
   const addToCache = useCallback((noteId, noteData) => {
     const cache = fullNotesCacheRef.current;
+    const wasCached = !!cache[noteId];
 
     // Add new note with access timestamp
     cache[noteId] = {
@@ -35,6 +39,10 @@ export const usePrefetch = (cacheSettings) => {
     };
 
     console.log(`[CACHE] Added note ${noteId} to cache. Cache size: ${Object.keys(cache).length}`);
+
+    if (!wasCached) {
+      notifyCacheStatus(noteId);
+    }
 
     // Check if cache exceeds limit
     const cacheSize = Object.keys(cache).length;
@@ -50,6 +58,7 @@ export const usePrefetch = (cacheSettings) => {
       toRemove.forEach(([id]) => {
         console.log(`[CACHE] Evicting note ${id} (LRU - last accessed: ${new Date(cache[id].lastAccessed).toLocaleTimeString()})`);
         delete cache[id];
+        notifyCacheStatus(id);
       });
     }
   }, []);
@@ -67,7 +76,30 @@ export const usePrefetch = (cacheSettings) => {
     const cache = fullNotesCacheRef.current;
     if (cache[noteId]) {
       delete cache[noteId];
+      notifyCacheStatus(noteId);
     }
+  }, []);
+
+  // Per-note subscription used by NoteCard via useSyncExternalStore
+  const subscribeToCacheStatus = useCallback((noteId, callback) => {
+    let subs = cacheStatusSubscribersRef.current.get(noteId);
+    if (!subs) {
+      subs = new Set();
+      cacheStatusSubscribersRef.current.set(noteId, subs);
+    }
+    subs.add(callback);
+    return () => {
+      subs.delete(callback);
+      if (subs.size === 0) {
+        cacheStatusSubscribersRef.current.delete(noteId);
+      }
+    };
+  }, []);
+
+  // Synchronous snapshot — true if the note is in cache (TTL is checked at
+  // open time, not for the indicator).
+  const getNoteCacheStatus = useCallback((noteId) => {
+    return !!fullNotesCacheRef.current[noteId];
   }, []);
 
   // Get cached note
@@ -80,109 +112,81 @@ export const usePrefetch = (cacheSettings) => {
     return cachedNote && (Date.now() - cachedNote.cachedAt) < cacheSettingsRef.current.CACHE_TTL_MS;
   }, []);
 
-  // Prefetch a single note and add to cache
-  const prefetchNoteToCache = useCallback(async (noteId) => {
-    // Skip if already in cache and valid
-    const cachedNote = fullNotesCacheRef.current[noteId];
-    const isValid = cachedNote && (Date.now() - cachedNote.cachedAt) < cacheSettingsRef.current.CACHE_TTL_MS;
+  // Concurrency throttle so a burst of intersecting cards can't fire dozens of
+  // parallel requests. Max in-flight = PREFETCH_BATCH_SIZE; extras queue here.
+  const inFlightFetchesRef = useRef(new Set());
+  const inFlightCountRef = useRef(0);
+  const pendingQueueRef = useRef([]);
+  const pendingSetRef = useRef(new Set());
 
-    if (isValid) {
-      console.log(`[PREFETCH] Note ${noteId} already cached and valid, skipping`);
-      return;
-    }
+  const doFetch = async (noteId) => {
+    inFlightFetchesRef.current.add(noteId);
+    inFlightCountRef.current += 1;
 
     try {
       // Fetch full note content with tags/images/objects so the NoteForm can
       // render the tag row on first paint without a follow-up /tags request.
       const response = await api.get(`/notes/${noteId}`, { params: { includeDetails: true } });
-      // GET /notes/:id returns note directly, not wrapped in { note: ... }
       const fetchedNote = response.data;
-
       if (fetchedNote && fetchedNote.id) {
-        console.log(`[PREFETCH] Successfully cached note ${noteId}`);
         addToCache(noteId, fetchedNote);
-      } else {
-        console.log(`[PREFETCH] Invalid note data received for ${noteId}`);
       }
     } catch (error) {
-      // Silently fail - prefetching is non-critical
       console.log(`[PREFETCH] Failed to fetch note ${noteId}:`, error.message);
+    } finally {
+      inFlightFetchesRef.current.delete(noteId);
+      inFlightCountRef.current -= 1;
+      pumpPending();
+    }
+  };
+
+  const pumpPending = () => {
+    const max = cacheSettingsRef.current.PREFETCH_BATCH_SIZE;
+    while (
+      pendingQueueRef.current.length > 0 &&
+      inFlightCountRef.current < max
+    ) {
+      const nextId = pendingQueueRef.current.shift();
+      pendingSetRef.current.delete(nextId);
+      // Skip if it landed in cache between enqueue and dequeue
+      const c = fullNotesCacheRef.current[nextId];
+      const valid = c && (Date.now() - c.cachedAt) < cacheSettingsRef.current.CACHE_TTL_MS;
+      if (valid) continue;
+      doFetch(nextId);
+    }
+  };
+
+  // Prefetch a single note and add to cache. Throttled by concurrency limit;
+  // safe to call many times in quick succession (dedupes in-flight + pending).
+  const prefetchNoteToCache = useCallback((noteId) => {
+    if (inFlightFetchesRef.current.has(noteId)) return;
+    if (pendingSetRef.current.has(noteId)) return;
+
+    const cachedNote = fullNotesCacheRef.current[noteId];
+    const isValid = cachedNote && (Date.now() - cachedNote.cachedAt) < cacheSettingsRef.current.CACHE_TTL_MS;
+    if (isValid) return;
+
+    if (inFlightCountRef.current < cacheSettingsRef.current.PREFETCH_BATCH_SIZE) {
+      doFetch(noteId);
+    } else {
+      pendingQueueRef.current.push(noteId);
+      pendingSetRef.current.add(noteId);
     }
   }, [addToCache]);
 
-  // Process a batch of notes from the queue
-  const processPrefetchBatch = useCallback(async (queue, startIdx) => {
-    if (startIdx >= queue.length) {
-      console.log(`[PREFETCH] Queue complete. Processed ${queue.length} notes.`);
-      setIsPrefetching(false);
-      currentBatchIndexRef.current = 0;
-      return;
-    }
-
-    const batch = queue.slice(startIdx, startIdx + cacheSettingsRef.current.PREFETCH_BATCH_SIZE);
-    console.log(`[PREFETCH] Processing batch ${Math.floor(startIdx / cacheSettingsRef.current.PREFETCH_BATCH_SIZE) + 1}: notes ${startIdx + 1}-${startIdx + batch.length}`);
-
-    setIsPrefetching(true);
-
-    // Fetch batch in parallel
-    await Promise.allSettled(
-      batch.map(id => prefetchNoteToCache(id))
-    );
-
-    // Update current index
-    currentBatchIndexRef.current = startIdx + cacheSettingsRef.current.PREFETCH_BATCH_SIZE;
-
-    // Schedule next batch with delay (don't overwhelm server)
-    setTimeout(() => {
-      processPrefetchBatch(queue, startIdx + cacheSettingsRef.current.PREFETCH_BATCH_SIZE);
-    }, cacheSettingsRef.current.BATCH_DELAY_MS);
-  }, [prefetchNoteToCache]);
-
-  // Start prefetching notes from the queue
-  const startPrefetchQueue = useCallback((noteIds) => {
-    // Cancel any existing prefetch operation
-    if (prefetchAbortControllerRef.current) {
-      console.log('[PREFETCH] Aborting previous prefetch queue');
-      clearTimeout(prefetchAbortControllerRef.current);
-    }
-
-    // Filter out notes that are already cached and valid
-    const notesToPrefetch = noteIds.filter(id => {
-      const cachedNote = fullNotesCacheRef.current[id];
-      const isValid = cachedNote && (Date.now() - cachedNote.cachedAt) < cacheSettingsRef.current.CACHE_TTL_MS;
-      return !isValid;
-    });
-
-    if (notesToPrefetch.length === 0) {
-      console.log('[PREFETCH] All notes already cached, skipping prefetch');
-      return;
-    }
-
-    console.log(`[PREFETCH] Starting queue with ${notesToPrefetch.length} notes (batch size: ${cacheSettingsRef.current.PREFETCH_BATCH_SIZE}, delay: ${cacheSettingsRef.current.BATCH_DELAY_MS}ms)`);
-
-    // Update queue state
-    setPrefetchQueue(notesToPrefetch);
-    currentBatchIndexRef.current = 0;
-
-    // Start processing first batch
-    processPrefetchBatch(notesToPrefetch, 0);
-  }, [processPrefetchBatch]);
-
-  // Cancel prefetch operation
-  const cancelPrefetch = useCallback(() => {
-    if (prefetchTimerRef.current) {
-      clearTimeout(prefetchTimerRef.current);
-      prefetchTimerRef.current = null;
-    }
-    setIsPrefetching(false);
-    currentBatchIndexRef.current = 0;
+  // Cancel any queued (not-yet-started) prefetches. In-flight fetches finish
+  // normally; they're cheap and likely useful.
+  const cancelPendingPrefetches = useCallback(() => {
+    pendingQueueRef.current = [];
+    pendingSetRef.current.clear();
   }, []);
 
-  // Reset prefetch state
-  const resetPrefetch = useCallback(() => {
-    lastPrefetchedPageRef.current = 0;
-    cancelPrefetch();
-  }, [cancelPrefetch]);
+  // Stable getter for the per-card viewport-prefetch debounce (reuses the
+  // BATCH_DELAY_MS setting — how long a card must stay in view before fetching).
+  const getViewportPrefetchDelay = useCallback(
+    () => cacheSettingsRef.current.BATCH_DELAY_MS,
+    []
+  );
 
   return {
     // Cache operations
@@ -192,15 +196,14 @@ export const usePrefetch = (cacheSettings) => {
     getCachedNote,
     isCacheValid,
 
-    // Prefetch operations
-    startPrefetchQueue,
-    cancelPrefetch,
-    resetPrefetch,
+    // Per-note cache-status subscription for UI indicators
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
 
-    // State
-    isPrefetching,
-    prefetchQueue,
-    lastPrefetchedPageRef,
+    // Prefetch operations
+    prefetchNoteToCache,
+    cancelPendingPrefetches,
+    getViewportPrefetchDelay,
 
     // Direct cache access (for migration)
     fullNotesCacheRef

@@ -83,6 +83,14 @@ export const NoteActionsProvider = ({ children }) => {
     // State that NoteCard needs and changes infrequently
     view,
     searchMode,
+
+    // Stable subscription primitives for per-note prefetch-status indicator
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
+
+    // Viewport-triggered single-note prefetch + tuning
+    prefetchNoteToCache,
+    getViewportPrefetchDelay,
   } = useNotes();
 
   // Memoize the context value to prevent unnecessary re-renders
@@ -118,6 +126,12 @@ export const NoteActionsProvider = ({ children }) => {
       // State (only infrequently changing)
       view,
       searchMode,
+
+      // Stable subscription primitives
+      subscribeToCacheStatus,
+      getNoteCacheStatus,
+      prefetchNoteToCache,
+      getViewportPrefetchDelay,
     };
   }, [
     // Functions - these should be stable references (all have empty dependency arrays)
@@ -141,6 +155,11 @@ export const NoteActionsProvider = ({ children }) => {
     // State values (only infrequently changing)
     view,
     searchMode,
+    // Stable subscription primitives
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
+    prefetchNoteToCache,
+    getViewportPrefetchDelay,
   ]);
 
   return (

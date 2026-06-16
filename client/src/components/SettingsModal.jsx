@@ -1967,7 +1967,7 @@ const SettingsModal = ({ onClose }) => {
                       </FormGroup>
 
                       <FormGroup>
-                        <Label>Prefetch Batch Size</Label>
+                        <Label>Max Concurrent Prefetches</Label>
                         <Input
                           type="number"
                           min="1"
@@ -1976,22 +1976,22 @@ const SettingsModal = ({ onClose }) => {
                           onChange={(e) => handleCacheSettingChange('PREFETCH_BATCH_SIZE', e.target.value)}
                         />
                         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-                          Number of notes to prefetch per batch. Default: 10
+                          Maximum number of prefetch requests in flight at once. Extras queue until a slot frees. Default: 10
                         </p>
                       </FormGroup>
 
                       <FormGroup>
-                        <Label>Batch Delay (milliseconds)</Label>
+                        <Label>Viewport Prefetch Delay (milliseconds)</Label>
                         <Input
                           type="number"
-                          min="100"
+                          min="0"
                           max="5000"
-                          step="100"
+                          step="50"
                           value={settings.BATCH_DELAY_MS || '500'}
                           onChange={(e) => handleCacheSettingChange('BATCH_DELAY_MS', e.target.value)}
                         />
                         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-                          Delay between prefetch batches. Default: 500ms
+                          How long a note card must stay visible before its prefetch fires. Higher values skip cards you scroll past quickly. Default: 500ms
                         </p>
                       </FormGroup>
 

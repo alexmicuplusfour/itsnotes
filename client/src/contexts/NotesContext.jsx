@@ -125,12 +125,11 @@ export const NotesProvider = ({ children }) => {
     removeFromCache,
     getCachedNote,
     isCacheValid,
-    startPrefetchQueue,
-    cancelPrefetch,
-    resetPrefetch,
-    isPrefetching,
-    prefetchQueue,
-    lastPrefetchedPageRef,
+    prefetchNoteToCache,
+    cancelPendingPrefetches,
+    getViewportPrefetchDelay,
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
     fullNotesCacheRef
   } = usePrefetch(cacheSettings);
 
@@ -2226,7 +2225,7 @@ export const NotesProvider = ({ children }) => {
    }, [_executeOptimisticUpdate]);
 
   // --- Prefetch Functions ---
-  // Note: Prefetch functions (prefetchNoteToCache, processPrefetchBatch, startPrefetchQueue) are now provided by usePrefetch hook
+  // Note: Prefetch functions are provided by usePrefetch hook
 
   // Updated to accept an optional preloadedNote object
   const openNoteById = useCallback(async (id, preloadedNote = null) => {
@@ -2350,60 +2349,13 @@ export const NotesProvider = ({ children }) => {
   useEffect(() => { hasMoreRef.current = hasMore; }, [hasMore]);
   useEffect(() => { openNoteByIdRef.current = openNoteById; }, [openNoteById]); // Update openNoteById ref to avoid circular dependency
 
-  // --- Prefetch Effect ---
-  // Start background prefetching when notes list loads successfully
+  // Clear any queued (not-yet-started) viewport prefetches on view change.
+  // In-flight requests finish normally — they're cheap and likely useful.
   useEffect(() => {
-    // Determine which notes list to prefetch from
-    const notesToPrefetch = searchMode ? searchResults : notes;
-
-    // Only prefetch when:
-    // 1. List is loaded and has notes
-    // 2. We haven't already prefetched this page
-    // 3. Not already prefetching
-    if (!listLoading && notesToPrefetch.length > 0 && page > lastPrefetchedPageRef.current && !isPrefetching) {
-      console.log(`[PREFETCH] New page ${page} loaded with ${notesToPrefetch.length} total notes (searchMode: ${searchMode}). Prefetching latest page only.`);
-
-      // Only prefetch notes from the CURRENT page (last 80 notes)
-      // This prevents prefetching all 1000+ notes when you scroll fast
-      const pageSize = 80; // Match INITIAL_PAGE_LIMIT
-      const startIndex = Math.max(0, notesToPrefetch.length - pageSize);
-      const currentPageNotes = notesToPrefetch.slice(startIndex);
-
-      // ALWAYS include pinned notes in prefetch, since they're displayed at the top
-      // even if they're not in the current page window
-      const pinnedNoteIds = notesToPrefetch
-        .filter(n => n.is_pinned)
-        .map(n => n.id);
-
-      const currentPageNoteIds = currentPageNotes.map(n => n.id);
-
-      // Combine pinned notes with current page notes (remove duplicates)
-      const noteIds = [...new Set([...pinnedNoteIds, ...currentPageNoteIds])];
-
-      console.log(`[PREFETCH] Prefetching ${noteIds.length} notes from page ${page} (${pinnedNoteIds.length} pinned + ${currentPageNoteIds.length} from current page, notes ${startIndex + 1}-${notesToPrefetch.length})`);
-
-      // Mark this page as prefetched
-      lastPrefetchedPageRef.current = page;
-
-      // Start prefetch queue (debounce to avoid multiple triggers)
-      const timer = setTimeout(() => {
-        startPrefetchQueue(noteIds);
-      }, 1000); // Wait 1 second after list load to start prefetching
-
-      return () => clearTimeout(timer);
-    }
-  }, [listLoading, notes, searchResults, page, searchMode, isPrefetching, startPrefetchQueue]);
-
-  // Cleanup prefetch queue on unmount or view change
-  useEffect(() => {
-    // Reset last prefetched page when view changes
-    lastPrefetchedPageRef.current = 0;
-
     return () => {
-      // Cancel prefetch on view change
-      cancelPrefetch();
+      cancelPendingPrefetches();
     };
-  }, [view, cancelPrefetch]);
+  }, [view, cancelPendingPrefetches]);
 
   // --- Search Triggers ---
   // These close the note and search - used when clicking tags/books/colors from within notes
@@ -2868,7 +2820,15 @@ export const NotesProvider = ({ children }) => {
     _updateOrRemoveNoteInState,
 
     // Cache settings reload
-    reloadCacheSettings: reloadSettings
+    reloadCacheSettings: reloadSettings,
+
+    // Per-note prefetch-status subscription (for UI indicator)
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
+
+    // Viewport-triggered single-note prefetch + tuning
+    prefetchNoteToCache,
+    getViewportPrefetchDelay
   }), [
     // Dependencies for the context value memoization
     filteredNotes, pinnedNotes, unpinnedNotes, notes, listLoading, noteDetailLoading, error, savingNotes, totalNotes, view, noteTags, hasMore,
@@ -2884,7 +2844,8 @@ export const NotesProvider = ({ children }) => {
     changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
     getNoteTags, addTagToNote, removeTagFromNote, updateNotesFromServer, openNoteById, closeNoteWithoutUrlUpdate,
     handleViewChange, toggleLayoutView, enhancedChangeLayoutView, toggleQuickAccess, toggleMonthMarkers, toggleNoteTabs, setSearchBarActive, setError, _updateOrRemoveNoteInState,
-    reloadSettings
+    reloadSettings,
+    subscribeToCacheStatus, getNoteCacheStatus, prefetchNoteToCache, getViewportPrefetchDelay
   ]);
 
   // --- Render Provider ---
