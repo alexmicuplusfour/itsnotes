@@ -169,40 +169,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     return (editor && !editor.isDestroyed) ? editor : null;
   }, []);
 
-  // Stable editor instance management - single polling mechanism
-  useEffect(() => {
-    let timeoutId;
-    let isActive = true;
-
-    const updateEditorInstance = () => {
-      if (!isActive) return false;
-
-      if (contentInputRef.current) {
-        const editor = contentInputRef.current.getEditor?.();
-        if (editor && !editor.isDestroyed) {
-          console.log('[NoteForm] Editor instance found and active');
-          setEditorInstance(editor); // Store the actual editor, not the ref
-          return true;
-        }
-      }
-
-      // Schedule next check with exponential backoff (max 200ms)
-      const delay = Math.min(50 * Math.pow(1.5, Math.floor(Date.now() / 1000) % 4), 200);
-      timeoutId = setTimeout(() => {
-        if (isActive) updateEditorInstance();
-      }, delay);
-
-      return false;
-    };
-
-    // Start checking
-    updateEditorInstance();
-
-    return () => {
-      isActive = false;
-      if (timeoutId) clearTimeout(timeoutId);
-    };
-  }, [note?.id]);
+  // Editor instance is captured via TiptapNoteContent's onMount (Tiptap onCreate).
 
   // Clipboard tracking - listen for copy events within the form
   useEffect(() => {
@@ -2165,10 +2132,9 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     }
   }, [handleRemoveImage]);
 
-  // Handle editor mount
-  const handleEditorMount = useCallback(() => {
-    console.log('[NoteForm] TiptapNoteContent onMount triggered');
-    // Editor instance management is now handled by the stable useEffect above
+  // Capture the editor instance as soon as it's constructed (via Tiptap's onCreate)
+  const handleEditorMount = useCallback((editor) => {
+    if (editor && !editor.isDestroyed) setEditorInstance(editor);
   }, []);
 
   // Memoize style object to prevent unnecessary re-renders of TiptapNoteContent

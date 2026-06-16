@@ -629,11 +629,6 @@ const TiptapNoteContent = React.memo(forwardRef(({
   // Custom error boundary simulation (basic)
   const [hasError, setHasError] = useState(false);
 
-  // Call onMount when component mounts
-  useEffect(() => {
-    onMount();
-  }, [onMount]);
-
   // Reset error state when content changes
   useEffect(() => {
     setHasError(false);
@@ -671,6 +666,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
       <EditorWrapper ref={editorWrapperRef} style={{ ...style }}>
         <TiptapEditor
           ref={editorRef} // Pass ref properly to forwardRef component
+          onCreate={onMount} // Forward the editor instance once it's constructed
           content={content} // Pass current internal state
           onUpdate={handleUpdate}
           placeholder={placeholder}

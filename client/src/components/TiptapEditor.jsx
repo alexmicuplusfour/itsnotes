@@ -476,6 +476,7 @@ const TiptapEditor = forwardRef(({
   onBlur = () => { },
   onSelectionUpdate = () => { },
   onTransaction = () => { }, // Add onTransaction prop
+  onCreate = () => { }, // Fired with the editor instance when it's constructed
   onPaste = () => { },
   onImagePaste = () => { },
   onImageClick = () => { },
@@ -641,6 +642,9 @@ const TiptapEditor = forwardRef(({
     content,
     parseOptions: {
       preserveWhitespace: 'full',
+    },
+    onCreate: ({ editor }) => {
+      onCreate(editor);
     },
     onUpdate: ({ editor, transaction }) => {
       // Skip if this was a programmatic content sync (not a user edit)
