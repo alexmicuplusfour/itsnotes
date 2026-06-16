@@ -72,15 +72,14 @@ import {
 // Helper functions moved to utils/noteUtils.js
 // Styled components moved to NoteForm/NoteForm.styles.js
 
+// Module-scope so it isn't reallocated per render. Matches the phrases
+// the old toLowerCase()/includes() path checked: "remind me",
+// "set a reminder", "set reminder".
+const REMINDER_INTENT_RE = /remind me|set (?:a )?reminder/i;
+
 // Wrap component with forwardRef to accept the ref from App.jsx
 // Remove handleImageUpload from props
 const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPrevNote, onNextNote, hasPrevNote = false, hasNextNote = false, 'data-source': dataSource = 'unknown' }, ref) => {
-  // Only log first render for each noteId to reduce console noise
-  const renderedRef = useRef(false);
-  if (!renderedRef.current || renderedRef.current !== note?.id) {
-    const now = new Date();
-    renderedRef.current = note?.id;
-  }
   const navigate = useNavigate();
   const location = useLocation(); // Get location object
   const [title, setTitle] = useState(note?.title || "");
@@ -278,6 +277,22 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Hoisted above handleAddReminder so that callback can list addSuggestedTags in its deps.
   const dynamicActionBarsRef = useRef(null); // Ref for the action-bar wrapper component
 
+  // Live ref to noteTags so callbacks that only need to *read* the current
+  // tag list (dedup checks, "already applied?" guards) can stay stable
+  // across tag mutations. Listing noteTags in callback deps would rebuild
+  // every handler whenever tags change and break the memo wrapper around
+  // the action bar.
+  const noteTagsRef = useRef(noteTags);
+  useEffect(() => { noteTagsRef.current = noteTags; }, [noteTags]);
+
+  // Same idea for the full notes array from NotesContext — saveNoteIfNeeded
+  // only needs to peek at the current note's is_deleted flag, so we read
+  // via ref instead of listing `notes` as a dep (which would rebuild
+  // saveNoteIfNeeded on every socket update and cascade through every
+  // handler that lists saveNoteIfNeeded).
+  const notesRef = useRef(notes);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
+
   // Single entry point for "I want to surface a suggested tag." Dedups against
   // current suggestions and applied tags. The action bar surfacing itself is
   // handled by DynamicActionBarsWrapper, which forces visible while
@@ -285,13 +300,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const addSuggestedTags = useCallback((newSuggestions) => {
     if (!newSuggestions || newSuggestions.length === 0) return;
     setSuggestedTags(prev => {
+      const currentTags = noteTagsRef.current;
       const filtered = newSuggestions.filter(s =>
         !prev.some(p => p.id === s.id) &&
-        !noteTags.some(t => t.id === s.id)
+        !currentTags.some(t => t.id === s.id)
       );
       return filtered.length > 0 ? [...prev, ...filtered] : prev;
     });
-  }, [noteTags]);
+  }, []);
 
   // handleAddReminder must be defined AFTER useNoteTagsModal since it uses noteTags and refreshTags
   const handleAddReminder = useCallback(async (e) => {
@@ -439,8 +455,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Don't mark as fully loaded initially - wait for the note to finish loading
   // Only mark as loaded if it's a new note (no content) or if isLoading is explicitly false
   const initialContentFullyLoaded = !note || note?.content === '' || (!note?.isLoading && note?.id);
-  const renderID = Math.random().toString(36).substr(2, 9);
-  console.log(`[NoteForm Init - ${renderID}] SOURCE=${dataSource}, contentFullyLoaded=${initialContentFullyLoaded}, note.id=${note?.id}, isLoading=${note?.isLoading}, hasContent=${!!note?.content}`);
   const [contentFullyLoaded, setContentFullyLoaded] = useState(initialContentFullyLoaded);
 
   const latestStateRef = useRef({});
@@ -460,41 +474,36 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     resetImageState, // Function to reset state
   } = useImageManager();
 
-  // Extract URLs from note content - optimized
+  // Extract URLs from note content. Cheap early-out for the common case
+  // of a note with no URL-shaped substring at all — skips the regex pass.
   const noteUrls = useMemo(() => {
-    // Only extract if content actually exists and has changed
     if (!content || typeof content !== 'string') return [];
+    if (!content.includes('http') && !content.includes('www.')) return [];
     return extractUrls(content);
   }, [content]);
 
   // Extract book references from note content - optimized with stable reference
   const bookReferences = useMemo(() => {
-    // Only extract if content actually exists and has meaningful content
     if (!content || typeof content !== 'string' || content.trim().length === 0) return [];
-
-    // Check if content contains book reference patterns before expensive extraction
+    // Bail before the regex pass when the brace pattern can't be present.
     if (!content.includes('{') || !content.includes('}')) return [];
-
     return extractBookReferences(content);
   }, [content]);
 
-  // Extract note references from note content - optimized
+  // Extract note references. We hand the already-computed URL list down
+  // so extractNoteReferences can skip its internal extractUrls pass
+  // (otherwise we'd run extractUrls twice on the same content per commit).
   const noteReferences = useMemo(() => {
-    // Only extract if content actually exists and has changed
     if (!content || typeof content !== 'string') return [];
-    return extractNoteReferences(content);
-  }, [content]);
+    return extractNoteReferences(content, noteUrls.map(u => u.url));
+  }, [content, noteUrls]);
 
-  // Check if content has reminder intent
-  const hasReminderIntent = useMemo(() => {
-    if (!content) return false;
-    const lowerContent = content.toLowerCase();
-    return (
-      lowerContent.includes('remind me') ||
-      lowerContent.includes('set a reminder') ||
-      lowerContent.includes('set reminder')
-    );
-  }, [content]);
+  // Regex-test instead of toLowerCase()-ing the whole HTML on every commit.
+  // For a multi-KB note the lowercased copy was the dominant cost here.
+  const hasReminderIntent = useMemo(
+    () => !!content && REMINDER_INTENT_RE.test(content),
+    [content]
+  );
 
   // Search functionality using custom hook
   const {
@@ -1229,29 +1238,24 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const handleTagSelect = useCallback(async (tag) => {
     console.log('[NoteForm] Tag selected from mention:', tag);
     if (note?.id && tag?.id) {
-      // Check if tag is already applied
-      const alreadyApplied = noteTags.some(t => t.id === tag.id);
-      if (alreadyApplied) {
+      // Read current tag list via ref so this callback stays stable across
+      // tag mutations (otherwise we churn the memo around the action bar).
+      if (noteTagsRef.current.some(t => t.id === tag.id)) {
         console.log(`[NoteForm] Tag "${tag.name}" already applied to note`);
         return;
       }
-      
+
       try {
         await tagsApi.addTagToNote(note.id, tag.id);
-        // Update local state - add the tag to noteTags (with duplicate check)
         setNoteTags(prevTags => {
-          if (prevTags.some(t => t.id === tag.id)) {
-            console.log(`[NoteForm] Tag "${tag.name}" already exists in noteTags, skipping add`);
-            return prevTags;
-          }
+          if (prevTags.some(t => t.id === tag.id)) return prevTags;
           return [...prevTags, { id: tag.id, name: tag.name }];
         });
-        console.log(`[NoteForm] Tag "${tag.name}" added to note ${note.id}`);
       } catch (error) {
         console.error('[NoteForm] Error adding tag to note:', error);
       }
     }
-  }, [note?.id, noteTags, setNoteTags]);
+  }, [note?.id, setNoteTags]);
 
 
   // --- Core Save Logic (Using useNoteSaver Hook) ---
@@ -1270,10 +1274,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         return;
       }
 
-      // Prevent saving if the note has been trashed/deleted
-      // Check both the note prop and the current state from context
-      const currentNoteFromContext = notes?.find(n => n.id === note?.id);
-      if (note?.is_deleted === true || currentNoteFromContext?.is_deleted === true || isBeingTrashed || isBeingTrashedRef.current) {
+      // Prevent saving if the note has been trashed/deleted. Both the
+      // notes-array lookup and the trash flag are read via refs so this
+      // callback stays stable across NotesContext updates.
+      const currentNoteFromContext = notesRef.current?.find(n => n.id === note?.id);
+      if (note?.is_deleted === true || currentNoteFromContext?.is_deleted === true || isBeingTrashedRef.current) {
         console.log(`[saveNoteIfNeeded] Aborted: Note ${note?.id} has been trashed/deleted or is being trashed.`);
         return;
       }
@@ -1287,7 +1292,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         throw error;
       }
     },
-    [saveNoteFromHook, note?.id, note?.isLoading, notes, isBeingTrashed]
+    [saveNoteFromHook, note?.id, note?.isLoading]
   );
 
   useEffect(() => {
@@ -1774,50 +1779,20 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // --- Update handleRemoveImage ---
   const handleRemoveImage = useCallback(
     async (imageId) => {
-      // Make async
-      console.log(`[NoteForm] handleRemoveImage called with imageId: ${imageId} (type: ${typeof imageId})`);
-
-      // Debug: Show current images state
-      console.log(`[NoteForm] Current images from hook:`, images.map(img => ({ id: img.id, type: typeof img.id, name: img.name })));
-
-      // First, remove the image from inline content if it exists
       if (contentInputRef.current) {
-        console.log(`[NoteForm] Attempting to remove inline image with ID ${imageId}`);
-
-        // Debug: list all inline images first
-        if (contentInputRef.current.debugInlineImages) {
-          contentInputRef.current.debugInlineImages();
-        }
-
-        const success = contentInputRef.current.removeInlineImageById?.(imageId);
-        if (success) {
-          console.log(`[NoteForm] Successfully removed inline image with ID ${imageId} from content`);
-        } else {
-          console.log(`[NoteForm] No inline image found with ID ${imageId} or removal failed`);
-        }
-      } else {
-        console.log(`[NoteForm] contentInputRef.current is not available`);
+        contentInputRef.current.removeInlineImageById?.(imageId);
       }
 
-      // Convert imageId to number to match the image manager's data structure
       const imageIdAsNumber = parseInt(imageId, 10);
-      console.log(`[NoteForm] Converting imageId from ${imageId} (${typeof imageId}) to ${imageIdAsNumber} (${typeof imageIdAsNumber})`);
-
-      // Then call the hook's removeImage function
-      const success = await removeImage(imageIdAsNumber, note?.id); // Pass imageId and noteId
-
+      const success = await removeImage(imageIdAsNumber, note?.id);
       if (success) {
-        console.log("Image removed successfully via hook.");
         markAsModified();
-        // Potentially trigger adjustTextareaHeight if needed
-        // Height adjustment is now handled/displayed by the hook's effect
       } else {
-        console.error("Failed to remove image via hook.");
-        // Error is already handled/displayed by the hook's error state/effect
+        console.error("[NoteForm] Failed to remove image via hook.");
       }
     },
-    [note?.id, removeImage, isMobile, images], // Added images to dependencies to see current state
-  ); // Removed adjustTextareaHeight dependency
+    [note?.id, removeImage, markAsModified],
+  );
 
   // Handle tag click for searching
   const handleTagClick = useCallback(
@@ -1939,28 +1914,23 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         console.warn(`[NoteForm] handleApplyTag: Tag ${tagId} not found`);
         return;
       }
-      // Check if already applied
-      if (noteTags.some(t => t.id === tagId)) {
+      // Read current tag list via ref — see noteTagsRef comment above.
+      if (noteTagsRef.current.some(t => t.id === tagId)) {
         console.log(`[NoteForm] Tag ${actualTag.name} already applied`);
         return;
       }
       try {
         await tagsApi.addTagToNote(note.id, tagId);
-        // Update local state (with duplicate check)
         setNoteTags(prevTags => {
-          if (prevTags.some(t => t.id === tagId)) {
-            console.log(`[NoteForm] Tag ${actualTag.name} already exists in noteTags, skipping add`);
-            return prevTags;
-          }
+          if (prevTags.some(t => t.id === tagId)) return prevTags;
           return [...prevTags, { id: tagId, name: actualTag.name }];
         });
-        console.log(`[NoteForm] Applied tag ${actualTag.name} to note`);
         showToast(`Tagged with ${actualTag.name}`);
       } catch (error) {
         console.error(`[NoteForm] Error applying tag ${actualTag.name}:`, error);
       }
     },
-    [note?.id, tags, noteTags, setNoteTags, showToast],
+    [note?.id, tags, setNoteTags, showToast],
   );
 
   // Track previous note ID to detect actual note changes
@@ -2616,24 +2586,17 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
 // Wrap with React.memo to prevent unnecessary re-renders
 // Custom comparison function to only re-render when important props change
+// Re-render only when note identity / loading / external-sync fields change.
 export default React.memo(NoteForm, (prevProps, nextProps) => {
-  console.log("[NoteForm memo] Comparison function called");
-  // Re-render if note id changes or if onClose function changes
-  // Also check if the note's isLoading state has changed, as this is critical for initial render
   const noteIdChanged = prevProps.note?.id !== nextProps.note?.id;
   const onCloseChanged = prevProps.onClose !== nextProps.onClose;
   const isLoadingChanged = prevProps.note?.isLoading !== nextProps.note?.isLoading;
-  
-  // Also re-render for live sync: color and tags changes from external sources
   const colorChanged = prevProps.note?.color !== nextProps.note?.color;
   const isPinnedChanged = prevProps.note?.is_pinned !== nextProps.note?.is_pinned;
-  
-  // Compare tags arrays by IDs to detect changes
+
   const prevTagIds = (prevProps.note?.tags || []).map(t => t.id).sort().join(',');
   const nextTagIds = (nextProps.note?.tags || []).map(t => t.id).sort().join(',');
   const tagsChanged = prevTagIds !== nextTagIds;
 
-// DEBUG: Log what's causing re-renders  const noteRefChanged = prevProps.note !== nextProps.note;  if (noteRefChanged && !noteIdChanged && !isLoadingChanged && !colorChanged && !isPinnedChanged && !tagsChanged) {    console.log('[NoteForm memo] Note REFERENCE changed but props are same - THIS CAUSES RE-RENDER');    console.log('  prevProps.note === nextProps.note:', prevProps.note === nextProps.note);  }    if (noteIdChanged) console.log('[NoteForm memo] noteIdChanged');  if (onCloseChanged) console.log('[NoteForm memo] onCloseChanged');  if (isLoadingChanged) console.log('[NoteForm memo] isLoadingChanged');  if (colorChanged) console.log('[NoteForm memo] colorChanged');  if (isPinnedChanged) console.log('[NoteForm memo] isPinnedChanged');  if (tagsChanged) console.log('[NoteForm memo] tagsChanged');
-  // Return true if props are equal (skip re-render), false if different (trigger re-render)
   return !noteIdChanged && !onCloseChanged && !isLoadingChanged && !colorChanged && !isPinnedChanged && !tagsChanged;
 });

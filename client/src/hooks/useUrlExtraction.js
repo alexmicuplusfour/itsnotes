@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { extractUrls, cleanHtmlForTiptap } from '../utils/noteUtils';
 import { notesApi } from '../services/api';
 
@@ -46,8 +46,8 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
   // Internal refs
   const processedUrlsRef = useRef(new Set());
   const pasteDetectedRef = useRef(false);
-  const previousUrlsRef = useRef([]);
-  
+
+
   // Use external pasteDetectedRef if provided, otherwise use internal one
   const activePasteDetectedRef = externalPasteDetectedRef || pasteDetectedRef;
   // Utility functions
@@ -251,46 +251,12 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
       console.log(`[useUrlExtraction] Extraction process finished for: ${urlToExtract}`);
     }
   }, [currentContent, setContent, setTitle, setIsModified, setLastSaveTime, apiService, onExtractionStart, onExtractionSuccess, onExtractionError, _hidePrompt]);
-  // URL Detection Effect
-  useEffect(() => {
-    // Convert HTML content to plain text for URL detection
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = currentContent || '';
-    const plainText = tempDiv.innerText;
-
-    // Extract URLs from current content
-    const currentUrls = extractUrls(plainText).map((item) => item.url);
-    
-    // Find newly added URLs compared to previous content
-    const newlyAddedUrls = currentUrls.filter(
-      (url) =>
-        !previousUrlsRef.current.includes(url) &&
-        !processedUrlsRef.current.has(url) &&
-        url !== promptUrl // Don't re-prompt for the URL already being prompted
-    );
-
-    // Update previous URLs for next comparison
-    previousUrlsRef.current = currentUrls;
-
-    // URL extraction prompt disabled - users found it disruptive
-    // If you want to re-enable the prompt, uncomment the code below:
-    // if (
-    //   newlyAddedUrls.length > 0 && 
-    //   !isExtracting && 
-    //   !isPromptVisible && 
-    //   activePasteDetectedRef.current
-    // ) {
-    //   console.log("[useUrlExtraction] Detected new URL from paste, showing prompt:", newlyAddedUrls[0]);
-    //   _showPrompt(newlyAddedUrls[0]);
-    //   // Reset paste detection flag
-    //   activePasteDetectedRef.current = false;
-    // }
-    
-    // Just reset the paste detection flag without showing prompt
-    if (newlyAddedUrls.length > 0 && activePasteDetectedRef.current) {
-      activePasteDetectedRef.current = false;
-    }
-  }, [currentContent, isExtracting, isPromptVisible, promptUrl, activePasteDetectedRef, _showPrompt]);
+  // URL detection on content change is handled by the imperative `detectUrls`
+  // path (called from NoteForm.handleContentChange when a paste is flagged).
+  // The previous reactive useEffect here parsed the full note HTML and ran
+  // extractUrls on every debounced content commit, even though the prompt
+  // is disabled — wasted work plus callback churn through `currentContent`
+  // deps. Removed; previousUrlsRef is no longer needed.
 
   // Exposed functions
   const extractNow = useCallback(() => {

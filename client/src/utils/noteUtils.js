@@ -221,17 +221,14 @@ export const extractUrls = (text) => {
     // Ensure URL has a protocol for the href attribute
     const href = cleanUrl.startsWith('www.') ? `https://${cleanUrl}` : cleanUrl;
 
-    // Basic validation - must have at least a domain with a dot
-    if (!href.includes('.') || href.length < 7) {
-      console.warn('Skipping invalid URL (too short or no domain):', cleanUrl);
-      return null;
-    }
-
+    // Trust new URL() as the validator. The previous `.includes('.')` guard
+    // rejected real URLs without dots in the hostname (localhost, intranet
+    // names, IPv6 literals like http://[::1]/) and produced per-keystroke
+    // warnings when such URLs ended up in a note.
     let domain;
     try {
       domain = toDisplayDomain(new URL(href).hostname);
-    } catch (e) {
-      console.warn('Skipping invalid URL:', cleanUrl, e.message);
+    } catch {
       return null;
     }
 
@@ -313,20 +310,20 @@ export const extractBookReferences = (htmlContent) => {
 };
 
 // Note references extraction function - UUID format
-// Extract UUIDs from text, excluding those that are part of URLs
-export const extractNoteReferences = (text) => {
+// Extract UUIDs from text, excluding those that are part of URLs.
+// Pass `urlStrings` (e.g. `extractUrls(text).map(u => u.url)`) when the
+// caller already has the URL list — avoids a redundant extractUrls pass
+// over the same text. NoteForm does this to share the work with its
+// `noteUrls` memo on the same content commit.
+export const extractNoteReferences = (text, urlStrings = null) => {
   if (!text) return [];
 
-  // First extract all URLs from the text with error handling
-  let urls = [];
-  let urlStrings = [];
-  try {
-    urls = extractUrls(text);
-    urlStrings = urls.map((urlItem) => urlItem.url);
-  } catch (error) {
-    console.warn('Error extracting URLs in note references:', error);
-    urls = [];
-    urlStrings = [];
+  if (urlStrings === null) {
+    try {
+      urlStrings = extractUrls(text).map((urlItem) => urlItem.url);
+    } catch {
+      urlStrings = [];
+    }
   }
 
   // UUID pattern - matches standard UUID format, optionally followed by #<digits>

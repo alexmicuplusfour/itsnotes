@@ -1014,4 +1014,8 @@ export const NoteActionBar = ({
   );
 };
 
-export default NoteActionBar;
+// Memoized — the wrapper above (DynamicActionBarsWrapper) already uses
+// React.memo, but its memo is only useful when the leaf component
+// downstream also bails on equal props. Without this, any prop churn
+// from NoteForm re-renders the full ~1000-line tags/refs/buttons tree.
+export default React.memo(NoteActionBar);
