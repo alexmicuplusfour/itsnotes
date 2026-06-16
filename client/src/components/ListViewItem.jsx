@@ -171,7 +171,8 @@ const Title = styled.div`
 `;
 
 const ContentPreview = styled.div`
-  font-size: 15px;
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
+  font-size: var(--note-card-body-font-size, 15px);
   color: var(--text-color);
   width: calc(100% - 6px);
   opacity: 1;
