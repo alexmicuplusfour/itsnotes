@@ -485,6 +485,7 @@ const SettingsModal = ({ onClose }) => {
     PREFETCH_BATCH_SIZE: '10',
     BATCH_DELAY_MS: '500',
     CACHE_TTL_MS: '300000',
+    PAGE_SIZE: '80',
     AI_PROMPT_SUMMARIZE: '',
     AI_PROMPT_OCR: '',
     AI_PROMPT_REMINDER: '',
@@ -1996,17 +1997,35 @@ const SettingsModal = ({ onClose }) => {
                       </FormGroup>
 
                       <FormGroup>
-                        <Label>Cache TTL (milliseconds)</Label>
+                        <Label>Cache TTL (minutes)</Label>
                         <Input
                           type="number"
-                          min="60000"
-                          max="3600000"
-                          step="60000"
-                          value={settings.CACHE_TTL_MS || '300000'}
-                          onChange={(e) => handleCacheSettingChange('CACHE_TTL_MS', e.target.value)}
+                          min="1"
+                          max="1440"
+                          step="1"
+                          value={Math.max(1, Math.round((parseInt(settings.CACHE_TTL_MS, 10) || 300000) / 60000))}
+                          onChange={(e) => {
+                            const minutes = Math.max(1, parseInt(e.target.value, 10) || 0);
+                            handleCacheSettingChange('CACHE_TTL_MS', String(minutes * 60000));
+                          }}
                         />
                         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-                          Cache time-to-live (how long before cached notes expire). Default: 300000ms (5 minutes)
+                          How long a cached note stays valid before it's re-fetched on open. Default: 5 minutes
+                        </p>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>Page Size (notes per request)</Label>
+                        <Input
+                          type="number"
+                          min="10"
+                          max="500"
+                          step="10"
+                          value={settings.PAGE_SIZE || '80'}
+                          onChange={(e) => handleCacheSettingChange('PAGE_SIZE', e.target.value)}
+                        />
+                        <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
+                          How many notes are loaded per page (initial load and each infinite-scroll page). Smaller = faster initial load, more frequent scroll fetches. Default: 80
                         </p>
                       </FormGroup>
                     </SectionContainer>

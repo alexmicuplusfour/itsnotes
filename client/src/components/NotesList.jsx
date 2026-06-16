@@ -528,6 +528,36 @@ const NotesList = ({ title, notes, showPinned }) => {
     };
   }, []); // Empty deps - create once, never recreate
 
+  // After each load completes, re-check whether the LoadTrigger is still
+  // within range. IntersectionObserver only fires on intersection transitions
+  // — with a small PAGE_SIZE the trigger can stay continuously intersecting,
+  // so the observer never refires and the list stalls on the "Load More"
+  // button. We wait past the 300ms loadNotes/search debounce window, then
+  // poll every 500ms while the trigger remains in range. Stops when the page
+  // is filled (trigger drops below 2x viewport), hasMore goes false, or a
+  // load completes (effect re-runs and cancels the timer).
+  useEffect(() => {
+    if (listLoading || !hasMore) return;
+
+    let timer = null;
+    const tryLoad = () => {
+      timer = null;
+      const target = observerTarget.current;
+      if (!target || !hasMoreRef.current || listLoadingRef.current) return;
+      const rect = target.getBoundingClientRect();
+      const isInRange = rect.top < window.innerHeight * 2;
+      if (!isInRange) return;
+      loadMoreRef.current();
+      // If the load got debounced, listLoading won't flip — retry later.
+      timer = setTimeout(tryLoad, 500);
+    };
+
+    timer = setTimeout(tryLoad, 500);
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [listLoading, hasMore]);
+
   // Callback ref - called whenever the LoadTrigger mounts/unmounts
   const setObserverTarget = useCallback((element) => {
     console.log('[IntersectionObserver] Callback ref called. Element:', !!element, 'Previous element:', !!observerTarget.current);

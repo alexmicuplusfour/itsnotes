@@ -60,13 +60,12 @@ const useStableArrayResult = (factory, deps) => {
 
 
 // --- Constants ---
-const INITIAL_PAGE_LIMIT = 80; // Standard page size for pagination
-
 // Default Cache and Prefetch Configuration (fallback values)
 const DEFAULT_CACHE_MAX_SIZE = 200;
 const DEFAULT_PREFETCH_BATCH_SIZE = 10;
 const DEFAULT_BATCH_DELAY_MS = 500;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_PAGE_SIZE = 80;
 
 // --- Provider Component ---
 export const NotesProvider = ({ children }) => {
@@ -78,6 +77,7 @@ export const NotesProvider = ({ children }) => {
     PREFETCH_BATCH_SIZE: parseInt(serverSettings.PREFETCH_BATCH_SIZE) || DEFAULT_PREFETCH_BATCH_SIZE,
     BATCH_DELAY_MS: parseInt(serverSettings.BATCH_DELAY_MS) || DEFAULT_BATCH_DELAY_MS,
     CACHE_TTL_MS: parseInt(serverSettings.CACHE_TTL_MS) || DEFAULT_CACHE_TTL_MS,
+    PAGE_SIZE: parseInt(serverSettings.PAGE_SIZE) || DEFAULT_PAGE_SIZE,
   }), [serverSettings]);
 
   // Keep a ref for cache settings to always get current values in closures
@@ -282,7 +282,7 @@ export const NotesProvider = ({ children }) => {
     const isArchived = currentView === 'archive';
     const isDeleted = currentView === 'trash';
 
-    const currentLimit = INITIAL_PAGE_LIMIT;
+    const currentLimit = cacheSettingsRef.current.PAGE_SIZE;
 
     // Set the ref to indicate API call is in progress
     loadNotesInProgressRef.current = true;
@@ -529,7 +529,7 @@ export const NotesProvider = ({ children }) => {
       try {
         // Use unified sort system to get search sort order
         const { searchSortOrder } = convertToLegacyParams(getSortForView('search'));
-        const searchResponse = await notesApi.searchNotes(noteId, 1, INITIAL_PAGE_LIMIT, searchSortOrder, true, false); // No truncation for ID search
+        const searchResponse = await notesApi.searchNotes(noteId, 1, cacheSettingsRef.current.PAGE_SIZE, searchSortOrder, true, false); // No truncation for ID search
         if (searchResponse?.notes) {
           console.log(`searchById: Found ${searchResponse.notes.length} notes via text search.`);
           searchResponse.notes.forEach(note => {
@@ -708,7 +708,7 @@ export const NotesProvider = ({ children }) => {
       lastUsedTagIdsRef.current = JSON.stringify(reconciledTagIds);
 
       console.log(`handleSearch: API call - Query: \"${rawQuery}\", Page: ${searchPage}, Sort: ${searchSortOrder}`);
-      const response = await notesApi.searchNotes(rawQuery, searchPage, INITIAL_PAGE_LIMIT, searchSortOrder, true, true, 520, resolvedTagIdsRef.current);
+      const response = await notesApi.searchNotes(rawQuery, searchPage, cacheSettingsRef.current.PAGE_SIZE, searchSortOrder, true, true, 520, resolvedTagIdsRef.current);
   
       setTotalNotes(response.totalCount);
       const fetchedNotes = response.notes || [];
