@@ -13,76 +13,9 @@ import ThemeManager from '../utils/ThemeManager';
 import Switch from './Switch';
 import ImportExportSettings from './ImportExportSettings';
 import BackupRestore from './BackupRestore';
+import Modal from './Modal';
 
 const DEBOUNCE_DELAY = 800; // ms to wait before auto-saving
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(3px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1100;
-  
-  @media (max-width: 768px) {
-    background-color: var(--note-bg-color);
-  }
-`;
-
-const ModalContainer = styled.div`
-  position: relative;
-  width: 900px;
-  max-width: 90%;
-  background-color: var(--note-bg-color);
-  border-radius: 8px;
-  box-shadow: 0 3px 10px var(--shadow-color);
-  color: var(--text-color);
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 80px);
-  max-height: 90vh;
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    max-width: 100%;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100vh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  box-shadow: 1px 3px 9px 0px rgba(0,0,0,0.2);
-`;
-
-const ModalTitle = styled.h2`
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0;
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: var(--text-color);
-  opacity: 0.8;
-  cursor: pointer;
-  
-  &:hover {
-    opacity: 1;
-  }
-`;
 
 const ModalBody = styled.div`
   display: flex;
@@ -530,7 +463,7 @@ const TagSelect = styled.select`
   }
 `;
 
-const SettingsModal = ({ isOpen, onClose }) => {
+const SettingsModal = ({ onClose }) => {
   const [activeSection, setActiveSection] = useState('appearance');
   const [isDarkTheme, setIsDarkTheme] = useState(ThemeManager.getTheme());
   const [settings, setSettings] = useState({
@@ -609,23 +542,18 @@ const SettingsModal = ({ isOpen, onClose }) => {
   // Tags context for tag selection
   const { tags } = useTags();
 
-  // Lock body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isOpen]);
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      fetchSettings();
-      setIsDarkTheme(ThemeManager.getTheme());
-    }
-  }, [isOpen, token]);
+    fetchSettings();
+    setIsDarkTheme(ThemeManager.getTheme());
+  }, [token]);
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -814,18 +742,15 @@ const SettingsModal = ({ isOpen, onClose }) => {
     }, 1000);
   }, [settings, debouncedSave, reloadCacheSettings]);
 
-  if (!isOpen) return null;
-
   return (
-    <ModalOverlay onClick={onClose}>
-      <ModalContainer onClick={e => e.stopPropagation()}>
-        <ModalHeader>
-          <ModalTitle>Settings</ModalTitle>
-          <CloseButton onClick={onClose}>
-            <Icon name="close" size={24} />
-          </CloseButton>
-        </ModalHeader>
-        
+    <Modal
+      title="Settings"
+      onClose={onClose}
+      width="900px"
+      height="calc(100vh - 80px)"
+      maxHeight="90vh"
+      closeIconSize={24}
+    >
         <ModalBody>
           <Sidebar>
             <SidebarItem
@@ -2093,8 +2018,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
           </ContentArea>
           </MainContent>
         </ModalBody>
-      </ModalContainer>
-    </ModalOverlay>
+    </Modal>
   );
 };
 

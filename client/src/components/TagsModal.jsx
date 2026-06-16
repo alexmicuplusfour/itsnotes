@@ -1,82 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react'; // Import useMemo
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { useTags } from '../contexts/TagsContext';
 import { useNotes } from '../contexts/NotesContext';
 import Icon from './Icons';
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(3px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1100;
-  
-  @media (max-width: 768px) {
-    background-color: var(--note-bg-color);
-  }
-`;
-
-const ModalContainer = styled.div`
-  position: relative;
-  width: 500px;
-  max-width: 90%;
-  background-color: var(--note-bg-color);
-  border: ${props => props.theme === 'dark' ? 'none' : '1px solid var(--note-border-color)'};
-  border-radius: 8px;
-  box-shadow: 0 3px 10px var(--shadow-color);
-  color: var(--text-color);
-  display: flex;
-  flex-direction: column;
-  
-  /* Fixed height calculation: viewport height minus 80px padding (40px top + 40px bottom) */
-  height: calc(100vh - 80px);
-  max-height: 700px; /* Maximum height on large screens */
-  
-  /* Mobile styles: full screen */
-  @media (max-width: 768px) {
-    width: 100%;
-    max-width: 100%;
-    height: 100vh;
-    height: 100dvh;
-    max-height: 100vh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-`;
-
-const ModalHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  box-shadow: 1px 3px 9px 0px rgba(0,0,0,0.2);
-  -webkit-box-shadow: 1px 3px 9px 0px rgba(0,0,0,0.2);
-  -moz-box-shadow: 1px 3px 9px 0px rgba(0,0,0,0.2);
-`;
-
-const ModalTitle = styled.h2`
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0;
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: var(--text-color);
-  opacity: 0.8;
-  cursor: pointer;
-  
-  &:hover {
-    opacity: 1;
-  }
-`;
+import Modal from './Modal';
 
 const ModalContent = styled.div`
   padding: 20px 0 20px 20px;
@@ -333,32 +260,9 @@ const TagsModal = ({ onClose }) => {
   const [editedTagName, setEditedTagName] = useState('');
   const [newlyCreatedTagId, setNewlyCreatedTagId] = useState(null); // Track newly created tag ID
   const [viewMode, setViewMode] = useState('tags'); // 'tags' or 'folders'
-  const [isDarkTheme, setIsDarkTheme] = useState(() =>
-    !document.documentElement.classList.contains('light-theme')
-  );
-  const modalRef = useRef();
   const inputRef = useRef();
   const editInputRef = useRef();
-  
-  // Focus on input when modal opens and set up theme observer
-  useEffect(() => {
-    /*if (inputRef.current) {
-      inputRef.current.focus();
-    }
-    */
-    // Set up theme observer
-    const observer = new MutationObserver(() => {
-      setIsDarkTheme(!document.documentElement.classList.contains('light-theme'));
-    });
-    
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    });
-    
-    return () => observer.disconnect();
-  }, []);
-  
+
   // Focus on edit input when editing a tag
   useEffect(() => {
     if (editingTagId && editInputRef.current) {
@@ -366,35 +270,16 @@ const TagsModal = ({ onClose }) => {
       editInputRef.current.select();
     }
   }, [editingTagId]);
-  
-  // Handle click outside
-  const handleClickOutside = (e) => {
-    if (modalRef.current && !modalRef.current.contains(e.target)) {
-      onClose();
-    }
-  };
-  
+
   useEffect(() => {
-    // Add click outside handler
-    document.addEventListener('mousedown', handleClickOutside);
-    
-    // Calculate scrollbar width before changing anything
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    
-    // Store original styles
     const originalStyle = window.getComputedStyle(document.body).overflow;
     const originalPadding = window.getComputedStyle(document.body).paddingRight;
-    
-    // Apply padding first to prevent layout shift
+
     document.body.style.paddingRight = `${scrollbarWidth}px`;
-    
-    // Only then disable scrolling
     document.body.style.overflow = 'hidden';
-    
+
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      
-      // Restore original scroll behavior and padding when modal closes
       document.body.style.overflow = originalStyle;
       document.body.style.paddingRight = originalPadding;
     };
@@ -633,15 +518,13 @@ const TagsModal = ({ onClose }) => {
   }, [tags, searchQuery]);
   
   return (
-    <ModalOverlay>
-      <ModalContainer ref={modalRef} theme={isDarkTheme ? 'dark' : 'light'}>
-        <ModalHeader>
-          <ModalTitle>Manage Tags / Folders</ModalTitle>
-          <CloseButton onClick={onClose}>
-            <Icon name="close" size={20} />
-          </CloseButton>
-        </ModalHeader>
-        
+    <Modal
+      title="Manage Tags / Folders"
+      onClose={onClose}
+      width="500px"
+      height="calc(100vh - 80px)"
+      maxHeight="700px"
+    >
         <ModalContent>
           <ViewToggleHeader>
             <ViewToggleButton
@@ -798,8 +681,7 @@ const TagsModal = ({ onClose }) => {
             )}
           </TagsListContainer>
         </ModalContent>
-      </ModalContainer>
-    </ModalOverlay>
+    </Modal>
   );
 };
 

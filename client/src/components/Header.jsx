@@ -2079,10 +2079,9 @@ const Header = () => {
         />
       )}
 
-      <SettingsModal 
-        isOpen={isSettingsModalOpen} 
-        onClose={() => setIsSettingsModalOpen(false)} 
-      />
+      {isSettingsModalOpen && (
+        <SettingsModal onClose={() => setIsSettingsModalOpen(false)} />
+      )}
 
       <SuccessToast
         message={toastMessage}
