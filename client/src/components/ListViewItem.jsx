@@ -1,10 +1,11 @@
-import React, { useState, useEffect, memo, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, memo, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import styled, { css } from 'styled-components';
 import Icon from './Icons';
 import { ColorPicker } from './ColorPicker';
 import { TagPicker } from './NoteTagPicker';
 import { formatDistanceToNow } from 'date-fns';
 import { getServerUrl } from '../services/api';
+import { useNoteActions } from '../contexts/NoteActionsContext';
 
 // Container for the list item
 const ItemContainer = styled.div`
@@ -85,6 +86,21 @@ const ItemContainer = styled.div`
 `;
 
 // Selection checkbox styled component
+// Tiny dot in the top-right corner shown while a note is not yet prefetched.
+// Fades out the moment the note lands in the cache.
+const PrefetchIndicator = styled.div`
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--text-color);
+  opacity: ${props => (props.$visible ? 0.18 : 0)};
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+`;
+
 const SelectionCheckbox = styled.div`
   position: absolute;
   top: 10px;
@@ -298,6 +314,52 @@ const ListViewItem = memo(function ListViewItem({
   const colorButtonRef = useRef(null);
   const tagButtonRef = useRef(null);
   const tagPickerRef = useRef(null);
+  const itemRef = useRef(null);
+
+  const {
+    subscribeToCacheStatus,
+    getNoteCacheStatus,
+    prefetchNoteToCache,
+    getViewportPrefetchDelay,
+  } = useNoteActions();
+
+  const subscribeCacheStatus = useCallback(
+    (cb) => subscribeToCacheStatus(note.id, cb),
+    [subscribeToCacheStatus, note.id]
+  );
+  const getCacheStatusSnapshot = useCallback(
+    () => getNoteCacheStatus(note.id),
+    [getNoteCacheStatus, note.id]
+  );
+  const isCached = useSyncExternalStore(subscribeCacheStatus, getCacheStatusSnapshot);
+
+  useEffect(() => {
+    if (isCached) return;
+    const el = itemRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+
+    let pendingTimer = null;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          if (pendingTimer) return;
+          pendingTimer = setTimeout(() => {
+            pendingTimer = null;
+            prefetchNoteToCache(note.id);
+          }, getViewportPrefetchDelay());
+        } else if (pendingTimer) {
+          clearTimeout(pendingTimer);
+          pendingTimer = null;
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    obs.observe(el);
+    return () => {
+      if (pendingTimer) clearTimeout(pendingTimer);
+      obs.disconnect();
+    };
+  }, [isCached, note.id, prefetchNoteToCache, getViewportPrefetchDelay]);
 
   // Memoize hover handlers to prevent recreating on each render
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
@@ -449,6 +511,7 @@ const ListViewItem = memo(function ListViewItem({
 
   return (
     <ItemContainer
+      ref={itemRef}
       data-note-id={note.id}
       style={itemColorStyle}
       $isActive={isActive}
@@ -461,6 +524,8 @@ const ListViewItem = memo(function ListViewItem({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
+      <PrefetchIndicator $visible={!isCached} aria-hidden="true" />
+
       {/* Selection checkbox */}
       <SelectionCheckbox
         $visible={showCheckbox}
