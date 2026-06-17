@@ -571,7 +571,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
       }
       return false;
     },
-  }));
+  }), []); // Methods only read from stable refs/imports — allocate the handle once
 
   const handleUpdate = (newContent) => {
     // Hot path: avoid setContent here. Bumping the live ref + forwarding
