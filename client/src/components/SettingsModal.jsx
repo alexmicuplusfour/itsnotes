@@ -574,7 +574,7 @@ const SettingsModal = ({ onClose }) => {
     setColorLabel,
     pageBackgroundEnabled,
     setPageBackgroundEnabled,
-    pickBackground,
+    regenerateBackground,
     setAiEnabled,
     notesFontFamily,
     notesBodyFontSize,
@@ -1453,20 +1453,46 @@ const SettingsModal = ({ onClose }) => {
                       <SectionTitle>Page Background</SectionTitle>
                       <OptionRow>
                         <Label style={{ marginBottom: 0 }}>Enable page backgrounds</Label>
-                        <Switch
-                          id="page-background-toggle"
-                          checked={pageBackgroundEnabled}
-                          onChange={() => {
-                            const newVal = !pageBackgroundEnabled;
-                            setPageBackgroundEnabled(newVal);
-                            const newSettings = { ...settings, BACKGROUND_ENABLED: newVal };
-                            setSettings(newSettings);
-                            debouncedSave(newSettings);
-                          }}
-                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {pageBackgroundEnabled && (
+                            <button
+                              type="button"
+                              onClick={regenerateBackground}
+                              title="New gradient"
+                              aria-label="New gradient"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: '30px', height: '30px', padding: 0, cursor: 'pointer',
+                                color: 'var(--text-color)', background: 'var(--hover-color)',
+                                border: '1px solid var(--border-color)', borderRadius: '8px',
+                              }}
+                            >
+                              <Icon name="refresh" size={15} />
+                            </button>
+                          )}
+                          <Switch
+                            id="page-background-toggle"
+                            checked={pageBackgroundEnabled}
+                            onChange={() => {
+                              const newVal = !pageBackgroundEnabled;
+                              setPageBackgroundEnabled(newVal);
+                              const newSettings = { ...settings, BACKGROUND_ENABLED: newVal };
+                              setSettings(newSettings);
+                              debouncedSave(newSettings);
+                            }}
+                          />
+                        </div>
                       </OptionRow>
                       <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
-                        Shows a subtle background image that changes each session.
+                        Shows a subtle mesh gradient, unique to each session, by{' '}
+                        <a
+                          href="https://github.com/cristicretu/meshgrad"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--text-secondary-color)', textDecoration: 'underline' }}
+                        >
+                          meshgrad
+                        </a>.
                       </p>
                     </SectionContainer>
 

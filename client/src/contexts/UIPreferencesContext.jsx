@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { BACKGROUNDS, BACKGROUNDS_DIR } from '../utils/backgrounds';
+import { generateBackground, adaptBackgroundForTheme } from '../utils/backgrounds';
 import ThemeManager from '../utils/ThemeManager';
 
 // Create the UIPreferences context
@@ -107,54 +107,47 @@ export const UIPreferencesProvider = ({ children }) => {
     root.style.setProperty('--note-card-body-font-size', sizes.card);
   }, [notesFontFamily, notesBodyFontSize]);
 
-  // Page background
+  // Page background — a meshgrad-generated mesh gradient. We store the full
+  // base mesh (full-lightness) for the session and re-light it per theme.
   const [pageBackgroundEnabled, _setPageBackgroundEnabled] = useState(false);
-  const [activeBackground, setActiveBackground] = useState(() => {
-    return sessionStorage.getItem('activeBackground') || null;
+  const [pageBgBase, setPageBgBase] = useState(() => {
+    return sessionStorage.getItem('pageBgBase') || null;
   });
+  const [isDarkTheme, setIsDarkTheme] = useState(() => ThemeManager.getTheme());
 
-  const pickBackground = useCallback((isDark) => {
-    const pool = isDark ? BACKGROUNDS.dark : BACKGROUNDS.light;
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    setActiveBackground(pick);
-    sessionStorage.setItem('activeBackground', pick);
+  const regenerateBackground = useCallback(() => {
+    const base = generateBackground();
+    sessionStorage.setItem('pageBgBase', base);
+    setPageBgBase(base);
   }, []);
 
   const setPageBackgroundEnabled = useCallback((enabled) => {
     _setPageBackgroundEnabled(enabled);
-    if (enabled) {
-      setActiveBackground(prev => {
-        if (prev) return prev;
-        const isDark = ThemeManager.getTheme();
-        const pool = isDark ? BACKGROUNDS.dark : BACKGROUNDS.light;
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        sessionStorage.setItem('activeBackground', pick);
-        return pick;
-      });
+    if (enabled && !sessionStorage.getItem('pageBgBase')) {
+      const base = generateBackground();
+      sessionStorage.setItem('pageBgBase', base);
+      setPageBgBase(base);
     }
   }, []);
 
+  // Apply the current mesh, re-lit for the active theme.
   useEffect(() => {
-    if (pageBackgroundEnabled && activeBackground) {
-      document.documentElement.style.setProperty('--page-bg-url', `url('/${BACKGROUNDS_DIR}/${activeBackground}')`);
+    if (pageBackgroundEnabled && pageBgBase) {
+      document.documentElement.style.setProperty('--page-bg-image', adaptBackgroundForTheme(pageBgBase, isDarkTheme));
     } else {
-      document.documentElement.style.removeProperty('--page-bg-url');
+      document.documentElement.style.removeProperty('--page-bg-image');
     }
-  }, [pageBackgroundEnabled, activeBackground]);
+  }, [pageBackgroundEnabled, pageBgBase, isDarkTheme]);
 
+  // Track theme changes so the same mesh gets re-lit on dark/light toggle.
   useEffect(() => {
-    if (!pageBackgroundEnabled) return;
-    let lastIsDark = ThemeManager.getTheme();
     const observer = new MutationObserver(() => {
-      const isDark = ThemeManager.getTheme();
-      if (isDark !== lastIsDark) {
-        lastIsDark = isDark;
-        pickBackground(isDark);
-      }
+      const dark = ThemeManager.getTheme();
+      setIsDarkTheme(prev => (prev !== dark ? dark : prev));
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
-  }, [pageBackgroundEnabled, pickBackground]);
+  }, []);
 
   // Color labels - custom display names for colors (e.g., "coral" -> "red")
   const [colorLabels, setColorLabels] = useState(() => {
@@ -336,7 +329,7 @@ export const UIPreferencesProvider = ({ children }) => {
     setAllColorLabels,
     getColorLabel,
     setPageBackgroundEnabled,
-    pickBackground,
+    regenerateBackground,
     setAiEnabled,
     setNotesFontFamily,
     setNotesBodyFontSize,
@@ -371,7 +364,7 @@ export const UIPreferencesProvider = ({ children }) => {
     setAllColorLabels,
     getColorLabel,
     setPageBackgroundEnabled,
-    pickBackground,
+    regenerateBackground,
     setAiEnabled,
     setNotesFontFamily,
     setNotesBodyFontSize,
