@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const User = require('../models/User');
+const db = require('../db');
 
 // Read JWT_SECRET lazily from process.env so the value set by ensureJwtSecret()
 // during startup is always picked up — no insecure compile-time fallback.
@@ -77,10 +79,30 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
+// Generate a fresh JWT secret, persist it, and swap it in live. Used after a
+// full reset: every previously issued token (whose user row no longer exists)
+// stops verifying, so stale sessions can't outlive the data they belonged to.
+const rotateJwtSecret = async () => {
+  const secret = crypto.randomBytes(48).toString('hex');
+  await db.query(
+    "INSERT INTO settings (key, value) VALUES ('JWT_SECRET', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+    [secret]
+  );
+  process.env.JWT_SECRET = secret;
+  return secret;
+};
+
+// Reset truncates the users table, so the cached "users exist" state is stale.
+const resetUsersExistCache = () => {
+  usersExist = false;
+};
+
 module.exports = {
   generateToken,
   authenticateToken,
   optionalAuth,
+  rotateJwtSecret,
+  resetUsersExistCache,
   getJwtSecret,
   get JWT_SECRET() {
     return getJwtSecret();

@@ -9,6 +9,7 @@ const unzipper = require('unzipper');
 const settingsService = require('../services/settings');
 const backupScheduler = require('../services/backupScheduler');
 const { blockInDemo } = require('../middleware/demoGuard');
+const { rotateJwtSecret, resetUsersExistCache } = require('../middleware/auth');
 const { execFileAsync, spawnToFile } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
@@ -260,6 +261,14 @@ router.post('/reset', blockInDemo, async (req, res) => {
     try { await fs.unlink(tempSqlPath); } catch {}
 
     console.log('[RESET] Database truncated');
+
+    // The truncate wiped the users table and the persisted JWT_SECRET. Issue a
+    // new secret so every existing session (now pointing at a deleted user) is
+    // invalidated, and clear the cached user-existence flag so the app falls
+    // back to the setup flow.
+    await rotateJwtSecret();
+    resetUsersExistCache();
+    console.log('[RESET] JWT secret rotated, sessions invalidated');
 
     // Clear uploads folder contents (keep the directory itself)
     try {

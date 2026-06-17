@@ -295,7 +295,7 @@ const formatFileSize = (bytes) => {
 const formatDate = (isoString) => new Date(isoString).toLocaleString();
 
 const BackupRestore = ({ isDarkTheme }) => {
-  const { isDemoMode } = useAuth();
+  const { isDemoMode, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -514,6 +514,10 @@ const BackupRestore = ({ isDarkTheme }) => {
     try {
       await api.post('/backup/reset');
       setStatus({ type: 'success', message: 'Reset complete. Reloading...' });
+      // The reset wiped the user account and rotated the JWT secret, so this
+      // session is dead — drop the stored token before reloading so we land on
+      // the setup screen instead of a broken authenticated state.
+      await logout();
       setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
       console.error('Error resetting:', error);
