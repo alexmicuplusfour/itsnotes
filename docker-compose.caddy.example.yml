@@ -33,8 +33,7 @@ services:
       BACKUP_PATH: /app/backups
     volumes:
       - attachments_data:/app/uploads
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./backups:/app/backups
+      - backups_data:/app/backups
 
   itsnotes-client:
     build: ./client
@@ -58,5 +57,6 @@ services:
 volumes:
   postgres_data:
   attachments_data:
+  backups_data:
   caddy_data:
   caddy_config:
