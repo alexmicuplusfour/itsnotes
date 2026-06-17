@@ -146,14 +146,14 @@ router.get('/all-trashed', async (req, res) => {
   }
 });
 
-// Get the year range (earliest/latest) of notes for the calendar browser
-router.get('/year-range', async (req, res) => {
+// Get per-month note counts for the calendar browser
+router.get('/month-counts', async (req, res) => {
   try {
-    const range = await Note.getYearRange();
-    res.json(range || { minYear: null, maxYear: null });
+    const counts = await Note.getMonthCounts();
+    res.json({ counts });
   } catch (error) {
-    console.error('Error fetching note year range:', error);
-    res.status(500).json({ message: 'Error fetching note year range', error: error.message });
+    console.error('Error fetching note month counts:', error);
+    res.status(500).json({ message: 'Error fetching note month counts', error: error.message });
   }
 });
 

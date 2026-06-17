@@ -736,7 +736,7 @@ const MONTH_LABEL = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 
 const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [yearRange, setYearRange] = useState(null);
+  const [monthCounts, setMonthCounts] = useState([]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const pillRef = useRef(null);
   const panelRef = useRef(null);
@@ -749,19 +749,19 @@ const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange 
   // Get data from contexts
   const { handleSearch } = useNotes();
 
-  // Lazily fetch the note year range the first time the panel opens
+  // Lazily fetch per-month note counts the first time the panel opens
   useEffect(() => {
     if (!isOpen || hasLoaded) return;
     let cancelled = false;
-    notesApi.getNoteYearRange()
-      .then((range) => {
+    notesApi.getNoteMonthCounts()
+      .then((data) => {
         if (!cancelled) {
-          setYearRange(range);
+          setMonthCounts(data?.counts || []);
           setHasLoaded(true);
         }
       })
       .catch((error) => {
-        console.error('Error loading note year range:', error);
+        console.error('Error loading note month counts:', error);
         if (!cancelled) setHasLoaded(true);
       });
     return () => { cancelled = true; };
@@ -796,26 +796,25 @@ const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange 
     };
   }, [isOpen]);
 
-  // Build a list of years (newest first) with the months to show for each.
-  // The current year is capped at the present month since future notes can't exist.
+  // Build a list of years (newest first), each with only the months that have
+  // notes (also newest first), plus per-month and per-year counts.
   const calendarYears = useMemo(() => {
-    if (!yearRange || yearRange.minYear == null || yearRange.maxYear == null) {
-      return [];
-    }
-    const now = new Date();
-    const thisYear = now.getFullYear();
-    const thisMonth = now.getMonth(); // 0-11
-    const years = [];
-    for (let year = yearRange.maxYear; year >= yearRange.minYear; year--) {
-      const lastMonthIndex = year >= thisYear ? thisMonth : 11;
-      const months = [];
-      for (let m = 0; m <= lastMonthIndex; m++) {
-        months.push({ index: m, short: MONTH_SHORT[m], label: MONTH_LABEL[m] });
-      }
-      years.push({ year, months });
-    }
-    return years;
-  }, [yearRange]);
+    const byYear = new Map();
+    monthCounts.forEach(({ year, month, count }) => {
+      if (!count) return;
+      if (!byYear.has(year)) byYear.set(year, []);
+      const index = month - 1; // month is 1-12
+      byYear.get(year).push({ index, short: MONTH_SHORT[index], label: MONTH_LABEL[index], count });
+    });
+
+    return [...byYear.keys()]
+      .sort((a, b) => b - a)
+      .map((year) => {
+        const months = byYear.get(year).sort((a, b) => b.index - a.index);
+        const total = months.reduce((sum, m) => sum + m.count, 0);
+        return { year, total, months };
+      });
+  }, [monthCounts]);
 
   const handleYearClick = (year) => {
     handleSearch(`yr:${year}`, true, true);
@@ -856,7 +855,7 @@ const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange 
             {calendarYears.length > 0 ? (
               <Section>
                 <SectionTitle></SectionTitle>
-                {calendarYears.map(({ year, months }) => (
+                {calendarYears.map(({ year, total, months }) => (
                   <CalendarYearBlock key={`cal-year-${year}`}>
                     <YearChip
                       theme={isDarkTheme ? 'dark' : 'light'}
@@ -864,6 +863,7 @@ const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange 
                       title={`Search year: ${year}`}
                     >
                       {year}
+                      <CalendarCount theme={isDarkTheme ? 'dark' : 'light'}>{total}</CalendarCount>
                     </YearChip>
                     <ItemsGrid>
                       {months.map((month) => (
@@ -874,6 +874,7 @@ const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange 
                           title={`Search ${month.label} ${year}`}
                         >
                           {month.label}
+                          <CalendarCount theme={isDarkTheme ? 'dark' : 'light'}>{month.count}</CalendarCount>
                         </TagItem>
                       ))}
                     </ItemsGrid>
@@ -1246,6 +1247,15 @@ const YearChip = styled(BaseItem)`
       ? 'rgba(255, 255, 255, 0.2)'
       : 'rgba(0, 0, 0, 0.2)'};
   }
+`;
+
+const CalendarCount = styled.span`
+  margin-left: 6px;
+  font-size: 12px;
+  color: ${props => props.theme === 'dark'
+    ? 'rgba(255, 255, 255, 0.5)'
+    : 'rgba(0, 0, 0, 0.5)'};
+  flex-shrink: 0;
 `;
 
 const FolderTagItem = styled(TagItem)`

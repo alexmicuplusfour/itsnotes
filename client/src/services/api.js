@@ -251,10 +251,10 @@ export const notesApi = {
     return response.data;
   },
 
-  // Earliest/latest note years, for the calendar browser
-  getNoteYearRange: async () => {
-    const response = await api.get('/notes/year-range');
-    return response.data; // { minYear, maxYear }
+  // Per-month note counts, for the calendar browser
+  getNoteMonthCounts: async () => {
+    const response = await api.get('/notes/month-counts');
+    return response.data; // { counts: [{ year, month, count }] }
   },
 
   // Extract content from URL

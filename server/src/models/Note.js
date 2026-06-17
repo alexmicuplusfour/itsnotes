@@ -1465,24 +1465,21 @@ class Note {
     return parseInt(result.count) || 0;
   }
   /**
-   * Get the earliest and latest note creation years across non-deleted notes.
-   * Returns null when there are no notes.
+   * Get note counts grouped by year and month across non-deleted notes.
+   * Returns an array of { year, month, count } (month is 1-12) in one aggregate query.
    */
-  static async getYearRange() {
-    const result = await db('notes')
+  static async getMonthCounts() {
+    const rows = await db('notes')
       .where('is_deleted', false)
-      .min('created_at as earliest')
-      .max('created_at as latest')
-      .first();
+      .select(db.raw('EXTRACT(YEAR FROM created_at)::int AS year, EXTRACT(MONTH FROM created_at)::int AS month'))
+      .count('* as count')
+      .groupByRaw('EXTRACT(YEAR FROM created_at), EXTRACT(MONTH FROM created_at)');
 
-    if (!result || !result.earliest) {
-      return null;
-    }
-
-    return {
-      minYear: new Date(result.earliest).getFullYear(),
-      maxYear: new Date(result.latest).getFullYear()
-    };
+    return rows.map(row => ({
+      year: row.year,
+      month: row.month,
+      count: parseInt(row.count) || 0
+    }));
   }
   /**
    * Bulk operations using Knex
