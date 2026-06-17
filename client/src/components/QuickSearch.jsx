@@ -732,7 +732,7 @@ const SavedSearchesPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenCh
 
 // Calendar Pill Component - browse notes by year and month
 const MONTH_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const MONTH_LABEL = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_LABEL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -1234,8 +1234,6 @@ const CalendarYearBlock = styled.div`
 `;
 
 const YearChip = styled(BaseItem)`
-  font-weight: 600;
-  font-size: 14px;
   margin-bottom: 8px;
   padding: 4px 12px;
 
