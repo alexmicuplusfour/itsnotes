@@ -16,6 +16,33 @@ class SchedulerService {
         this.cronTask = cron.schedule('* * * * *', () => {
             this.checkReminders();
         });
+
+        // Periodically purge empty notes (blank title/content, no attachments).
+        // Defaults to a daily 3 AM sweep; opt out with EMPTY_NOTE_CLEANUP_ENABLED=false.
+        if (process.env.EMPTY_NOTE_CLEANUP_ENABLED !== 'false') {
+            const cleanupCron = process.env.EMPTY_NOTE_CLEANUP_CRON || '0 3 * * *';
+            this.cleanupTask = cron.schedule(cleanupCron, () => {
+                this.cleanupEmptyNotes();
+            });
+            // Clear any existing backlog shortly after startup.
+            this.cleanupEmptyNotes();
+        }
+    }
+
+    async cleanupEmptyNotes() {
+        try {
+            const olderThanMinutes = parseInt(process.env.EMPTY_NOTE_CLEANUP_AGE_MINUTES) || 1440;
+            const deletedIds = await Note.deleteEmpty({ olderThanMinutes });
+
+            if (deletedIds.length > 0) {
+                console.log(`SchedulerService: Removed ${deletedIds.length} empty notes`);
+                if (this.io) {
+                    deletedIds.forEach(id => this.io.emit('note_deleted', id));
+                }
+            }
+        } catch (error) {
+            console.error('SchedulerService: Error cleaning up empty notes:', error);
+        }
     }
 
     async checkReminders() {

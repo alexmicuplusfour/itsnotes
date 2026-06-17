@@ -1455,6 +1455,40 @@ class Note {
     return result[0];
   }
 
+  /**
+   * Delete "empty" notes — those the UI already hides via applyStandardFilters
+   * (blank title, blank content, no images), additionally guarding against any
+   * note that carries data in a related table (attachments, objects, links).
+   * The age guard protects notes a user is actively composing: the client
+   * persists a note row the instant "+" is clicked, before any text is typed.
+   * Child rows (tags/images/versions/objects/links/attachments/reminders)
+   * cascade-delete via FK constraints. Returns the deleted note IDs.
+   */
+  static async deleteEmpty({ olderThanMinutes = 1440 } = {}) {
+    const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+
+    const deleted = await db('notes')
+      .where('updated_at', '<', cutoff)
+      .whereRaw("TRIM(COALESCE(notes.title, '')) = ''")
+      .whereRaw("TRIM(COALESCE(notes.content, '')) = ''")
+      .whereNotExists(function () {
+        this.select(db.raw(1)).from('note_images').whereRaw('note_images.note_id = notes.id');
+      })
+      .whereNotExists(function () {
+        this.select(db.raw(1)).from('note_attachments').whereRaw('note_attachments.note_id = notes.id');
+      })
+      .whereNotExists(function () {
+        this.select(db.raw(1)).from('note_objects').whereRaw('note_objects.note_id = notes.id');
+      })
+      .whereNotExists(function () {
+        this.select(db.raw(1)).from('note_links').whereRaw('note_links.note_id = notes.id');
+      })
+      .del()
+      .returning('id');
+
+    return deleted.map(row => row.id);
+  }
+
   static async getCount({ archived = false, deleted = false }) {
     const result = await db('notes')
       .where('is_archived', archived)
