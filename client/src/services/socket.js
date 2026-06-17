@@ -119,6 +119,9 @@ class SocketService {
     console.log('Creating new socket instance...');
     // Create a new socket with aggressive mobile-optimized settings
     this.socket = io(SOCKET_URL, {
+      // Re-read the token on every (re)connect so a refreshed token is used
+      // after reconnection. The server gates all socket connections on this JWT.
+      auth: (cb) => cb({ token: localStorage.getItem('authToken') }),
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 200,

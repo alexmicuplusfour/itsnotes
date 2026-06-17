@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const { initDb } = db;
 const { runMigrations } = require('./migrate');
+const jwt = require('jsonwebtoken');
 const notesRoutes = require('./routes/notes');
 const tagsRoutes = require('./routes/tags');
 const imagesRoutes = require('./routes/images');
@@ -26,7 +27,7 @@ const scheduler = require('./services/scheduler');
 const demoReset = require('./services/demoReset');
 const settingsService = require('./services/settings');
 const backupScheduler = require('./services/backupScheduler');
-const { optionalAuth } = require('./middleware/auth');
+const { optionalAuth, getJwtSecret } = require('./middleware/auth');
 
 // Load environment variables
 require('dotenv').config();
@@ -162,6 +163,23 @@ app.use('/api/backup', optionalAuth, backupRoutes);
 app.use('/api', optionalAuth, imagesRoutes);
 app.use('/api', optionalAuth, attachmentsRoutes);
 app.use('/api/import', optionalAuth, importRoutes);
+
+// Gate every socket connection behind the same JWT as the REST API. Without
+// this, anyone reaching the port could listen to io.emit broadcasts and stream
+// the user's notes in real time without authenticating.
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token
+    || socket.handshake.headers?.authorization?.split(' ')[1];
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    socket.user = jwt.verify(token, getJwtSecret());
+    next();
+  } catch (err) {
+    next(new Error('Invalid token'));
+  }
+});
 
 // Socket.io events (keep as is)
 io.on('connection', (socket) => {
