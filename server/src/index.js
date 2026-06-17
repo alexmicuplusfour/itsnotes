@@ -92,8 +92,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve uploaded files (images, attachments, objects)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files (images, attachments, objects). Uploads are
+// attacker-controlled (e.g. SVG with inline script), so never let the
+// browser execute them same-origin: force download, sandbox, no sniffing.
+// These headers don't affect <img>/subresource loads, only navigation.
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res) => {
+    res.setHeader('Content-Disposition', 'attachment');
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  },
+}));
 
 // Intercept responses to broadcast updates via Socket.io
 // MUST be placed BEFORE routes so that route handlers call the wrapped res.json
