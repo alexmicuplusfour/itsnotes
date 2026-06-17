@@ -48,6 +48,10 @@ export function useNoteSaver(
   // Mirror isModified so markAsModified can stay completely stable.
   const isModifiedRef = useRef(false);
   isModifiedRef.current = isModified;
+  // Mirror isAutoSaving so the concurrency guard and the auto-save interval
+  // can read it without listing it as a dep (which would churn identities).
+  const isAutoSavingRef = useRef(false);
+  isAutoSavingRef.current = isAutoSaving;
   const autoSaveTimerRef = useRef(null);
 
   // Stash hot-path props in refs so saveNote's identity doesn't change
@@ -142,7 +146,7 @@ export function useNoteSaver(
     }
 
     // Prevent concurrent saves
-    if (isAutoSaving) {
+    if (isAutoSavingRef.current) {
       console.log('[useNoteSaver] Save already in progress, skipping');
       return { success: false, error: 'Save already in progress' };
     }
@@ -225,7 +229,7 @@ export function useNoteSaver(
     } finally {
       setIsAutoSaving(false);
     }
-  }, [_shouldSave, isAutoSaving]);
+  }, [_shouldSave]);
 
   /**
    * Public save function
@@ -259,7 +263,14 @@ export function useNoteSaver(
     console.log('[useNoteSaver] Auto-save triggered');
     return await saveNote({ forceSave: false });
   }, [saveNote]);
-  // Auto-save timer effect
+  // Mirror triggerAutoSave so the interval can call the latest version
+  // without re-subscribing when saveNote's identity changes.
+  const triggerAutoSaveRef = useRef(triggerAutoSave);
+  triggerAutoSaveRef.current = triggerAutoSave;
+
+  // Auto-save timer effect. Reads isModified/isAutoSaving/the trigger via
+  // refs so the interval is set up once per autoSaveInterval change instead
+  // of being torn down and rebuilt on every keystroke and save.
   useEffect(() => {
     if (!autoSaveInterval || autoSaveInterval <= 0) {
       return; // Auto-save disabled
@@ -268,13 +279,13 @@ export function useNoteSaver(
     // Set up auto-save timer
     // Check interval should be responsive - use half the auto-save interval or minimum 500ms
     const checkInterval = Math.max(Math.floor(autoSaveInterval / 2), 500);
-    
+
     autoSaveTimerRef.current = setInterval(() => {
       const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
 
-      if (timeSinceLastSave >= autoSaveInterval && isModified && !isAutoSaving) {
+      if (timeSinceLastSave >= autoSaveInterval && isModifiedRef.current && !isAutoSavingRef.current) {
         console.log('[useNoteSaver] Auto-save conditions met, triggering save');
-        triggerAutoSave();
+        triggerAutoSaveRef.current();
       }
     }, checkInterval);
 
@@ -284,7 +295,7 @@ export function useNoteSaver(
         autoSaveTimerRef.current = null;
       }
     };
-  }, [autoSaveInterval, isModified, isAutoSaving, triggerAutoSave]);
+  }, [autoSaveInterval]);
 
   // Initial note change effect - reset state when note changes
   useEffect(() => {
