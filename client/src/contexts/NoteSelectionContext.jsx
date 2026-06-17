@@ -278,9 +278,19 @@ export const NoteSelectionProvider = ({ children }) => {
       };
         await _executeBulkAction('trash', notesApi.bulkTrashNotes, updateFn);
       
+      // Capture the trashed notes (+ their positions) so undo can restore them
+      // in place instead of refetching the whole search.
+      const trashedEntries = ids
+        .map(id => {
+          const index = sourceList.findIndex(n => n.id === id);
+          return index === -1 ? null : { note: sourceList[index], index };
+        })
+        .filter(Boolean);
+
       // Show success toast after successful operation
       notesContextRef.current.setOperationCount(ids.length);
       notesContextRef.current.setLastTrashedNoteIds(ids);
+      notesContextRef.current.captureTrashedNotesForUndo(trashedEntries);
       notesContextRef.current.setShowTrashSuccess(true);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
@@ -377,6 +387,7 @@ export const NoteSelectionProvider = ({ children }) => {
         // Show success toast for trashed archived notes
         notesContextRef.current.setOperationCount(archivedIds.length);
         notesContextRef.current.setLastTrashedNoteIds(archivedIds);
+        notesContextRef.current.captureTrashedNotesForUndo([]);
         notesContextRef.current.setShowTrashSuccess(true);
         // Refresh search count if in search mode
         if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {

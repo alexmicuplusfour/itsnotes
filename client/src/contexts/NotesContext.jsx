@@ -185,6 +185,9 @@ export const NotesProvider = ({ children }) => {
   const [operationCount, setOperationCount] = useState(1); // Track how many notes were affected
   const [lastArchivedNoteIds, setLastArchivedNoteIds] = useState([]);
   const [lastTrashedNoteIds, setLastTrashedNoteIds] = useState([]);
+  // Captures full note objects (+ their search-result index) for the most recent
+  // trash op so undo can re-insert them in place instead of refetching the search.
+  const lastTrashedNotesRef = useRef([]);
 
   // Note Interaction State
   const [openedNote, setOpenedNote] = useState(null); // The note currently open in the editor/modal
@@ -2019,6 +2022,7 @@ export const NotesProvider = ({ children }) => {
       // Check if note is archived first
       const sourceList = searchModeRef.current ? searchResultsRef.current : notesRef.current;
       const noteFromState = sourceList.find(note => note.id === id);
+      const trashedIndex = sourceList.findIndex(note => note.id === id);
       const wasInSearchMode = searchModeRef.current;
       const currentSearchQuery = searchQueryRef.current;
       
@@ -2055,6 +2059,9 @@ export const NotesProvider = ({ children }) => {
       // Show success toast
       setOperationCount(1);
       setLastTrashedNoteIds([id]);
+      lastTrashedNotesRef.current = noteFromState
+        ? [{ note: noteFromState, index: trashedIndex }]
+        : [];
       setShowTrashSuccess(true);
 
       // Keep the socket block active for a little longer after operation completes
@@ -2124,6 +2131,12 @@ export const NotesProvider = ({ children }) => {
     }
   }, [lastArchivedNoteIds, loadNotes, handleSearch]);
 
+  // Lets external callers (e.g. bulk trash in NoteSelectionContext) supply the
+  // full note objects + their search-result indices so undo can restore in place.
+  const captureTrashedNotesForUndo = useCallback((entries) => {
+    lastTrashedNotesRef.current = Array.isArray(entries) ? entries : [];
+  }, []);
+
   const handleUndoTrash = useCallback(async () => {
     if (!lastTrashedNoteIds.length) return;
     const ids = lastTrashedNoteIds;
@@ -2133,16 +2146,38 @@ export const NotesProvider = ({ children }) => {
       await notesApi.bulkRestoreNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
       if (searchModeRef.current && searchQueryRef.current) {
-        handleSearch(searchQueryRef.current, true, false, null, false, true);
+        const saved = lastTrashedNotesRef.current;
+        const canRestoreLocally = saved.length > 0 &&
+          saved.length === ids.length &&
+          saved.every(entry => entry.note && ids.includes(entry.note.id));
+        if (canRestoreLocally) {
+          // Re-insert the trashed notes at their original positions instead of
+          // refetching the whole search (which clears results and scrolls to top).
+          setSearchResults(prev => {
+            const next = prev.filter(n => !ids.includes(n.id));
+            saved
+              .slice()
+              .sort((a, b) => a.index - b.index)
+              .forEach(({ note, index }) => {
+                const insertAt = Math.min(Math.max(index, 0), next.length);
+                next.splice(insertAt, 0, note);
+              });
+            return next;
+          });
+          refreshSearchCount(searchQueryRef.current);
+        } else {
+          handleSearch(searchQueryRef.current, true, false, null, false, true);
+        }
       } else {
         loadNotes(true);
       }
+      lastTrashedNotesRef.current = [];
     } catch (err) {
       console.error('Failed to undo trash:', err);
       setError('Failed to undo trash');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastTrashedNoteIds, loadNotes, handleSearch]);
+  }, [lastTrashedNoteIds, loadNotes, handleSearch, refreshSearchCount]);
 
   const deleteNote = useCallback(async (id, suppressToast = false) => {
     // First, get the note to check if it's archived
@@ -2728,6 +2763,7 @@ export const NotesProvider = ({ children }) => {
     setOperationCount,
     setLastArchivedNoteIds,
     setLastTrashedNoteIds,
+    captureTrashedNotesForUndo,
 
     // Pagination & Loading
     hasMore,
