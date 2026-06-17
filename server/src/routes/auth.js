@@ -164,6 +164,23 @@ router.post('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
+// Mint a long-lived token for connecting AI clients to the MCP endpoint.
+// Separate from session tokens so it can outlive a normal login without
+// weakening session expiry. Treat the returned value like a password.
+router.post('/mcp-token', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByUsername(req.user.username);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const token = generateToken(user, '3650d'); // ~10 years
+    res.json({ token });
+  } catch (error) {
+    console.error('Error minting MCP token:', error);
+    res.status(500).json({ message: 'Failed to mint MCP token' });
+  }
+});
+
 // Get current user info
 router.get('/me', authenticateToken, async (req, res) => {
   try {

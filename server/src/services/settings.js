@@ -2,6 +2,7 @@ const db = require('../db');
 
 const KNOWN_KEYS = [
   'AI_ENABLED',
+  'MCP_ENABLED',
   'AI_PROVIDER',
   'OPENAI_API_KEY',
   'ANTHROPIC_API_KEY',

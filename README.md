@@ -61,6 +61,12 @@ All configuration is via `.env`. See `.env.example` for available options.
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
+## Chatting with your notes (MCP)
+
+There's a built-in [MCP](https://modelcontextprotocol.io/) server that lets Claude (and other AI clients) search and read your notes. Turn it on under **Settings → AI → MCP Server** and generate a token. To connect, paste the URL into Claude's custom connector, or run the `claude mcp add` command it gives you for Claude Code.
+
+It's off by default, read-only, and won't work without the token.
+
 ## Importing from Google Keep
 
 If you're moving over from Google Keep, you can bring your notes with you:

@@ -27,7 +27,8 @@ const scheduler = require('./services/scheduler');
 const demoReset = require('./services/demoReset');
 const settingsService = require('./services/settings');
 const backupScheduler = require('./services/backupScheduler');
-const { optionalAuth, getJwtSecret } = require('./middleware/auth');
+const { optionalAuth, authenticateToken, getJwtSecret } = require('./middleware/auth');
+const { handleMcpPost, handleMcpUnsupported } = require('./mcp/httpHandler');
 
 // Load environment variables
 require('dotenv').config();
@@ -166,6 +167,30 @@ app.use('/api/backup', optionalAuth, backupRoutes);
 app.use('/api', optionalAuth, imagesRoutes);
 app.use('/api', optionalAuth, attachmentsRoutes);
 app.use('/api/import', optionalAuth, importRoutes);
+
+// Built-in MCP endpoint (Streamable HTTP). Opt-in via the MCP_ENABLED setting
+// (Settings → AI Features), and gated by the same JWT as the REST API so AI
+// clients must present a valid token — see POST /api/auth/mcp-token for a
+// long-lived one. Stateless, read-only tools (search/get/list notes, list tags).
+const requireMcpEnabled = (req, res, next) => {
+  if (process.env.MCP_ENABLED !== 'true') {
+    return res.status(404).json({ message: 'MCP endpoint is disabled' });
+  }
+  next();
+};
+// Claude Desktop's "custom connector" UI only accepts a URL (it expects OAuth,
+// which we don't implement), so it can't send an Authorization header. Allow the
+// token via ?token= as a fallback — scoped to /mcp only, never the REST API — so
+// users can paste a single URL. authenticateToken still does the actual verifying.
+const allowMcpQueryToken = (req, res, next) => {
+  if (!req.headers['authorization'] && req.query.token) {
+    req.headers['authorization'] = `Bearer ${req.query.token}`;
+  }
+  next();
+};
+app.post('/mcp', requireMcpEnabled, allowMcpQueryToken, authenticateToken, handleMcpPost);
+app.get('/mcp', requireMcpEnabled, allowMcpQueryToken, authenticateToken, handleMcpUnsupported);
+app.delete('/mcp', requireMcpEnabled, allowMcpQueryToken, authenticateToken, handleMcpUnsupported);
 
 // Gate every socket connection behind the same JWT as the REST API. Without
 // this, anyone reaching the port could listen to io.emit broadcasts and stream

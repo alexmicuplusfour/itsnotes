@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styled, { keyframes } from 'styled-components';
-import api, { aiApi } from '../services/api';
+import api, { aiApi, getServerUrl } from '../services/api';
 import Icon from './Icons';
 import TagMultiSelect from './TagMultiSelect';
 import { useAuth } from '../contexts/AuthContext';
@@ -316,6 +316,50 @@ const ReadOnlyPromptBox = styled.div`
   margin-bottom: 12px;
 `;
 
+const McpCommandBox = styled.div`
+  position: relative;
+  background-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)'};
+  border-radius: 8px;
+  padding: 12px 44px 12px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-color);
+  white-space: pre-wrap;
+  word-break: break-all;
+`;
+
+const CopyButton = styled.button`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0;
+  &:hover { background-color: var(--hover-color, rgba(0,0,0,0.06)); }
+`;
+
+const McpActionButton = styled.button`
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  color: var(--text-color);
+  opacity: ${props => props.disabled ? 0.6 : 1};
+  &:hover { border-color: var(--foreground-color); }
+`;
+
 const PromptSectionLabel = styled.div`
   font-size: 13px;
   font-weight: 500;
@@ -468,6 +512,7 @@ const SettingsModal = ({ onClose }) => {
   const [isDarkTheme, setIsDarkTheme] = useState(ThemeManager.getTheme());
   const [settings, setSettings] = useState({
     AI_ENABLED: 'true',
+    MCP_ENABLED: 'false',
     AI_PROVIDER: 'openai',
     OPENAI_API_KEY: '',
     ANTHROPIC_API_KEY: '',
@@ -501,6 +546,11 @@ const SettingsModal = ({ onClose }) => {
   });
   const [availableModels, setAvailableModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [mcpToken, setMcpToken] = useState(null);
+  const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
+  const [mcpTokenError, setMcpTokenError] = useState(null);
+  const [mcpCopied, setMcpCopied] = useState(false);
+  const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
   const [initialSettings, setInitialSettings] = useState(settings);
   const [loading, setLoading] = useState(false);
   const debounceTimerRef = useRef(null);
@@ -679,6 +729,46 @@ const SettingsModal = ({ onClose }) => {
     }
   }, [activeSection, loadModels]);
 
+  const generateMcpToken = async () => {
+    setMcpTokenLoading(true);
+    setMcpTokenError(null);
+    try {
+      const { data } = await api.post('/auth/mcp-token');
+      setMcpToken(data.token);
+    } catch (e) {
+      setMcpTokenError('Could not generate a token. Make sure you are logged in.');
+    } finally {
+      setMcpTokenLoading(false);
+    }
+  };
+
+  // getServerUrl returns a bare "/mcp" when SERVER_BASE_URL is unset (relative
+  // deploys behind nginx). MCP clients run outside the browser and need an
+  // absolute URL, so fall back to the current origin.
+  const mcpUrlRaw = getServerUrl('/mcp');
+  const mcpUrl = mcpUrlRaw.startsWith('http')
+    ? mcpUrlRaw
+    : `${window.location.origin}${mcpUrlRaw}`;
+  const mcpCommand = mcpToken
+    ? `claude mcp add --transport http itsnotes ${mcpUrl} --header "Authorization: Bearer ${mcpToken}"`
+    : '';
+  // Claude Desktop's custom-connector dialog takes only a URL, so embed the
+  // token as a query param (the server accepts it for /mcp).
+  const mcpConnectorUrl = mcpToken ? `${mcpUrl}?token=${mcpToken}` : '';
+
+  const copyText = (text, setCopied) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleMcpToggle = (enabled) => {
+    const newSettings = { ...settings, MCP_ENABLED: enabled ? 'true' : 'false' };
+    setSettings(newSettings);
+    debouncedSave(newSettings);
+  };
+
   // When models load, auto-select the first one for any feature that has no selection
   useEffect(() => {
     if (availableModels.length === 0) return;
@@ -830,7 +920,69 @@ const SettingsModal = ({ onClose }) => {
                 {activeSection === 'ai' && (
                   <>
                     <SectionContainer>
-                      <SectionTitle>AI Integration</SectionTitle>
+                      <SectionTitle>MCP Server</SectionTitle>
+                      <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Label style={{ marginBottom: 0 }}>Enable MCP endpoint</Label>
+                        <Switch
+                          id="mcp-enabled-toggle"
+                          checked={settings.MCP_ENABLED === 'true'}
+                          onChange={() => handleMcpToggle(settings.MCP_ENABLED !== 'true')}
+                        />
+                      </FormGroup>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary-color)', margin: '0 0 4px' }}>
+                        Exposes a read-only Model Context Protocol endpoint so AI clients
+                        (Claude, etc.) can search and read your notes. Access requires a
+                        connection token.
+                      </p>
+                      {settings.MCP_ENABLED === 'true' && (
+                        <>
+                          <FormGroup>
+                            <Label>Endpoint URL</Label>
+                            <McpCommandBox $isDark={isDarkTheme}>{mcpUrl}</McpCommandBox>
+                          </FormGroup>
+                          {!mcpToken ? (
+                            <FormGroup>
+                              <McpActionButton onClick={generateMcpToken} disabled={mcpTokenLoading}>
+                                {mcpTokenLoading ? 'Generating…' : 'Generate connection token'}
+                              </McpActionButton>
+                              {mcpTokenError && (
+                                <p style={{ fontSize: '12px', color: 'var(--danger-color, #e53935)', margin: '8px 0 0' }}>
+                                  {mcpTokenError}
+                                </p>
+                              )}
+                            </FormGroup>
+                          ) : (
+                            <>
+                              <FormGroup>
+                                <Label>Claude Desktop / web (custom connector)</Label>
+                                <McpCommandBox $isDark={isDarkTheme}>
+                                  {mcpConnectorUrl}
+                                  <CopyButton onClick={() => copyText(mcpConnectorUrl, setMcpUrlCopied)} title="Copy URL">
+                                    <Icon name={mcpUrlCopied ? 'check' : 'copy'} size={16} />
+                                  </CopyButton>
+                                </McpCommandBox>
+                                <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '8px 0 0' }}>
+                                  In Claude, add a custom connector and paste this URL — no files
+                                  to edit. The token is in the URL, so treat it as a secret.
+                                </p>
+                              </FormGroup>
+                              <FormGroup>
+                                <Label>Claude Code (CLI)</Label>
+                                <McpCommandBox $isDark={isDarkTheme}>
+                                  {mcpCommand}
+                                  <CopyButton onClick={() => copyText(mcpCommand, setMcpCopied)} title="Copy command">
+                                    <Icon name={mcpCopied ? 'check' : 'copy'} size={16} />
+                                  </CopyButton>
+                                </McpCommandBox>
+                              </FormGroup>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </SectionContainer>
+
+                    <SectionContainer>
+                      <SectionTitle>AI Features</SectionTitle>
                       <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <Label style={{ marginBottom: 0 }}>Enable AI Features</Label>
                         <Switch

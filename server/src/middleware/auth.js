@@ -14,15 +14,16 @@ const getJwtSecret = () => {
 };
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d'; // 7 days
 
-// Generate JWT token
-const generateToken = (user) => {
+// Generate JWT token. `expiresIn` overrides the default session lifetime —
+// used to mint long-lived tokens for non-interactive clients like the MCP connector.
+const generateToken = (user, expiresIn = JWT_EXPIRES_IN) => {
   return jwt.sign(
     {
       id: user.id,
       username: user.username
     },
     getJwtSecret(),
-    { expiresIn: JWT_EXPIRES_IN }
+    { expiresIn }
   );
 };
 
