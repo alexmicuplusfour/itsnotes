@@ -1465,6 +1465,26 @@ class Note {
     return parseInt(result.count) || 0;
   }
   /**
+   * Get the earliest and latest note creation years across non-deleted notes.
+   * Returns null when there are no notes.
+   */
+  static async getYearRange() {
+    const result = await db('notes')
+      .where('is_deleted', false)
+      .min('created_at as earliest')
+      .max('created_at as latest')
+      .first();
+
+    if (!result || !result.earliest) {
+      return null;
+    }
+
+    return {
+      minYear: new Date(result.earliest).getFullYear(),
+      maxYear: new Date(result.latest).getFullYear()
+    };
+  }
+  /**
    * Bulk operations using Knex
    */
   static async bulkUpdate(noteIds, updates) {

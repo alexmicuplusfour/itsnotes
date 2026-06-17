@@ -146,6 +146,17 @@ router.get('/all-trashed', async (req, res) => {
   }
 });
 
+// Get the year range (earliest/latest) of notes for the calendar browser
+router.get('/year-range', async (req, res) => {
+  try {
+    const range = await Note.getYearRange();
+    res.json(range || { minYear: null, maxYear: null });
+  } catch (error) {
+    console.error('Error fetching note year range:', error);
+    res.status(500).json({ message: 'Error fetching note year range', error: error.message });
+  }
+});
+
 // Get a single note by ID
 router.get('/:id', async (req, res) => {
   try {

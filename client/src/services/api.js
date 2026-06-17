@@ -251,6 +251,12 @@ export const notesApi = {
     return response.data;
   },
 
+  // Earliest/latest note years, for the calendar browser
+  getNoteYearRange: async () => {
+    const response = await api.get('/notes/year-range');
+    return response.data; // { minYear, maxYear }
+  },
+
   // Extract content from URL
   extractUrlContent: async (url, extractType, noteId = null, includeImages = false) => {
     const payload = { url, extractType };

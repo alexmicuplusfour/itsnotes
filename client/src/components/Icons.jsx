@@ -492,6 +492,13 @@ const iconPaths = {
       { elem: 'line', x1: "7", y1: "14", x2: "17", y2: "14", 'stroke-dasharray': "2,2" }
     ]
   },
+  calendar: {
+    paths: [
+      { elem: 'rect', x: "2", y: "4", width: "20", height: "18", rx: "2.5", ry: "2.5" },
+      { elem: 'line', x1: "2", y1: "9", x2: "22", y2: "9" },
+      { elem: 'circle', cx: "8", cy: "15", r: "1" }
+    ]
+  },
 
   "tabs": {
     "paths": [

@@ -4,6 +4,7 @@ import styled, { css, keyframes } from 'styled-components';
 import { useNotes } from '../contexts/NotesContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useTags } from '../contexts/TagsContext';
+import { notesApi } from '../services/api';
 import Icon from './Icons';
 import {
   DndContext,
@@ -729,6 +730,167 @@ const SavedSearchesPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenCh
   );
 };
 
+// Calendar Pill Component - browse notes by year and month
+const MONTH_SHORT = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_LABEL = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const CalendarPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [yearRange, setYearRange] = useState(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const pillRef = useRef(null);
+  const panelRef = useRef(null);
+
+  // Notify parent of open state changes
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Get data from contexts
+  const { handleSearch } = useNotes();
+
+  // Lazily fetch the note year range the first time the panel opens
+  useEffect(() => {
+    if (!isOpen || hasLoaded) return;
+    let cancelled = false;
+    notesApi.getNoteYearRange()
+      .then((range) => {
+        if (!cancelled) {
+          setYearRange(range);
+          setHasLoaded(true);
+        }
+      })
+      .catch((error) => {
+        console.error('Error loading note year range:', error);
+        if (!cancelled) setHasLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [isOpen, hasLoaded]);
+
+  // Close panel when clicking outside or scrolling
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isOpen &&
+          pillRef.current &&
+          !pillRef.current.contains(event.target) &&
+          panelRef.current &&
+          !panelRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleScroll = (event) => {
+      if (panelRef.current && panelRef.current.contains(event.target)) {
+        return;
+      }
+      if (isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isOpen]);
+
+  // Build a list of years (newest first) with the months to show for each.
+  // The current year is capped at the present month since future notes can't exist.
+  const calendarYears = useMemo(() => {
+    if (!yearRange || yearRange.minYear == null || yearRange.maxYear == null) {
+      return [];
+    }
+    const now = new Date();
+    const thisYear = now.getFullYear();
+    const thisMonth = now.getMonth(); // 0-11
+    const years = [];
+    for (let year = yearRange.maxYear; year >= yearRange.minYear; year--) {
+      const lastMonthIndex = year >= thisYear ? thisMonth : 11;
+      const months = [];
+      for (let m = 0; m <= lastMonthIndex; m++) {
+        months.push({ index: m, short: MONTH_SHORT[m], label: MONTH_LABEL[m] });
+      }
+      years.push({ year, months });
+    }
+    return years;
+  }, [yearRange]);
+
+  const handleYearClick = (year) => {
+    handleSearch(`yr:${year}`, true, true);
+    setIsOpen(false);
+  };
+
+  const handleMonthClick = (year, monthShort) => {
+    handleSearch(`yr:${year}:${monthShort}`, true, true);
+    setIsOpen(false);
+  };
+
+  // Hide on mobile when search is active, show on desktop always
+  if (isSearchActive && isMobileView) return null;
+  return (
+    <>
+      <PillButton
+        ref={pillRef}
+        theme={isDarkTheme ? 'dark' : 'light'}
+        $isOpen={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        title="Browse by date"
+      >
+        <Icon name="calendar" size={18} strokeWidth={2.5} />
+      </PillButton>
+
+      {isOpen && ReactDOM.createPortal(
+        <>
+          <Backdrop $isOpen={isOpen} onClick={() => setIsOpen(false)} />
+          <QuickSearchPanel
+            $isSearchActive={isSearchActive}
+            ref={panelRef}
+            theme={isDarkTheme ? 'dark' : 'light'}
+          >
+            {calendarYears.length > 0 ? (
+              <Section>
+                <SectionTitle></SectionTitle>
+                {calendarYears.map(({ year, months }) => (
+                  <CalendarYearBlock key={`cal-year-${year}`}>
+                    <YearChip
+                      theme={isDarkTheme ? 'dark' : 'light'}
+                      onClick={() => handleYearClick(year)}
+                      title={`Search year: ${year}`}
+                    >
+                      {year}
+                    </YearChip>
+                    <ItemsGrid>
+                      {months.map((month) => (
+                        <TagItem
+                          key={`cal-${year}-${month.short}`}
+                          theme={isDarkTheme ? 'dark' : 'light'}
+                          onClick={() => handleMonthClick(year, month.short)}
+                          title={`Search ${month.label} ${year}`}
+                        >
+                          {month.label}
+                        </TagItem>
+                      ))}
+                    </ItemsGrid>
+                  </CalendarYearBlock>
+                ))}
+              </Section>
+            ) : (
+              <EmptyState>{hasLoaded ? 'No notes yet' : 'Loading...'}</EmptyState>
+            )}
+          </QuickSearchPanel>
+        </>,
+        document.body
+      )}
+    </>
+  );
+};
+
 // Main component that renders all three pills
 // It now manages the isDarkTheme state
 const QuickAccessPills = ({ isSearchActive, isMobileView, onPanelOpenChange }) => {
@@ -741,7 +903,8 @@ const QuickAccessPills = ({ isSearchActive, isMobileView, onPanelOpenChange }) =
     savedSearches: false,
     tags: false,
     folders: false,
-    colors: false
+    colors: false,
+    calendar: false
   });
   
   // Notify parent when any panel open state changes
@@ -787,6 +950,12 @@ const QuickAccessPills = ({ isSearchActive, isMobileView, onPanelOpenChange }) =
         isMobileView={isMobileView}
         isDarkTheme={isDarkTheme}
         onOpenChange={(isOpen) => handlePanelToggle('folders', isOpen)}
+      />
+      <CalendarPill
+        isSearchActive={isSearchActive}
+        isMobileView={isMobileView}
+        isDarkTheme={isDarkTheme}
+        onOpenChange={(isOpen) => handlePanelToggle('calendar', isOpen)}
       />
       <ColorsPill
         isSearchActive={isSearchActive}
@@ -1054,6 +1223,31 @@ const BaseItem = styled.div`
 
 const TagItem = styled(BaseItem)`
   max-width: 120px;
+`;
+
+const CalendarYearBlock = styled.div`
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const YearChip = styled(BaseItem)`
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+
+  background-color: ${props => props.theme === 'dark'
+    ? 'rgba(255, 255, 255, 0.12)'
+    : 'rgba(0, 0, 0, 0.12)'};
+
+  &:hover {
+    background-color: ${props => props.theme === 'dark'
+      ? 'rgba(255, 255, 255, 0.2)'
+      : 'rgba(0, 0, 0, 0.2)'};
+  }
 `;
 
 const FolderTagItem = styled(TagItem)`
