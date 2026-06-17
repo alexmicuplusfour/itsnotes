@@ -27,6 +27,11 @@ import { useNavigationContext } from '../navigation/NavigationContext'; // Impor
 const NotesContext = createContext();
 export const useNotes = () => useContext(NotesContext);
 
+// Loading state lives in its own context so that list/search loading toggles
+// don't invalidate the main data context and re-render every note consumer.
+const NotesLoadingContext = createContext({ listLoading: false });
+export const useNotesLoading = () => useContext(NotesLoadingContext);
+
 // --- Helper Hook for Stable Array Results ---
 const useStableArrayResult = (factory, deps) => {
   const previousResultRef = useRef(null);
@@ -2734,32 +2739,22 @@ export const NotesProvider = ({ children }) => {
     pinnedNotes,
     unpinnedNotes,
     allNotesUnfiltered: searchMode ? searchResults : notes,
-    listLoading, // Renamed
-    noteDetailLoading, // New
     error,
-    savingNotes,
     totalNotes,
     view,
     noteTags,
 
-    // Toast State
-    showAutoTagSuccess,
+    // Toast setters (stable refs; toast *values* are read by the provider's own
+    // SuccessToast JSX, not by consumers — keeping them out of the value avoids
+    // re-rendering every useNotes() consumer on each toast toggle).
     setShowAutoTagSuccess,
-    autoTaggedTagName,
     setAutoTaggedTagName,
-    showArchiveSuccess,
     setShowArchiveSuccess,
-    showUnarchiveSuccess,
     setShowUnarchiveSuccess,
-    showTrashSuccess,
     setShowTrashSuccess,
-    showRestoreSuccess,
     setShowRestoreSuccess,
-    showDeleteSuccess,
     setShowDeleteSuccess,
-    showHiddenSuccess,
     setShowHiddenSuccess,
-    operationCount,
     setOperationCount,
     setLastArchivedNoteIds,
     setLastTrashedNoteIds,
@@ -2824,7 +2819,6 @@ export const NotesProvider = ({ children }) => {
     openedNote,
     openNoteById,
     closeNoteWithoutUrlUpdate,
-    recentlyEditedNoteId,
 
     // Selection & Bulk Actions - moved to NoteSelectionContext
     // selectedNoteIds, toggleNoteSelection, clearSelection,
@@ -2867,14 +2861,12 @@ export const NotesProvider = ({ children }) => {
     getViewportPrefetchDelay
   }), [
     // Dependencies for the context value memoization
-    filteredNotes, pinnedNotes, unpinnedNotes, notes, listLoading, noteDetailLoading, error, savingNotes, totalNotes, view, noteTags, hasMore,
+    filteredNotes, pinnedNotes, unpinnedNotes, notes, error, totalNotes, view, noteTags, hasMore,
     searchMode, searchQuery, searchResults, searchBarActive, savedSearches,
     getSortForView, getAvailableSortsForView, SORT_LABELS,
-    openedNote, recentlyEditedNoteId,
+    openedNote,
     layoutView, showQuickAccess, showMonthMarkers, showNoteTabs, hiddenTagIds,
-    // Toast states
-    showAutoTagSuccess, autoTaggedTagName, showArchiveSuccess, showUnarchiveSuccess, 
-    showTrashSuccess, showRestoreSuccess, showDeleteSuccess, showHiddenSuccess, operationCount,
+    // Toast values intentionally excluded — only the provider's own JSX reads them.
     // Include all functions
     loadNotes, handleSearch, loadMoreSearchResults, searchByTag, searchByColor, searchByBook, searchById, getReferenceCount, refreshSearchCount, saveSearch, removeSavedSearch,
     changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
@@ -2883,6 +2875,10 @@ export const NotesProvider = ({ children }) => {
     reloadSettings,
     subscribeToCacheStatus, getNoteCacheStatus, prefetchNoteToCache, getViewportPrefetchDelay
   ]);
+
+  // Separate loading-state context value — toggling listLoading must not
+  // invalidate contextValue above (which would re-render every note).
+  const loadingValue = useMemo(() => ({ listLoading }), [listLoading]);
 
   // --- Render Provider ---
   return (
@@ -2925,7 +2921,9 @@ export const NotesProvider = ({ children }) => {
         onHide={() => setShowHiddenSuccess(false)}
       />
       <NotesContext.Provider value={contextValue}>
-        {children}
+        <NotesLoadingContext.Provider value={loadingValue}>
+          {children}
+        </NotesLoadingContext.Provider>
       </NotesContext.Provider>
     </>
   );

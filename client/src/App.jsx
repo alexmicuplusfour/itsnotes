@@ -13,7 +13,7 @@ import { NotesProvider } from './contexts/NotesContext';
 import { TagsProvider } from './contexts/TagsContext';
 import { StarredNotesProvider } from './contexts/StarredNotesContext';
 import { SortingProvider } from './contexts/SortingContext';
-import { useNotes } from './contexts/NotesContext';
+import { useNotes, useNotesLoading } from './contexts/NotesContext';
 import { useTags } from './contexts/TagsContext';
 import { useUIPreferences } from './contexts/UIPreferencesContext';
 import { TypingProvider } from './contexts/TypingContext'; // Import TypingProvider
@@ -152,10 +152,10 @@ const AppContent = () => {
     searchResults,
     searchQuery,
     totalNotes,
-    listLoading,
     view,
     openedNote,
   } = notesContext;
+  const { listLoading } = useNotesLoading();
 
   const { showQuickAccess, showNoteTabs, colorLabels, setAllColorLabels, layoutView, setPageBackgroundEnabled } = useUIPreferences();
   const { settings: serverSettings } = useSettings();

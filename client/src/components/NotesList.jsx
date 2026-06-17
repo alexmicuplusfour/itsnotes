@@ -13,7 +13,7 @@ import CurrentTags from './CurrentTags'; // Import the current tags component
 import FolderHeader from './FolderHeader';
 import EmptyTrashPills from './EmptyTrashPills'; // Import the empty trash pills
 import MonthSearchStar from './MonthSearchStar'; // Import the month search star component
-import { useNotes } from '../contexts/NotesContext';
+import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useSorting } from '../contexts/SortingContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
@@ -282,7 +282,6 @@ const NotesList = ({ title, notes, showPinned }) => {
 
   const {
     notes: contextNotes,
-    listLoading, // Changed from loading
     hasMore,
     loadNotes,
     loadMoreSearchResults,
@@ -294,6 +293,7 @@ const NotesList = ({ title, notes, showPinned }) => {
     searchByColor,
     view,
   } = useNotes();
+  const { listLoading } = useNotesLoading(); // Changed from loading
 
   // Get unified sorting system
   const { getSortForView, SORT_OPTIONS } = useSorting();

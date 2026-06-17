@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { useNotes } from '../contexts/NotesContext';
+import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useNoteSelection } from '../contexts/NoteSelectionContext'; // Import useNoteSelection // Import useUIPreferences
@@ -779,8 +779,8 @@ const Header = () => {
     loadNotes, searchQuery, searchBarActive, setSearchBarActive, createNote, addTagToNote, registerTagId,
     changeLayoutView, // Enhanced version that handles overview mode refresh
     openedNote, // For hiding new note button in list view
-    listLoading, // Track if notes are loading to avoid blur during content changes
   } = useNotes();
+  const { listLoading } = useNotesLoading(); // Track if notes are loading to avoid blur during content changes
 
   useEffect(() => {
     setIsHeaderHidden(false);

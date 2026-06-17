@@ -14,7 +14,7 @@ import FolderHeader from './FolderHeader';
 import EmptyTrashPills from './EmptyTrashPills';
 import MonthSearchStar from './MonthSearchStar';
 import Icon from './Icons';
-import { useNotes } from '../contexts/NotesContext';
+import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useNoteActions } from '../contexts/NoteActionsContext';
@@ -238,7 +238,6 @@ function ListView({ searchQuery }) {
     searchResults,
     searchMode,
     loading,
-    listLoading,
     hasMore,
     loadNotes,
     loadMoreSearchResults,
@@ -247,6 +246,7 @@ function ListView({ searchQuery }) {
     totalNotes,
     searchByColor,
   } = useNotes();
+  const { listLoading } = useNotesLoading();
   
   // Memoize openedNoteId to prevent unnecessary re-renders of list items
   // Only changes when the actual note ID changes, not when note object updates
