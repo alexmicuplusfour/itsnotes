@@ -63,9 +63,11 @@ const optionalAuth = async (req, res, next) => {
       usersExist = await User.exists();
     }
 
+    // No users yet: the setup flow lives entirely on /api/auth/* (which bypass
+    // optionalAuth), so nothing legitimate needs an open route here. Deny rather
+    // than waving requests through.
     if (!usersExist) {
-      req.isSetupMode = true;
-      return next();
+      return res.status(401).json({ message: 'Setup required' });
     }
 
     return authenticateToken(req, res, next);
