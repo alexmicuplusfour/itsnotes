@@ -25,6 +25,10 @@ export function useNoteFormInteractions({
   // --- Refs for managing timers and touch behavior (scroll handling moved to DynamicActionBarsWrapper) ---
   const typingTimeoutRef = useRef(null);
   const isTypingRef = useRef(isTyping); // Add ref to avoid dependency in useCallback
+  // Refs holding live prop values so stable handlers can read them without re-registering
+  const isListViewRef = useRef(isListView);
+  const onCloseRef = useRef(onClose);
+  const onClickOutsideRef = useRef(onClickOutside);
   // Removed scroll-related refs - now handled by DynamicActionBarsWrapper
 
   // Keep ref in sync with state
@@ -32,17 +36,22 @@ export function useNoteFormInteractions({
     isTypingRef.current = isTyping;
   }, [isTyping]);
 
+  // Keep prop refs current on every render so the once-registered listeners stay fresh
+  useEffect(() => {
+    isListViewRef.current = isListView;
+    onCloseRef.current = onClose;
+    onClickOutsideRef.current = onClickOutside;
+  });
+
   // --- Constants ---
   const SWIPE_THRESHOLD = 50;
   // --- Core Logic Functions - memoized to prevent re-creation ---
 
   const _handleResize = useCallback(() => {
     const newIsMobile = window.innerWidth <= 768;
-    // Only update if value actually changed
-    if (newIsMobile !== isMobile) {
-      setIsMobile(newIsMobile);
-    }
-  }, [isMobile]);
+    // Functional update keeps this handler stable; React bails out if unchanged
+    setIsMobile((prev) => (prev !== newIsMobile ? newIsMobile : prev));
+  }, []);
 
   const _handleThemeChange = useCallback(() => {
     const newIsDarkTheme = !document.documentElement.classList.contains("light-theme");
@@ -52,7 +61,7 @@ export function useNoteFormInteractions({
 
   const _handleClickOutside = useCallback((event) => {
     // In list view, don't close on click outside
-    if (isListView) return;
+    if (isListViewRef.current) return;
 
     // 1. Ignore clicks within the image modal
     const isImageModal = event.target.closest(".image-modal-overlay");
@@ -83,21 +92,21 @@ export function useNoteFormInteractions({
     if (isClickInFixedTabs) return;    // 7. Check click outside main form
     if (formRef.current && !formRef.current.contains(event.target)) {
       // Use custom click-outside handler if provided, otherwise fall back to onClose
+      const onClickOutside = onClickOutsideRef.current;
+      const onClose = onCloseRef.current;
       if (onClickOutside && typeof onClickOutside === 'function') {
         onClickOutside(event);
       } else if (onClose && typeof onClose === 'function') {
         onClose();
       }
     }
-  }, [formRef, tagPickerRef, onClose, onClickOutside, isListView]);  // Removed _handleMobileScroll - scroll handling is now consolidated in DynamicActionBarsWrapper
+  }, [formRef, tagPickerRef]);  // formRef/tagPickerRef are stable refs; live values read from refs
   const _handleContentFocus = useCallback(() => {
     // Content focus handling is now delegated to DynamicActionBarsWrapper
     // This hook only manages typing detection and other non-scroll interactions
   }, []);
 
   const _handleSelectionUpdate = useCallback((editor) => {
-    const perfStart = performance.now();
-
     if (isMobile && editor) {
       const isSelectionEmpty = editor.state.selection.empty;
 
@@ -119,15 +128,6 @@ export function useNoteFormInteractions({
           }, 600);
         }
       }
-    }
-
-    const elapsed = performance.now() - perfStart;
-    if (elapsed > 2) {
-      console.log('[useNoteFormInteractions PERF] _handleSelectionUpdate: SLOW', {
-        time: elapsed.toFixed(2) + 'ms',
-        isMobile,
-        isTyping: isTypingRef.current
-      });
     }
   }, [isMobile]); // Removed isTyping from dependencies - use ref instead
   const _handleActionBarTouchStart = useCallback((e) => {
@@ -185,8 +185,6 @@ export function useNoteFormInteractions({
   // --- Effects ---
   // Main Setup and Cleanup Effect - run only once
   useEffect(() => {
-    console.log("[useNoteFormInteractions] Setting up main listeners and observers");
-
     // Apply body scroll lock
     const { originalStyle, originalPadding } = _applyBodyScrollLock();
 
@@ -207,8 +205,6 @@ export function useNoteFormInteractions({
 
     // Cleanup function
     return () => {
-      console.log("[useNoteFormInteractions] Cleaning up main listeners and observers");
-      
       // Remove event listeners
       window.removeEventListener("resize", _handleResize);
       document.removeEventListener("mousedown", _handleClickOutside);
@@ -226,9 +222,8 @@ export function useNoteFormInteractions({
   }, []); // Remove all dependencies to prevent re-running  // Mobile Scroll Listener Effect - removed, now handled by DynamicActionBarsWrapper
   // This prevents duplicate scroll listeners and improves performance
 
-  // Track return value changes for debugging
-  const returnValueRef = useRef({});
-  const returnValue = {
+  // --- Return Values (removed action bar related values - handled by DynamicActionBarsWrapper) ---
+  return {
     // State
     isMobile,
     isTyping,
@@ -244,26 +239,4 @@ export function useNoteFormInteractions({
     actionBarTouchMoveHandler: _handleActionBarTouchMove,
     actionBarTouchEndHandler: _handleActionBarTouchEnd,
   };
-
-  // Log what changed
-  if (returnValueRef.current) {
-    const changes = [];
-    if (returnValueRef.current.isMobile !== returnValue.isMobile) changes.push('isMobile');
-    if (returnValueRef.current.isTyping !== returnValue.isTyping) changes.push('isTyping');
-    if (returnValueRef.current.isDarkTheme !== returnValue.isDarkTheme) changes.push('isDarkTheme');
-    if (returnValueRef.current.handleTypingDetection !== returnValue.handleTypingDetection) changes.push('handleTypingDetection');
-    if (returnValueRef.current.contentFocusHandler !== returnValue.contentFocusHandler) changes.push('contentFocusHandler');
-    if (returnValueRef.current.selectionUpdateHandler !== returnValue.selectionUpdateHandler) changes.push('selectionUpdateHandler');
-    if (returnValueRef.current.actionBarTouchStartHandler !== returnValue.actionBarTouchStartHandler) changes.push('actionBarTouchStartHandler');
-    if (returnValueRef.current.actionBarTouchMoveHandler !== returnValue.actionBarTouchMoveHandler) changes.push('actionBarTouchMoveHandler');
-    if (returnValueRef.current.actionBarTouchEndHandler !== returnValue.actionBarTouchEndHandler) changes.push('actionBarTouchEndHandler');
-
-    if (changes.length > 0) {
-      console.log('[useNoteFormInteractions] Return values changed:', changes.join(', '));
-    }
-  }
-  returnValueRef.current = returnValue;
-
-  // --- Return Values (removed action bar related values - handled by DynamicActionBarsWrapper) ---
-  return returnValue;
 }
