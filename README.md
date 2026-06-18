@@ -43,13 +43,62 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
 
 ## Setup
 
-Requires Docker and Docker Compose. No clone needed — the compose file pulls prebuilt images from GHCR. Grab it and rename it:
+Requires Docker and Docker Compose. Save this as `docker-compose.yml`:
 
-```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/docker-compose.example.yml
+```yaml
+name: itsnotes
+
+services:
+  itsnotes-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: itsnotesuser
+      POSTGRES_PASSWORD: change-this-password
+      POSTGRES_DB: itsnotes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itsnotesuser -d itsnotes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  itsnotes-server:
+    image: ghcr.io/alexmicuplusfour/itsnotes-server:latest
+    restart: unless-stopped
+    depends_on:
+      itsnotes-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: itsnotes-db
+      DB_PORT: 5432
+      DB_USER: itsnotesuser
+      DB_PASSWORD: change-this-password
+      DB_NAME: itsnotes
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      BACKUP_PATH: /app/backups
+    volumes:
+      - attachments_data:/app/uploads
+      - backups_data:/app/backups
+
+  itsnotes-client:
+    image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
+    restart: unless-stopped
+    depends_on:
+      - itsnotes-server
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:
+  attachments_data:
+  backups_data:
 ```
 
-Edit the database credentials (and any optional settings) directly in `docker-compose.yml`, then:
+Change the database password (and set any optional values — see [`.env.example`](.env.example)), then start it:
 
 ```bash
 docker compose up -d
@@ -59,14 +108,7 @@ The app will be available on port 80.
 
 ### With Caddy (HTTPS + domain)
 
-To run with automatic HTTPS via Caddy, grab the Caddy compose file and a Caddyfile:
-
-```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/docker-compose.caddy.example.yml
-curl -o Caddyfile https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/Caddyfile.example
-```
-
-Edit `Caddyfile` to set your domain and the credentials in `docker-compose.yml`, then `docker compose up -d`. Caddy handles SSL certificates automatically.
+For automatic HTTPS, use [`docker-compose.caddy.example.yml`](docker-compose.caddy.example.yml) instead — it adds a Caddy service. You'll also need a `Caddyfile` ([`Caddyfile.example`](Caddyfile.example)) with your domain. Then `docker compose up -d`; Caddy handles SSL certificates automatically.
 
 ## Configuration
 
