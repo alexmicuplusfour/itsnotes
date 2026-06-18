@@ -336,19 +336,21 @@ const ImageGallery = ({ images, onRemoveImage, unsavedImageIds = [], noteColor, 
               $reducedSize={reducedSize}
             >
               <ThumbnailImage src={image.thumbnail} alt="Note attachment" />
-              <RemoveButton 
-                className="image-modal-overlay"
-                onClick={(e) => {
-                  e.stopPropagation(); // Prevent opening fullsize when removing
-                  e.preventDefault(); // Prevent default behavior
-                  // Use setTimeout to ensure event propagation is complete before action
-                  setTimeout(() => {
-                    onRemoveImage(image.id);
-                  }, 0);
-                }}
-              >
-                <Icon name="trash" size={16} strokeWidth="2.5" />
-              </RemoveButton>
+              {onRemoveImage && (
+                <RemoveButton
+                  className="image-modal-overlay"
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent opening fullsize when removing
+                    e.preventDefault(); // Prevent default behavior
+                    // Use setTimeout to ensure event propagation is complete before action
+                    setTimeout(() => {
+                      onRemoveImage(image.id);
+                    }, 0);
+                  }}
+                >
+                  <Icon name="trash" size={16} strokeWidth="2.5" />
+                </RemoveButton>
+              )}
               {isUnsaved && <LoadingIndicator />}
             </ImageContainer>
           );

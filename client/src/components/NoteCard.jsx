@@ -11,8 +11,7 @@ import ImageGallery from './ImageGallery';
 import ProgressFlyout from './ProgressFlyout';
 import CompactBookCard from './CompactBookCard';
 import CompactImdbCard from './CompactImdbCard';
-import env from '../../env.js';
-import { loadNoteImages, deleteImage } from '../services/imageManager';
+import { loadNoteImages } from '../services/imageManager';
 import { useInlineImageResolution } from '../hooks/useInlineImageResolution';
 
 
@@ -985,40 +984,6 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
   const handleMouseLeave = useCallback(() => setIsHovered(false), []);
 
-  // Handle image removal
-  const handleRemoveImage = useCallback(async (imageId) => {
-    if (!note?.id) return;
-    
-    try {
-      console.log(`Deleting image ${imageId}`);
-      
-      // Get token directly from localStorage like the axios interceptor does
-      const authToken = localStorage.getItem('authToken');
-      const headers = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      
-      // Use direct fetch call
-      const response = await fetch(`${env.SERVER_BASE_URL}/api/images/${imageId}`, {
-        method: 'DELETE',
-        headers: headers
-      });
-      
-      if (!response.ok) {
-        console.error(`Error deleting image: ${response.status}`);
-        return;
-      }
-      
-      console.log('Image deleted successfully');
-      
-      // No need to update local state - the socket will handle updating the note data
-      // The NotesContext will receive the 'note_image_deleted' event and update the note
-    } catch (error) {
-      console.error('Error removing image:', error);
-    }
-  }, [note?.id]);
-
   // Handle progress flyout
   const handleObjectChipClick = useCallback((e, obj) => {
     e.stopPropagation();
@@ -1137,9 +1102,8 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         {/* Display images if any */}
         {images.length > 0 && (
           <div>
-            <ImageGallery 
-              images={images} 
-              onRemoveImage={handleRemoveImage} 
+            <ImageGallery
+              images={images}
               noteColor={note.color || 'default'}
             />
           </div>
