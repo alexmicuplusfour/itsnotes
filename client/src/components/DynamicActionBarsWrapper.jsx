@@ -298,9 +298,12 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
           style={{ position: 'relative' }}
         >
           <Icon name="tag" size={20} strokeWidth="2.5" />
-          {noteTags && noteTags.length > 0 && (
-            <TagCountBadge style={bottomActionStyle} $isDarkTheme={isDarkTheme}> {noteTags.length} </TagCountBadge>
-          )}
+          {(() => {
+            const nonFolderTagCount = noteTags ? noteTags.filter(tag => !tag.is_folder).length : 0;
+            return nonFolderTagCount > 0 && (
+              <TagCountBadge style={bottomActionStyle} $isDarkTheme={isDarkTheme}> {nonFolderTagCount} </TagCountBadge>
+            );
+          })()}
         </NoteTagsButton>
         <ShowFooterHandle
           $isDarkTheme={isDarkTheme}
