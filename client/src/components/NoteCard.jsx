@@ -155,6 +155,7 @@ const PrefetchIndicator = styled.div`
 `;
 
 const Title = styled.h3`
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
   font-size: 18px;
   font-weight: 500;
   margin-bottom: 8px;

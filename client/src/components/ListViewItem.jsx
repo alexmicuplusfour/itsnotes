@@ -161,6 +161,7 @@ const ContentArea = styled.div`
 `;
 
 const Title = styled.div`
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
   font-size: 18px;
   font-weight: 500;
   color: var(--text-color);

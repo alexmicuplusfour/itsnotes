@@ -226,6 +226,7 @@ export const ContentWrapper = styled.div`
 `;
 
 export const TitleInput = styled.input`
+  font-family: var(--note-body-font-family, 'Product Sans', Arial, sans-serif);
   font-size: 20px;
   font-weight: 400;
   padding: 15px 0;
