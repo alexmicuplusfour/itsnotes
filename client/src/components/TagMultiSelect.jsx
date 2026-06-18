@@ -121,7 +121,7 @@ const TagMultiSelect = ({ selectedTagIds = [], onChange, placeholder = "Type to 
   const filteredTags = tags.filter(tag => {
     const matchesSearch = tag.name.toLowerCase().includes(inputValue.toLowerCase());
     const notSelected = !selectedTagIds.includes(tag.id);
-    return matchesSearch && notSelected;
+    return matchesSearch && notSelected && !tag.is_folder;
   });
 
   // Update dropdown position when opening
