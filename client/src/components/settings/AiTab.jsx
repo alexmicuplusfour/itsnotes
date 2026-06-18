@@ -1,0 +1,396 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import styled from 'styled-components';
+import api, { aiApi, getServerUrl } from '../../services/api';
+import Icon from '../Icons';
+import Switch from '../Switch';
+import {
+  SectionContainer,
+  SectionTitle,
+  FormGroup,
+  Label,
+  LabelBold,
+  Input,
+  Select,
+} from './styles';
+
+const TextArea = styled.textarea`
+  width: 100%;
+  min-height: 150px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--text-color);
+  font-family: monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  border: 1px solid var(--border-color);
+
+  &:focus {
+    outline: none;
+    border-color: var(--foreground-color);
+  }
+
+  &::placeholder {
+    color: var(--text-secondary-color);
+    opacity: 0.7;
+  }
+`;
+
+const PromptDescription = styled.p`
+  font-size: 13px;
+  color: var(--text-secondary-color);
+  margin-top: 0px;
+  margin-bottom: 0;
+`;
+
+const ReadOnlyPromptBox = styled.div`
+  background-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)'};
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary-color);
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+`;
+
+const McpCommandBox = styled.div`
+  position: relative;
+  background-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.03)'};
+  border-radius: 8px;
+  padding: 12px 44px 12px 12px;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-color);
+  white-space: pre-wrap;
+  word-break: break-all;
+`;
+
+const CopyButton = styled.button`
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0;
+  &:hover { background-color: var(--hover-color, rgba(0,0,0,0.06)); }
+`;
+
+const McpActionButton = styled.button`
+  align-self: flex-start;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  color: var(--text-color);
+  opacity: ${props => props.disabled ? 0.6 : 1};
+  &:hover { border-color: var(--foreground-color); }
+`;
+
+const PROMPT_FEATURES = [
+  { icon: 'summarize_ai', title: 'Note Summarization', modelKey: 'AI_MODEL_SUMMARIZE', coreKey: 'AI_PROMPT_SUMMARIZE', customKey: 'AI_PROMPT_SUMMARIZE_CUSTOM', placeholder: "Add any additional instructions for summarization (e.g., 'Focus on action items' or 'Include relevant dates')...", description: 'Your custom requirements will be appended to the core prompt when generating summaries.' },
+  { icon: 'ocr', title: 'OCR Text Extraction', modelKey: 'AI_MODEL_OCR', coreKey: 'AI_PROMPT_OCR', customKey: 'AI_PROMPT_OCR_CUSTOM', placeholder: "Add any additional instructions for OCR (e.g., 'Preserve line breaks' or 'Ignore page numbers')...", description: 'Your custom requirements will be appended to the core prompt when extracting text from images.' },
+  { icon: 'bell', title: 'Reminder Generation', modelKey: 'AI_MODEL_REMINDER', coreKey: 'AI_PROMPT_REMINDER', customKey: 'AI_PROMPT_REMINDER_CUSTOM', placeholder: "Add any additional instructions for reminder parsing (e.g., 'Default to 9am if no time specified')...", description: 'Your custom requirements will be appended to the core prompt. Note: The core prompt ensures proper JSON format and date handling.' },
+  { icon: 'tag', title: 'Auto-Tagging', modelKey: 'AI_MODEL_AUTO_TAG', coreKey: 'AI_PROMPT_AUTO_TAG', customKey: 'AI_PROMPT_AUTO_TAG_CUSTOM', placeholder: "Add any additional instructions for tag suggestions (e.g., 'Prefer more specific tags over general ones' or 'Always include project tags if mentioned')...", description: 'Your custom requirements will be appended to the core prompt when suggesting tags. This applies when you click "Auto-tag" in the tag picker.' },
+];
+
+const ModelSelect = ({ name, value, onChange, models, loading }) => (
+  <Select name={name} value={value} onChange={onChange} disabled={loading || models.length === 0}>
+    {loading ? (
+      <option value="">Loading models...</option>
+    ) : models.length === 0 ? (
+      <option value="">No models — enter API key and refresh</option>
+    ) : (
+      models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)
+    )}
+  </Select>
+);
+
+const PromptFeature = ({ config, settings, onChange, models, loading, isDarkTheme }) => (
+  <SectionContainer>
+    <FormGroup>
+      <LabelBold> <Icon name={config.icon} size={20} /> {config.title}</LabelBold>
+
+      <ModelSelect
+        name={config.modelKey}
+        value={settings[config.modelKey]}
+        onChange={onChange}
+        models={models}
+        loading={loading}
+      />
+
+      <Label style={{ marginTop: '16px' }}>Core Prompt (Read-only)</Label>
+      <ReadOnlyPromptBox $isDark={isDarkTheme}>
+        {settings[config.coreKey]}
+      </ReadOnlyPromptBox>
+
+      <Label>Your Custom Requirements (Optional)</Label>
+      <TextArea
+        name={config.customKey}
+        value={settings[config.customKey]}
+        onChange={onChange}
+        placeholder={config.placeholder}
+        style={{ minHeight: '100px' }}
+      />
+      <PromptDescription>{config.description}</PromptDescription>
+    </FormGroup>
+  </SectionContainer>
+);
+
+const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => {
+  const [availableModels, setAvailableModels] = useState([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [mcpToken, setMcpToken] = useState(null);
+  const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
+  const [mcpTokenError, setMcpTokenError] = useState(null);
+  const [mcpCopied, setMcpCopied] = useState(false);
+  const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
+
+  const loadModels = useCallback(async () => {
+    setModelsLoading(true);
+    try {
+      const data = await aiApi.getModels();
+      setAvailableModels(data.models || []);
+    } catch (e) {
+      setAvailableModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadModels();
+  }, [loadModels]);
+
+  // When models load, auto-select the first one for any feature with no selection.
+  useEffect(() => {
+    if (availableModels.length === 0) return;
+    const firstId = availableModels[0].id;
+    const updates = {};
+    if (!settings.AI_MODEL_SUMMARIZE) updates.AI_MODEL_SUMMARIZE = firstId;
+    if (!settings.AI_MODEL_OCR) updates.AI_MODEL_OCR = firstId;
+    if (!settings.AI_MODEL_REMINDER) updates.AI_MODEL_REMINDER = firstId;
+    if (!settings.AI_MODEL_AUTO_TAG) updates.AI_MODEL_AUTO_TAG = firstId;
+    if (Object.keys(updates).length > 0) {
+      commit({ ...settings, ...updates });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableModels]);
+
+  const handleProviderChange = async (e) => {
+    const newProvider = e.target.value;
+    setAvailableModels([]);
+    await commitImmediate({
+      ...settings,
+      AI_PROVIDER: newProvider,
+      AI_MODEL_SUMMARIZE: '',
+      AI_MODEL_OCR: '',
+      AI_MODEL_REMINDER: '',
+      AI_MODEL_AUTO_TAG: '',
+    });
+    loadModels();
+  };
+
+  const generateMcpToken = async () => {
+    setMcpTokenLoading(true);
+    setMcpTokenError(null);
+    try {
+      const { data } = await api.post('/auth/mcp-token');
+      setMcpToken(data.token);
+    } catch (e) {
+      setMcpTokenError('Could not generate a token. Make sure you are logged in.');
+    } finally {
+      setMcpTokenLoading(false);
+    }
+  };
+
+  // getServerUrl returns a bare "/mcp" when SERVER_BASE_URL is unset (relative
+  // deploys behind nginx). MCP clients run outside the browser and need an
+  // absolute URL, so fall back to the current origin.
+  const mcpUrlRaw = getServerUrl('/mcp');
+  const mcpUrl = mcpUrlRaw.startsWith('http')
+    ? mcpUrlRaw
+    : `${window.location.origin}${mcpUrlRaw}`;
+  const mcpCommand = mcpToken
+    ? `claude mcp add --transport http itsnotes ${mcpUrl} --header "Authorization: Bearer ${mcpToken}"`
+    : '';
+  // Claude Desktop's custom-connector dialog takes only a URL, so embed the
+  // token as a query param (the server accepts it for /mcp).
+  const mcpConnectorUrl = mcpToken ? `${mcpUrl}?token=${mcpToken}` : '';
+
+  const copyText = (text, setCopied) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      <SectionContainer>
+        <SectionTitle>MCP Server</SectionTitle>
+        <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Label style={{ marginBottom: 0 }}>Enable MCP endpoint</Label>
+          <Switch
+            id="mcp-enabled-toggle"
+            checked={settings.MCP_ENABLED === 'true'}
+            onChange={() => commit({ ...settings, MCP_ENABLED: settings.MCP_ENABLED === 'true' ? 'false' : 'true' })}
+          />
+        </FormGroup>
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary-color)', margin: '0 0 4px' }}>
+          Exposes a read-only Model Context Protocol endpoint so AI clients
+          (Claude, etc.) can search and read your notes. Access requires a
+          connection token.
+        </p>
+        {settings.MCP_ENABLED === 'true' && (
+          <>
+            <FormGroup>
+              <Label>Endpoint URL</Label>
+              <McpCommandBox $isDark={isDarkTheme}>{mcpUrl}</McpCommandBox>
+            </FormGroup>
+            {!mcpToken ? (
+              <FormGroup>
+                <McpActionButton onClick={generateMcpToken} disabled={mcpTokenLoading}>
+                  {mcpTokenLoading ? 'Generating…' : 'Generate connection token'}
+                </McpActionButton>
+                {mcpTokenError && (
+                  <p style={{ fontSize: '12px', color: 'var(--danger-color, #e53935)', margin: '8px 0 0' }}>
+                    {mcpTokenError}
+                  </p>
+                )}
+              </FormGroup>
+            ) : (
+              <>
+                <FormGroup>
+                  <Label>Claude Desktop / web (custom connector)</Label>
+                  <McpCommandBox $isDark={isDarkTheme}>
+                    {mcpConnectorUrl}
+                    <CopyButton onClick={() => copyText(mcpConnectorUrl, setMcpUrlCopied)} title="Copy URL">
+                      <Icon name={mcpUrlCopied ? 'check' : 'copy'} size={16} />
+                    </CopyButton>
+                  </McpCommandBox>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '8px 0 0' }}>
+                    In Claude, add a custom connector and paste this URL — no files
+                    to edit. The token is in the URL, so treat it as a secret.
+                  </p>
+                </FormGroup>
+                <FormGroup>
+                  <Label>Claude Code (CLI)</Label>
+                  <McpCommandBox $isDark={isDarkTheme}>
+                    {mcpCommand}
+                    <CopyButton onClick={() => copyText(mcpCommand, setMcpCopied)} title="Copy command">
+                      <Icon name={mcpCopied ? 'check' : 'copy'} size={16} />
+                    </CopyButton>
+                  </McpCommandBox>
+                </FormGroup>
+              </>
+            )}
+          </>
+        )}
+      </SectionContainer>
+
+      <SectionContainer>
+        <SectionTitle>AI Features</SectionTitle>
+        <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Label style={{ marginBottom: 0 }}>Enable AI Features</Label>
+          <Switch
+            id="ai-enabled-toggle"
+            checked={settings.AI_ENABLED !== 'false'}
+            onChange={() => commit({ ...settings, AI_ENABLED: settings.AI_ENABLED === 'false' ? 'true' : 'false' })}
+          />
+        </FormGroup>
+        <FormGroup>
+          <Label>Provider</Label>
+          <Select
+            name="AI_PROVIDER"
+            value={settings.AI_PROVIDER || 'openai'}
+            onChange={handleProviderChange}
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (Claude)</option>
+          </Select>
+        </FormGroup>
+        {(settings.AI_PROVIDER || 'openai') === 'openai' ? (
+          <FormGroup>
+            <Label>OpenAI API Key</Label>
+            <Input
+              type="text"
+              name="OPENAI_API_KEY"
+              value={settings.OPENAI_API_KEY}
+              onChange={onChange}
+              placeholder="sk-..."
+            />
+          </FormGroup>
+        ) : (
+          <FormGroup>
+            <Label>Anthropic API Key</Label>
+            <Input
+              type="text"
+              name="ANTHROPIC_API_KEY"
+              value={settings.ANTHROPIC_API_KEY}
+              onChange={onChange}
+              placeholder="sk-ant-..."
+            />
+          </FormGroup>
+        )}
+      </SectionContainer>
+
+      <SectionContainer>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <SectionTitle style={{ margin: 0 }}>AI Prompts</SectionTitle>
+          <button
+            onClick={loadModels}
+            disabled={modelsLoading}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '12px',
+              cursor: modelsLoading ? 'not-allowed' : 'pointer',
+              color: 'var(--text-secondary-color)',
+              opacity: modelsLoading ? 0.6 : 1,
+            }}
+          >
+            {modelsLoading ? 'Loading...' : '↻ Refresh models'}
+          </button>
+        </div>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+          Add custom requirements to AI prompts. The core functionality is protected and cannot be modified.
+        </p>
+        <p style={{ fontSize: '13px', color: 'var(--text-color)', backgroundColor: 'rgba(251, 188, 4, 0.1)', padding: '8px 12px', borderRadius: '6px', borderLeft: '3px solid var(--primary-color)' }}>
+          💡 Core prompts are locked to ensure features work correctly. You can add additional instructions below.
+        </p>
+
+        {PROMPT_FEATURES.map(config => (
+          <PromptFeature
+            key={config.modelKey}
+            config={config}
+            settings={settings}
+            onChange={onChange}
+            models={availableModels}
+            loading={modelsLoading}
+            isDarkTheme={isDarkTheme}
+          />
+        ))}
+      </SectionContainer>
+    </>
+  );
+};
+
+export default AiTab;
