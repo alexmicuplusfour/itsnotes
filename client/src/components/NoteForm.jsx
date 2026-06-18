@@ -691,6 +691,17 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     prevNoteRef.current = note;
   }, [note, internalNoteId, setContent, resetImageState, loadImages, showSearch, handleSearchToggle, location.search, resetNoteScrollPosition]); // Consolidated dependencies
 
+  // Load the gallery's note_images whenever a real, non-shell note is shown.
+  // The consolidated effect above only loads images when the note id changes
+  // from the internally-tracked id; on a fresh (keyed) mount with a cache-hit
+  // note those already match and there's no isLoading transition either, so it
+  // never fires. This guarantees the gallery populates on open.
+  useEffect(() => {
+    if (note?.id && !note?.isLoading) {
+      loadImages(note.id);
+    }
+  }, [note?.id, note?.isLoading, loadImages]);
+
   // Effect to update the ref holding latest state for handleClickOutside's save logic
 
   // Scroll restoration logic moved to useScrollRestoration hook

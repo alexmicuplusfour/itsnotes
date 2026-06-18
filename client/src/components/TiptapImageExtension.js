@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import React from 'react';
 import Icon from "./Icons";
 import { Plugin, PluginKey } from 'prosemirror-state';
+import { getInlineImageUrl } from '../services/inlineImageResolver';
 
 export const TiptapImageExtension = Node.create({
   name: 'inlineImage',
@@ -85,18 +86,19 @@ export const TiptapImageExtension = Node.create({
   },
 
   parseHTML() {
+    // Match images that carry either an inline src (legacy base64 / remote URL)
+    // or a data-image-id reference (src stripped — resolved at render time).
+    const getAttrs = element => ({
+      src: element.getAttribute('src'),
+      alt: element.getAttribute('alt'),
+      title: element.getAttribute('title'),
+      width: element.getAttribute('width'),
+      height: element.getAttribute('height'),
+      'data-image-id': element.getAttribute('data-image-id'),
+    });
     return [
-      {
-        tag: 'img[src]',
-        getAttrs: element => ({
-          src: element.getAttribute('src'),
-          alt: element.getAttribute('alt'),
-          title: element.getAttribute('title'),
-          width: element.getAttribute('width'),
-          height: element.getAttribute('height'),
-          'data-image-id': element.getAttribute('data-image-id'),
-        }),
-      },
+      { tag: 'img[src]', getAttrs },
+      { tag: 'img[data-image-id]', getAttrs },
     ];
   },
 
@@ -132,7 +134,21 @@ export const TiptapImageExtension = Node.create({
       dom.style.cssText = 'position: relative; display: block; margin: 0.5rem 0; pointer-events: none; user-select: none;';
       
       const img = document.createElement('img');
-      img.src = node.attrs.src;
+
+      // Resolve the displayed source: prefer an inline src (legacy base64 or a
+      // remote URL), otherwise look the image up by its note_images id so the
+      // note body doesn't have to carry base64.
+      const applySource = (attrs) => {
+        if (attrs.src) {
+          img.src = attrs.src;
+        } else if (attrs['data-image-id']) {
+          getInlineImageUrl(attrs['data-image-id'])
+            .then((url) => { img.src = url; })
+            .catch((err) => console.error('[inlineImage] resolve failed:', err.message));
+        }
+      };
+      applySource(node.attrs);
+
       img.alt = node.attrs.alt || '';
       img.title = node.attrs.title || '';
       
@@ -204,8 +220,9 @@ export const TiptapImageExtension = Node.create({
           }
           
           // Update image attributes if they've changed
-          if (updatedNode.attrs.src !== node.attrs.src) {
-            img.src = updatedNode.attrs.src;
+          if (updatedNode.attrs.src !== node.attrs.src ||
+              updatedNode.attrs['data-image-id'] !== node.attrs['data-image-id']) {
+            applySource(updatedNode.attrs);
           }
           if (updatedNode.attrs.alt !== node.attrs.alt) {
             img.alt = updatedNode.attrs.alt || '';

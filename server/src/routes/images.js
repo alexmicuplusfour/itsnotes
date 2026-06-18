@@ -40,15 +40,47 @@ router.get('/notes/:noteId/images', async (req, res) => {
 router.get('/images/:id', async (req, res) => {
   try {
     const image = await NoteImage.findById(req.params.id);
-    
+
     if (!image) {
       return res.status(404).json({ message: 'Image not found' });
     }
-    
+
     res.json({ image });
   } catch (error) {
     console.error('Error fetching image:', error);
     res.status(500).json({ message: 'Error fetching image', error: error.message });
+  }
+});
+
+// Stream the decoded image bytes for inline rendering. Inline note images
+// reference their row by id instead of inlining base64 into the note body, so
+// this serves the actual bytes (with caching) for the client to load as a blob.
+router.get('/images/:id/raw', async (req, res) => {
+  try {
+    const image = await NoteImage.findById(req.params.id);
+
+    if (!image || !image.data) {
+      return res.status(404).json({ message: 'Image not found' });
+    }
+
+    // Stored `data` is a data URL: data:<mime>;base64,<payload>
+    const match = /^data:([^;]+);base64,(.*)$/s.exec(image.data);
+    if (!match) {
+      return res.status(415).json({ message: 'Image data is not a base64 data URL' });
+    }
+
+    const mime = match[1];
+    const buffer = Buffer.from(match[2], 'base64');
+
+    // Image bytes for a given id never change, so cache aggressively (private —
+    // the resource is auth-gated and per-user).
+    res.set('Content-Type', mime);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.set('Content-Length', String(buffer.length));
+    res.send(buffer);
+  } catch (error) {
+    console.error('Error streaming image:', error);
+    res.status(500).json({ message: 'Error streaming image', error: error.message });
   }
 });
 

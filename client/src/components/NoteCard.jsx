@@ -13,6 +13,7 @@ import CompactBookCard from './CompactBookCard';
 import CompactImdbCard from './CompactImdbCard';
 import env from '../../env.js';
 import { loadNoteImages, deleteImage } from '../services/imageManager';
+import { useInlineImageResolution } from '../hooks/useInlineImageResolution';
 
 
 // Define highlight animation - simpler scale effect without glow
@@ -764,6 +765,9 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   // card stays in view past BATCH_DELAY_MS, so fast scroll-past doesn't fire
   // requests. Cancelled when scrolling away before the timer elapses.
   const cardRef = useRef(null);
+  const contentRef = useRef(null);
+  // Resolve inline body images that reference a note_images row by id.
+  useInlineImageResolution(contentRef, [note.content]);
   useEffect(() => {
     if (isCached) return;
     const el = cardRef.current;
@@ -1126,7 +1130,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         {note.title && <Title>{note.title}</Title>}
         {note.content && (
           <ContentWrapper $layoutView={layoutView}>
-            <Content dangerouslySetInnerHTML={{ __html: note.content }} />
+            <Content ref={contentRef} dangerouslySetInnerHTML={{ __html: note.content }} />
           </ContentWrapper>
         )}
         

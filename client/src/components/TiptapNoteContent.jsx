@@ -9,6 +9,7 @@ import { useNavigation } from '../navigation'; // NEW: Use centralized navigatio
 import { DOMParser } from 'prosemirror-model';
 import { NodeSelection } from 'prosemirror-state';
 import { scrollEditorSelectionIntoView } from '../utils/editorScroll';
+import { prepareInlineImageInsert, evictInlineImageUrl } from '../services/inlineImageResolver';
 
 const EditorWrapper = styled.div`
   width: 100%;
@@ -420,11 +421,12 @@ const TiptapNoteContent = React.memo(forwardRef(({
     insertInlineImage: (imageData) => {
       const editor = editorRef.current?.getEditor?.();
       if (editor && !editor.isDestroyed) {
+        const { src, imageId } = prepareInlineImageInsert(imageData);
         const result = editor.commands.insertImage({
-          src: imageData.src || imageData.data || imageData.thumbnail,
+          src,
           alt: imageData.alt || imageData.name || 'Image',
           title: imageData.title || imageData.name,
-          'data-image-id': imageData.id,
+          'data-image-id': imageId,
         });
         // Block atom — collapse the NodeSelection so the bubble menu
         // doesn't pop and the cursor lands after the image.
@@ -494,6 +496,7 @@ const TiptapNoteContent = React.memo(forwardRef(({
         // Apply the transaction if we found inline images to remove
         if (hasChanges) {
           editor.view.dispatch(transaction);
+          evictInlineImageUrl(imageId);
           console.log(`[TiptapNoteContent] Removed inline image(s) with ID ${imageId} from content`);
           return true;
         } else {

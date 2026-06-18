@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const db = require('./db');
 const { initDb } = db;
 const { runMigrations } = require('./migrate');
+const { migrate: dereferenceInlineImages } = require('./scripts/migrate-inline-image-refs');
 const jwt = require('jsonwebtoken');
 const notesRoutes = require('./routes/notes');
 const tagsRoutes = require('./routes/tags');
@@ -279,6 +280,13 @@ async function startServer(retryCount = 0, maxRetries = 10) {
   try {
     await initDb();
     await runMigrations();
+    // Idempotent data migration: rewrite any inline base64 note images into
+    // lightweight note_images references. A no-op once there's nothing inline.
+    try {
+      await dereferenceInlineImages();
+    } catch (err) {
+      console.error('[migrate-inline-image-refs] Skipped (non-fatal):', err.message);
+    }
     await ensureJwtSecret();
     await settingsService.init();
     await backupScheduler.init();

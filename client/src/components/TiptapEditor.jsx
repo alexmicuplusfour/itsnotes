@@ -19,6 +19,7 @@ import { CustomDetails } from './CustomDetailsExtension';
 import TaskItemExtension from './TaskItemExtension';
 import TabInsertExtension from './TabInsertExtension';
 import { NoteReferenceMark, UUID_REGEX_EXACT, UUID_REGEX_GLOBAL } from './TiptapNoteReferenceMark';
+import { prepareInlineImageInsert } from '../services/inlineImageResolver';
 import { NotePreviewPlugin } from './TiptapNotePreviewPlugin';
 import { NotePreviewExtension } from './TiptapNotePreviewExtension';
 import { TiptapImageExtension } from './TiptapImageExtension';
@@ -984,11 +985,12 @@ const TiptapEditor = forwardRef(({
       insertInlineImage: (imageData) => {
         if (editor && !editor.isDestroyed) {
           console.log('[TiptapEditor] Inserting inline image:', imageData);
+          const { src, imageId } = prepareInlineImageInsert(imageData);
           return editor.commands.insertImage({
-            src: imageData.src || imageData.data || imageData.thumbnail,
+            src,
             alt: imageData.alt || imageData.name || 'Image',
             title: imageData.title || imageData.name,
-            'data-image-id': imageData.id,
+            'data-image-id': imageId,
           });
         }
         return false;
