@@ -58,7 +58,7 @@ Edit `.env` to set your database credentials, then:
 docker compose up -d
 ```
 
-This pulls prebuilt `amd64`/`arm64` images from GHCR. The app will be available on port 80.
+The app will be available on port 80.
 
 ### With Caddy (HTTPS + domain)
 

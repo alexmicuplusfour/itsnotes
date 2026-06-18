@@ -4,6 +4,9 @@ on:
   push:
     branches: [master]
     tags: ["v*"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 
 env:
   REGISTRY: ghcr.io
