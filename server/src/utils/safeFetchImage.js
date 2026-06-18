@@ -82,7 +82,10 @@ function fetchOnce(currentUrl, { maxBytes, timeoutMs, requireImageContentType })
         path: `${parsed.pathname}${parsed.search}`,
         headers: {
           'User-Agent': USER_AGENT,
-          Accept: 'image/*',
+          // Advertise transparency-capable formats. CDNs that do `format=auto`
+          // content negotiation otherwise fall back to JPEG, which flattens any
+          // alpha channel to a black/white matte before we ever see the bytes.
+          Accept: 'image/avif,image/webp,image/png,image/*;q=0.8',
         },
         timeout: timeoutMs,
         // Pin the connection to the addresses we already validated. This both
