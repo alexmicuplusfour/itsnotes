@@ -210,9 +210,7 @@ export const useNoteTagsModal = ({
     // doesn't flash empty while the fetch is in flight.
     if (seededNoteIdRef.current !== note.id) {
       seededNoteIdRef.current = note.id;
-      if (Array.isArray(note.tags)) {
-        setNoteTags(note.tags);
-      }
+      setNoteTags(Array.isArray(note.tags) ? note.tags : []);
     }
 
     // Debounce to prevent rapid consecutive calls during component mounting cycles

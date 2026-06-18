@@ -634,7 +634,9 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
       // Common resets for both shell and real notes
       if (noteIdChanged) {
-        setNoteTags([]); // Clear tags, they will be fetched by the tags useEffect
+        // Tag state is owned entirely by useNoteTagsModal, which seeds from
+        // note.tags on id change to avoid an empty flash. Clearing here would
+        // race that seed and win, reintroducing the flash.
         resetImageState(); // Clear images, they will be fetched by the images useEffect
         setEditorInstance(null); // Reset editor instance when note changes
         // Note: isModified is now managed internally by useNoteSaver hook
