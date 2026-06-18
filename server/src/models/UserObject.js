@@ -252,23 +252,26 @@ class UserObject {
 
   // Sync note-object links (replace all links for a note with new set)
   static async syncNoteLinks(noteId, objectIds) {
-    // Start transaction
+    // Nothing to insert: a single DELETE clears any links left from a removed
+    // card without paying for a pooled connection + transaction round-trips.
+    // This is the common case (notes with no object cards).
+    if (!objectIds || objectIds.length === 0) {
+      await db.query('DELETE FROM note_objects WHERE note_id = $1', [noteId]);
+      return;
+    }
+
+    // Replace links atomically when there are cards to insert.
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      
-      // Remove existing links
       await client.query('DELETE FROM note_objects WHERE note_id = $1', [noteId]);
-      
-      // Add new links
-      if (objectIds && objectIds.length > 0) {
-        const values = objectIds.map((objId, i) => `($1, $${i + 2})`).join(', ');
-        await client.query(
-          `INSERT INTO note_objects (note_id, object_id) VALUES ${values}`,
-          [noteId, ...objectIds]
-        );
-      }
-      
+
+      const values = objectIds.map((objId, i) => `($1, $${i + 2})`).join(', ');
+      await client.query(
+        `INSERT INTO note_objects (note_id, object_id) VALUES ${values}`,
+        [noteId, ...objectIds]
+      );
+
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

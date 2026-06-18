@@ -4,6 +4,23 @@ const Tag = require('../models/Tag');
 const db = require('../db');
 const router = express.Router();
 
+// Pull unique object-card ids out of note HTML without spinning up a full DOM.
+// Each card is a `<div data-type="object-card" objectid="..." ...>`; we scan the
+// opening tags so attribute order doesn't matter.
+function extractObjectCardIds(html) {
+  const ids = [];
+  if (!html) return ids;
+  const tagRegex = /<div\b[^>]*\bdata-type=["']object-card["'][^>]*>/gi;
+  let tag;
+  while ((tag = tagRegex.exec(html)) !== null) {
+    const idMatch = /\bobjectid=["']([^"']+)["']/i.exec(tag[0]);
+    if (idMatch && !ids.includes(idMatch[1])) {
+      ids.push(idMatch[1]);
+    }
+  }
+  return ids;
+}
+
 // Get all notes (with pagination)
 router.get('/', async (req, res) => {
   try {
@@ -254,6 +271,14 @@ router.put('/:id', async (req, res) => {
     const incomingContent = content !== undefined ? content : currentNote.content;
     const contentActuallyChanged = incomingTitle !== currentNote.title || incomingContent !== currentNote.content;
 
+    // Convert the incoming HTML to plain text once and reuse it for both the
+    // version snapshot and the main-table update, so we don't parse it twice.
+    // When the content didn't change, the existing plain_content still applies.
+    const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
+    const plainContent = contentActuallyChanged
+      ? (incomingContent ? convertHtmlToPlainText(incomingContent) : '')
+      : currentNote.plain_content;
+
     if (contentActuallyChanged) {
       const now = new Date();
       const lastVersionQuery = `SELECT id, created_at FROM note_versions WHERE note_id = $1 ORDER BY created_at DESC LIMIT 1`;
@@ -263,11 +288,6 @@ router.put('/:id', async (req, res) => {
       // This prevents the 30-min window from staying open indefinitely with continuous edits
       const shouldCreateNewVersion = !lastVersionResult.rows.length ||
         (now.getTime() - new Date(lastVersionResult.rows[0].created_at).getTime() > VERSION_INTERVAL_MS);
-
-      // Convert HTML content to plain text for version storage
-      const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
-      const textToConvert = incomingContent; // Use the new content being saved
-      const plainContent = textToConvert ? convertHtmlToPlainText(textToConvert) : '';
 
       // Don't create/update a version if both content and title are empty or just whitespace
       const contentIsEmpty = !plainContent.trim();
@@ -316,6 +336,7 @@ router.put('/:id', async (req, res) => {
       const updateSuccess = await Note.update(noteId, {
         title: incomingTitle,
         content: incomingContent,
+        plain_content: plainContent, // precomputed above to avoid a second parse
         is_pinned,
         is_archived,
         is_deleted,
@@ -338,28 +359,8 @@ router.put('/:id', async (req, res) => {
     if (contentActuallyChanged && incomingContent) {
       try {
         const UserObject = require('../models/UserObject');
-        const { JSDOM } = require('jsdom');
-
-        // Parse HTML and extract object cards (not mentions)
-        const dom = new JSDOM(incomingContent);
-        const objectCards = dom.window.document.querySelectorAll('div[data-type="object-card"]');
-
-        console.log(`[Object Links] Found ${objectCards.length} object cards in HTML`);
-
-        const objectIds = [];
-        objectCards.forEach((card, index) => {
-          const objectId = card.getAttribute('objectid');
-          const objectType = card.getAttribute('objecttype');
-          console.log(`[Object Links] Card ${index}: objectid="${objectId}", objecttype="${objectType}"`);
-          console.log(`[Object Links] Card ${index} HTML:`, card.outerHTML);
-          if (objectId && !objectIds.includes(objectId)) {
-            objectIds.push(objectId);
-          }
-        });
-
-        // Sync the links
+        const objectIds = extractObjectCardIds(incomingContent);
         await UserObject.syncNoteLinks(noteId, objectIds);
-        console.log(`[Object Links] Synced ${objectIds.length} object links for note ${noteId}:`, objectIds);
       } catch (error) {
         console.error(`[Object Links] Error syncing object links for note ${noteId}:`, error);
         // Don't fail the whole update if object syncing fails
@@ -377,9 +378,6 @@ router.put('/:id', async (req, res) => {
       console.error(`[ERROR] Could not fetch final details for note ${noteId} after update operations.`);
       return res.status(404).json({ message: 'Note could not be found after update process.' });
     }
-
-    // Add objects to the note
-    await Note.addObjects([finalNoteWithDetails]);
 
     // 10. Emit socket event ONLY if the main note record was actually changed
     if (needsMainTableUpdate) {

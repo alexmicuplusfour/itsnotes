@@ -1393,8 +1393,9 @@ class Note {
   static async update(id, noteData) {
     const updateData = { ...noteData };
 
-    // Convert HTML content to plain text if content is being updated
-    if (updateData.content !== undefined) {
+    // Convert HTML content to plain text if content is being updated. Callers
+    // that already computed plain_content can pass it in to skip a second parse.
+    if (updateData.plain_content === undefined && updateData.content !== undefined) {
       updateData.plain_content = convertHtmlToPlainText(updateData.content);
     }
 
