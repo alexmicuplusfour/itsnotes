@@ -41,9 +41,9 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
   </tr>
 </table>
 
-## Setup
+## Docker Setup
 
-Requires Docker and Docker Compose. Save this as `docker-compose.yml`:
+Save this as `docker-compose.yml`:
 
 ```yaml
 name: itsnotes
