@@ -617,6 +617,7 @@ export const NoteActionBar = ({
   isMobile,
   actionBarClass,
   unsavedImageIds,
+  isAddContentBusy,
   showColorPicker,
   showTagsModal,
   onToggleTagsModal,
@@ -979,11 +980,15 @@ export const NoteActionBar = ({
                 ref={addContentButtonRef}
                 $isDarkTheme={isDarkTheme}
                 onClick={handleAddContentToggle}
-                title="Add content"
-                disabled={isAutoSaving}
+                title={isAddContentBusy ? 'Working…' : 'Add content'}
+                disabled={isAutoSaving || isAddContentBusy}
                 aria-label="Add content"
               >
-                <Icon name="addCircle" size={20} />
+                {isAddContentBusy ? (
+                  <SharedSaveIndicator />
+                ) : (
+                  <Icon name="addCircle" size={20} />
+                )}
               </SharedActionButton>              {/* AddContentDropdown positioned relative to button */}
               <AddContentDropdown
                 isOpen={showAddContentDropdown}

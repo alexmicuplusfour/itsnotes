@@ -40,7 +40,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
     isTyping,
     showActionBar: externalShowActionBar,
     note, color, images, noteTags, noteUrls, bookReferences, noteReferences,
-    isModified, isAutoSaving, isDarkTheme, unsavedImageIds,
+    isModified, isAutoSaving, isDarkTheme, unsavedImageIds, isAddContentBusy,
     onRemoveImage, onTagClick, onRemoveTag, onBookClick, onNoteReferenceClick, onAddImageClick, onClose,
     onTagsModalClose, onToggleTagsModal, onToggleColorPicker,
     tagButtonRef, colorButtonRef, showTagsModal, showColorPicker, onColorSelect, onCloseTagsModal, onUndo, onRedo, canUndo, canRedo,
@@ -224,6 +224,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
       noteUrls={noteUrls} bookReferences={bookReferences} noteReferences={noteReferences}
       isModified={isModified} isAutoSaving={isAutoSaving} isDarkTheme={isDarkTheme}
       isMobile={isMobile} actionBarClass={effectiveActionBarClass} unsavedImageIds={unsavedImageIds}
+      isAddContentBusy={isAddContentBusy}
       onRemoveImage={onRemoveImage} onTagClick={onTagClick} onRemoveTag={onRemoveTag} onBookClick={onBookClick}
       onNoteReferenceClick={onNoteReferenceClick} onAddImageClick={onAddImageClick}
       onClose={onClose}
@@ -323,11 +324,15 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
         <AddContentButton
           $isDarkTheme={isDarkTheme}
           onClick={handleAddContentClick}
-          title="Add content"
-          disabled={isAutoSaving}
+          title={isAddContentBusy ? 'Working…' : 'Add content'}
+          disabled={isAutoSaving || isAddContentBusy}
           aria-label="Add content"
         >
-          <Icon name="add" size={20} strokeWidth="2.5" />
+          {isAddContentBusy ? (
+            <SaveIndicator />
+          ) : (
+            <Icon name="add" size={20} strokeWidth="2.5" />
+          )}
         </AddContentButton>
       </BottomActionContainer>
     </>

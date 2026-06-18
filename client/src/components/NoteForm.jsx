@@ -382,10 +382,10 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   });
 
   // Initialize summarizer hook
-  const { handleSummarizeWithAI } = useNoteSummarizer(note, contentInputRef);
+  const { handleSummarizeWithAI, isSummarizing } = useNoteSummarizer(note, contentInputRef);
 
   // Initialize OCR hook
-  const { handleInsertOCR } = useNoteOCR(contentInputRef);
+  const { handleInsertOCR, isExtractingOCR } = useNoteOCR(contentInputRef);
 
   // Keyboard shortcuts - Add escape to close functionality (desktop only)
   useKeyboardShortcut(
@@ -432,6 +432,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     images, // Get the images state from the hook
     unsavedImageIds, // Get the unsaved IDs from the hook
     isLoading: imagesLoading, // Optional: Use loading state for UI feedback
+    isUploadingImage, // True while an image upload is in flight
     error: imageError, // Optional: Use error state for UI feedback
     loadImages, // Function to load images
     addImage, // Function to add an image - THIS IS WHAT WE NEED
@@ -440,6 +441,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     clearUnsavedIds, // Function to clear unsaved IDs after any save
     resetImageState, // Function to reset state
   } = useImageManager();
+
+  // The add-content (+) button shows a spinner while any of its async actions
+  // is in flight: image upload, AI summarize, OCR, or reminder generation.
+  const isAddContentBusy =
+    isUploadingImage || isSummarizing || isExtractingOCR || isCreatingReminder;
 
   // Extract URLs from note content. Cheap early-out for the common case
   // of a note with no URL-shaped substring at all — skips the regex pass.
@@ -2459,6 +2465,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           isAutoSaving={isSaving}
           isDarkTheme={isDarkTheme}
           unsavedImageIds={unsavedImageIds}
+          isAddContentBusy={isAddContentBusy}
           onRemoveImage={handleRemoveImage}
           onTagClick={handleTagClick}
           onRemoveTag={handleRemoveTag}

@@ -14,6 +14,7 @@ export const useImageManager = () => {
   const [images, setImages] = useState([]);
   const [unsavedImageIds, setUnsavedImageIds] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [error, setError] = useState(null);
   const { token } = useAuth(); // Get the auth token  // Helper function to create auth headers
   const getAuthHeaders = useMemo(() => {
@@ -72,6 +73,7 @@ export const useImageManager = () => {
     }
 
     setIsLoading(true);
+    setIsUploadingImage(true);
     setError(null);
     const tempImageId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`; // More unique temp ID
     // Add to unsaved IDs immediately for tracking
@@ -114,6 +116,7 @@ export const useImageManager = () => {
         // Remove *temporary* ID from unsaved list on successful upload
         setUnsavedImageIds(prev => prev.filter(id => id !== tempImageId));
         setIsLoading(false);
+        setIsUploadingImage(false);
         return { success: true, image: data.image }; // Indicate success
 
       } else {
@@ -135,6 +138,7 @@ export const useImageManager = () => {
         setImages(prev => [...prev, tempImage]);
         // Keep tempImageId in unsavedImageIds until note is saved
         setIsLoading(false);
+        setIsUploadingImage(false);
         return { success: true, image: tempImage }; // Indicate success (locally)
       }
     } catch (error) {
@@ -143,6 +147,7 @@ export const useImageManager = () => {
       // Remove the ID if processing/upload failed entirely
       setUnsavedImageIds(prev => prev.filter(id => id !== tempImageId));
       setIsLoading(false);
+      setIsUploadingImage(false);
       return { success: false, error: error.message }; // Indicate failure
     }
   }, [getAuthHeaders]); // Include getAuthHeaders dependency
@@ -222,6 +227,7 @@ export const useImageManager = () => {
 
     console.log(`[useImageManager] Uploading ${tempImagesToUpload.length} temporary images to new note ${newNoteId}`);
     setIsLoading(true); // Set loading for the batch
+    setIsUploadingImage(true);
     const uploadPromises = [];
     const successfullyUploadedImages = [];
     const failedUploadIds = [];    for (const tempImg of tempImagesToUpload) {
@@ -287,6 +293,7 @@ export const useImageManager = () => {
     }
 
     setIsLoading(false); // Batch loading finished
+    setIsUploadingImage(false);
     return successfullyUploadedImages.map(item => item.newImage); // Return the successfully uploaded images
 
   }, [images, getAuthHeaders]); // Depends on images state and auth headers
@@ -303,6 +310,7 @@ export const useImageManager = () => {
     setImages([]);
     setUnsavedImageIds([]);
     setIsLoading(false);
+    setIsUploadingImage(false);
     setError(null);
   }, []);
 
@@ -312,6 +320,7 @@ export const useImageManager = () => {
     images,
     unsavedImageIds,
     isLoading,
+    isUploadingImage,
     error,
     loadImages,
     addImage,

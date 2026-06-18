@@ -1,9 +1,10 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { aiApi } from '../services/api';
 import { marked } from 'marked';
 
 export const useNoteSummarizer = (note, contentInputRef) => {
   const inFlightRef = useRef(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
   const handleSummarizeWithAI = useCallback(async (e) => {
     if (inFlightRef.current) return;
@@ -19,6 +20,7 @@ export const useNoteSummarizer = (note, contentInputRef) => {
     }
 
     inFlightRef.current = true;
+    setIsSummarizing(true);
 
     const placeholderText = "✨ Generating summary...";
 
@@ -66,8 +68,9 @@ export const useNoteSummarizer = (note, contentInputRef) => {
       alert("Failed to summarize with AI. Please try again.");
     } finally {
       inFlightRef.current = false;
+      setIsSummarizing(false);
     }
   }, [note?.content, contentInputRef]);
 
-  return { handleSummarizeWithAI };
+  return { handleSummarizeWithAI, isSummarizing };
 };

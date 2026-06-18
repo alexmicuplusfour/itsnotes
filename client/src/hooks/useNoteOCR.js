@@ -1,8 +1,9 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { aiApi } from '../services/api';
 
 export const useNoteOCR = (contentInputRef) => {
   const inFlightRef = useRef(false);
+  const [isExtractingOCR, setIsExtractingOCR] = useState(false);
 
   const handleInsertOCR = useCallback(async (imageFile) => {
     if (inFlightRef.current) return;
@@ -11,6 +12,7 @@ export const useNoteOCR = (contentInputRef) => {
     if (!imageFile) return;
 
     inFlightRef.current = true;
+    setIsExtractingOCR(true);
 
     const placeholderText = "✨ Extracting text...";
 
@@ -50,8 +52,9 @@ export const useNoteOCR = (contentInputRef) => {
       }
     } finally {
       inFlightRef.current = false;
+      setIsExtractingOCR(false);
     }
   }, [contentInputRef]);
 
-  return { handleInsertOCR };
+  return { handleInsertOCR, isExtractingOCR };
 };
