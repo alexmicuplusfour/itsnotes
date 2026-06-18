@@ -27,6 +27,33 @@ class SchedulerService {
             // Clear any existing backlog shortly after startup.
             this.cleanupEmptyNotes();
         }
+
+        // Periodically purge notes that have sat in the trash past a retention
+        // window. Defaults to a daily 3 AM sweep; opt out with TRASH_CLEANUP_ENABLED=false.
+        if (process.env.TRASH_CLEANUP_ENABLED !== 'false') {
+            const trashCron = process.env.TRASH_CLEANUP_CRON || '0 3 * * *';
+            this.trashCleanupTask = cron.schedule(trashCron, () => {
+                this.cleanupOldTrash();
+            });
+            // Clear any existing backlog shortly after startup.
+            this.cleanupOldTrash();
+        }
+    }
+
+    async cleanupOldTrash() {
+        try {
+            const olderThanDays = parseInt(process.env.TRASH_CLEANUP_AGE_DAYS) || 30;
+            const deletedIds = await Note.deleteOldTrashed({ olderThanDays });
+
+            if (deletedIds.length > 0) {
+                console.log(`SchedulerService: Permanently deleted ${deletedIds.length} trashed notes`);
+                if (this.io) {
+                    deletedIds.forEach(id => this.io.emit('note_deleted', id));
+                }
+            }
+        } catch (error) {
+            console.error('SchedulerService: Error cleaning up old trash:', error);
+        }
     }
 
     async cleanupEmptyNotes() {

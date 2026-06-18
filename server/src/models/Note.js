@@ -1490,6 +1490,23 @@ class Note {
     return deleted.map(row => row.id);
   }
 
+  /**
+   * Permanently delete notes that have sat in the trash longer than the given
+   * age. Falls back to updated_at for legacy rows trashed before trashed_at
+   * existed. Child rows cascade-delete via FK constraints. Returns deleted IDs.
+   */
+  static async deleteOldTrashed({ olderThanDays = 30 } = {}) {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+
+    const deleted = await db('notes')
+      .where('is_deleted', true)
+      .whereRaw('COALESCE(notes.trashed_at, notes.updated_at) < ?', [cutoff])
+      .del()
+      .returning('id');
+
+    return deleted.map(row => row.id);
+  }
+
   static async getCount({ archived = false, deleted = false }) {
     const result = await db('notes')
       .where('is_archived', archived)
