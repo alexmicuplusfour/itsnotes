@@ -1,7 +1,7 @@
 const { JSDOM } = require('jsdom');
 const db = require('../db');
 const NoteImage = require('../models/NoteImage');
-const { createThumbnail } = require('../utils/imageProcessing');
+const { processNoteImage } = require('../utils/imageProcessing');
 
 /**
  * One-time migration: note-body images used to inline their full base64 into the
@@ -63,23 +63,28 @@ async function dereferenceInlineImages(html, noteId, allowCreate) {
         // history with an unresolvable reference.
         continue;
       }
-      const parsed = parseDataUrl(src);
-      if (!parsed) continue;
+      if (!parseDataUrl(src)) continue;
 
-      let thumbnail = src;
+      // Re-encode through the single resize/encode policy (WebP full + thumb).
+      // Fall back to the raw inline data if processing fails, so a bad image
+      // never aborts the migration.
+      let processed;
       try {
-        thumbnail = await createThumbnail(src);
-      } catch (_) { /* fall back to full image as thumbnail */ }
+        processed = await processNoteImage(src);
+      } catch (_) {
+        const parsed = parseDataUrl(src);
+        processed = { data: src, thumbnail: src, type: parsed.type, size: parsed.buffer.length };
+      }
 
       const row = DRY_RUN
         ? { id: '(dry-run)' }
         : await NoteImage.create({
             note_id: noteId,
-            data: src,
-            thumbnail,
+            data: processed.data,
+            thumbnail: processed.thumbnail,
             name: img.getAttribute('alt') || 'Migrated image',
-            type: parsed.type,
-            size: parsed.buffer.length,
+            type: processed.type,
+            size: processed.size,
           });
 
       imageId = row.id;

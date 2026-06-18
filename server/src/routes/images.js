@@ -2,6 +2,7 @@ const express = require('express');
 const NoteImage = require('../models/NoteImage');
 const Note = require('../models/Note');
 const demoReset = require('../services/demoReset');
+const { processNoteImage } = require('../utils/imageProcessing');
 const router = express.Router();
 
 const DEMO_MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB in demo mode
@@ -88,12 +89,12 @@ router.get('/images/:id/raw', async (req, res) => {
 router.post('/notes/:noteId/images', async (req, res) => {
   try {
     const { noteId } = req.params;
-    const { data, thumbnail, name, type, size } = req.body;
-    
+    const { data, name, type, size } = req.body;
+
     console.log(`Adding image to note ${noteId}, type: ${type}, size: ${size}`);
-    
-    if (!data || !thumbnail) {
-      return res.status(400).json({ message: 'Image data and thumbnail are required' });
+
+    if (!data) {
+      return res.status(400).json({ message: 'Image data is required' });
     }
 
     if (demoReset.isEnabled()) {
@@ -107,23 +108,33 @@ router.post('/notes/:noteId/images', async (req, res) => {
         return res.status(413).json({ message: 'Images must be under 10MB in demo mode.' });
       }
     }
-    
+
     // Verify note exists
     const note = await Note.findById(noteId);
     console.log('Note found:', note ? 'Yes' : 'No');
-    
+
     if (!note) {
       return res.status(404).json({ message: 'Note not found' });
     }
-    
+
+    // Single source of truth for sizing/encoding: re-encode the uploaded image
+    // to WebP (full + thumbnail) server-side rather than trusting client output.
+    let processed;
+    try {
+      processed = await processNoteImage(data);
+    } catch (procErr) {
+      console.error('Failed to process uploaded image:', procErr.message);
+      return res.status(415).json({ message: 'Unsupported or corrupt image data' });
+    }
+
     try {
       const image = await NoteImage.create({
         note_id: noteId,
-        data,
-        thumbnail,
+        data: processed.data,
+        thumbnail: processed.thumbnail,
         name: name || null,
-        type: type || null,
-        size: size || null
+        type: processed.type,
+        size: processed.size
       });
       
       console.log('Image created successfully, ID:', image.id);

@@ -149,9 +149,10 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
             console.log(`[useUrlExtraction] Found ${matches.length} matches for ${originalUrl}`);
             console.log(`[useUrlExtraction] First match: ${matches[0]}`);
             
-            // Replace with our uploaded image
-            const replacement = `<img src="${uploadedImage.thumbnail}" alt="${uploadedImage.alt || 'Extracted image'}" data-image-id="${uploadedImage.id}" style="max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 8px;" />`;
-            
+            // Reference-only: store just the id; the bytes resolve via
+            // /api/images/:id/raw, keeping base64 out of the note body.
+            const replacement = `<img alt="${uploadedImage.alt || 'Extracted image'}" data-image-id="${uploadedImage.id}" style="max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 8px;" />`;
+
             processedHtml = processedHtml.replace(imgRegex, replacement);
             replacementsMade++;
             console.log(`[useUrlExtraction] Replaced image ${uploadedImage.id}`);
@@ -176,7 +177,7 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
         if (unmatchedImages.length > 0) {
           const imageElements = unmatchedImages.map(image => {
             console.log(`[useUrlExtraction] Adding unmatched image: ${image.id}`);
-            return `<img src="${image.thumbnail}" alt="${image.alt || 'Extracted image'}" data-image-id="${image.id}" style="max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 8px;" />`;
+            return `<img alt="${image.alt || 'Extracted image'}" data-image-id="${image.id}" style="max-width: 100%; height: auto; display: block; margin: 0.5rem 0; border-radius: 8px;" />`;
           });
           
           inlineImagesHtml = imageElements.join('\n');

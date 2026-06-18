@@ -29,54 +29,76 @@ async function downloadImageAsBase64(imageUrl, maxSize = 5 * 1024 * 1024) {
     }
 }
 
-/**
- * Create a small thumbnail from base64 image data (160px for gallery/preview)
- */
-async function createThumbnail(base64Data, size = 160) {
-    try {
-        // Remove data URL prefix to get just the base64 data
-        const base64Image = base64Data.split(',')[1];
-        const imageBuffer = Buffer.from(base64Image, 'base64');
+// Single resize/encode policy for every note image (uploads, URL extraction,
+// migration). WebP gives ~25-35% smaller files than JPEG at equal quality and
+// sharp auto-rotates from EXIF so phone photos aren't sideways.
+const FULL_MAX_DIMENSION = 1600; // longest side of the stored "full" image
+const FULL_QUALITY = 80;
+const THUMB_SIZE = 220; // square gallery/preview thumbnail
+const THUMB_QUALITY = 72;
 
-        // Use sharp to create a square thumbnail
-        const thumbnailBuffer = await sharp(imageBuffer)
-            .resize(size, size, {
-                fit: 'cover',
-                position: 'center'
-            })
-            .jpeg({ quality: 60 }) // Reasonable quality for small thumbnails
-            .toBuffer();
-
-        return `data:image/jpeg;base64,${thumbnailBuffer.toString('base64')}`;
-    } catch (error) {
-        console.error('Failed to create thumbnail:', error.message);
-        // Return a smaller version of the original if thumbnail creation fails
-        return base64Data;
+// Strip a `data:<mime>;base64,` prefix if present and return a decoded buffer
+// plus the source mime (used to preserve GIF animation through the encoder).
+function toBuffer(input) {
+    if (Buffer.isBuffer(input)) return { buffer: input, mime: null };
+    const match = /^data:([^;]+);base64,(.*)$/s.exec(input);
+    if (match) {
+        return { buffer: Buffer.from(match[2], 'base64'), mime: match[1] };
     }
+    // Assume raw base64
+    return { buffer: Buffer.from(input, 'base64'), mime: null };
 }
 
 /**
- * Create a resized "full resolution" image for extracted content (700px width max, for inline display)
+ * Produce the canonical stored representations of a note image: a WebP "full"
+ * image (longest side capped, EXIF-oriented) and a square WebP thumbnail.
+ *
+ * @param {string|Buffer} input - data URL, raw base64, or buffer
+ * @returns {Promise<{ data: string, thumbnail: string, type: string, size: number }>}
  */
-async function createExtractedFullImage(base64Data) {
-    try {
-        // Remove data URL prefix to get just the base64 data
-        const base64Image = base64Data.split(',')[1];
-        const imageBuffer = Buffer.from(base64Image, 'base64');
+async function processNoteImage(input) {
+    const { buffer, mime } = toBuffer(input);
+    const animated = mime === 'image/gif';
 
-        // Use sharp to resize to 700px width max, preserving aspect ratio
-        const resizedBuffer = await sharp(imageBuffer)
-            .resize(700, null, {
-                fit: 'inside',
-                withoutEnlargement: true // Don't enlarge images smaller than 700px
-            })
-            .jpeg({ quality: 30 }) // Low quality for database storage
+    const fullBuffer = await sharp(buffer, { animated })
+        .rotate() // auto-orient from EXIF before resizing
+        .resize(FULL_MAX_DIMENSION, FULL_MAX_DIMENSION, {
+            fit: 'inside',
+            withoutEnlargement: true,
+        })
+        .webp({ quality: FULL_QUALITY })
+        .toBuffer();
+
+    const thumbBuffer = await sharp(buffer)
+        .rotate()
+        .resize(THUMB_SIZE, THUMB_SIZE, { fit: 'cover', position: 'center' })
+        .webp({ quality: THUMB_QUALITY })
+        .toBuffer();
+
+    return {
+        data: `data:image/webp;base64,${fullBuffer.toString('base64')}`,
+        thumbnail: `data:image/webp;base64,${thumbBuffer.toString('base64')}`,
+        type: 'image/webp',
+        size: fullBuffer.length,
+    };
+}
+
+/**
+ * Create just the square WebP thumbnail (used where only a thumbnail is needed).
+ */
+async function createThumbnail(base64Data, size = THUMB_SIZE) {
+    try {
+        const { buffer } = toBuffer(base64Data);
+        const thumbnailBuffer = await sharp(buffer)
+            .rotate()
+            .resize(size, size, { fit: 'cover', position: 'center' })
+            .webp({ quality: THUMB_QUALITY })
             .toBuffer();
 
-        return `data:image/jpeg;base64,${resizedBuffer.toString('base64')}`;
+        return `data:image/webp;base64,${thumbnailBuffer.toString('base64')}`;
     } catch (error) {
-        console.error('Failed to create extracted full image:', error.message);
-        // Return the original if resizing fails
+        console.error('Failed to create thumbnail:', error.message);
+        // Return the original if thumbnail creation fails
         return base64Data;
     }
 }
@@ -147,27 +169,24 @@ async function processAndUploadImages(imageUrls, noteId, maxImages = 10) {
                     return null;
                 }
 
-                // Create full resolution image (700px max width) for inline display
-                const fullImage = await createExtractedFullImage(imageData.data);
+                // Run through the single resize/encode policy (WebP full + thumb)
+                const processed = await processNoteImage(imageData.data);
 
-                // Create small thumbnail (160px) for gallery/preview
-                const thumbnail = await createThumbnail(imageData.data);
-
-                // Create the image record
                 const image = await NoteImage.create({
                     note_id: noteId,
-                    data: fullImage, // Store the 700px version as "full resolution"
-                    thumbnail: thumbnail, // Store the 160px version as thumbnail
+                    data: processed.data,
+                    thumbnail: processed.thumbnail,
                     name: imageInfo.alt || path.basename(new URL(imageInfo.url).pathname) || 'Extracted Image',
-                    type: 'image/jpeg', // Since we're converting to JPEG
-                    size: Buffer.from(fullImage.split(',')[1], 'base64').length
+                    type: processed.type,
+                    size: processed.size,
                 });
 
                 console.log(`Successfully uploaded image ${image.id} for note ${noteId}`);
 
+                // Reference-only: the client inserts <img data-image-id> and resolves
+                // the bytes via /api/images/:id/raw, so we don't return base64 here.
                 return {
                     id: image.id,
-                    thumbnail: fullImage, // Return full image for inline display (not the small thumbnail)
                     originalUrl: imageInfo.url,
                     alt: imageInfo.alt,
                     width: imageInfo.width,
@@ -191,8 +210,8 @@ async function processAndUploadImages(imageUrls, noteId, maxImages = 10) {
 
 module.exports = {
     downloadImageAsBase64,
+    processNoteImage,
     createThumbnail,
-    createExtractedFullImage,
     extractImageUrls,
     processAndUploadImages
 };

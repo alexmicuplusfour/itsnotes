@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo } from 'react';
 // import { notesApi } from '../services/api';
 import {
   fileToBase64,
-  resizeImageIfNeeded,
   createThumbnail,
 } from '../services/imageManager';
 import env from '../../env.js'; // Import the environment configuration
@@ -81,23 +80,22 @@ export const useImageManager = () => {
     try {
       console.log(`[useImageManager] Processing image: ${file.name}`);
       const originalBase64 = await fileToBase64(file);
-      // Keep resizing consistent with NoteForm's previous logic (e.g., 200px width)
-      const base64Data = await resizeImageIfNeeded(originalBase64, 200);
-      const thumbnail = await createThumbnail(base64Data, 120);
-      const imageData = {
-        data: base64Data,
-        thumbnail,
-        name: file.name,
-        type: file.type,
-        size: Math.round((base64Data.length * 0.75) / 1024) // Approx KB
-      };      if (noteId) {
+      const approxSizeKB = Math.round((originalBase64.length * 0.75) / 1024);
+
+      if (noteId) {
         // --- Existing Note: Upload Immediately ---
-        console.log(`[useImageManager] Uploading image to existing note ${noteId}`);        // Use direct fetch with the dynamic base URL
-        console.log('[useImageManager] Uploading image - Headers being sent:', getAuthHeaders);
-        const response = await fetch(`${env.SERVER_BASE_URL}/api/notes/${noteId}/images`, { // <-- UPDATED URL
+        // Resizing/encoding (WebP, EXIF-oriented) is done authoritatively on the
+        // server. Send the original; use the processed image it returns.
+        console.log(`[useImageManager] Uploading image to existing note ${noteId}`);
+        const response = await fetch(`${env.SERVER_BASE_URL}/api/notes/${noteId}/images`, {
             method: 'POST',
             headers: getAuthHeaders,
-            body: JSON.stringify(imageData)
+            body: JSON.stringify({
+              data: originalBase64,
+              name: file.name,
+              type: file.type,
+              size: approxSizeKB,
+            })
         });
 
         if (!response.ok) {
@@ -120,10 +118,18 @@ export const useImageManager = () => {
 
       } else {
         // --- New Note: Create Temporary Preview ---
+        // No note id yet, so hold the original locally and show a light
+        // client-made thumbnail. uploadTemporaryImages() re-sends the original
+        // after the note is saved, where the server does the real encode.
         console.log(`[useImageManager] Creating temporary image preview for new note.`);
+        const thumbnail = await createThumbnail(originalBase64, 220);
         const tempImage = {
             id: tempImageId, // Use the temp ID
-            ...imageData,
+            data: originalBase64,
+            thumbnail,
+            name: file.name,
+            type: file.type,
+            size: approxSizeKB,
             isTemp: true
         };
         setImages(prev => [...prev, tempImage]);
@@ -223,9 +229,8 @@ export const useImageManager = () => {
       const promise = fetch(`${env.SERVER_BASE_URL}/api/notes/${newNoteId}/images`, { // <-- UPDATED URL
         method: 'POST',
         headers: getAuthHeaders,
-        body: JSON.stringify({ // Send only necessary data
+        body: JSON.stringify({ // Server re-encodes; send the original only
             data: tempImg.data,
-            thumbnail: tempImg.thumbnail,
             name: tempImg.name,
             type: tempImg.type,
             size: tempImg.size
