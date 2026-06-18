@@ -3,7 +3,7 @@ import styled, { keyframes } from 'styled-components';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ListViewItem from './ListViewItem';
 import NoteForm from './NoteForm';
-import { MonthSeparator, MonthLabel, SectionTitle, CountPill, LoadingMessage } from './NotesList';
+import { MonthSeparator, MonthLabel, SectionTitle, CountPill, CountSpinner, LoadingMessage } from './NotesList';
 import { StickyMonthHeader, StickyMonthLabel } from './StickyMonthHeader.styled';
 import MonthNavigationPills from './MonthNavigationPills';
 import ColorSelectorPills from './ColorSelectorPills';
@@ -244,6 +244,7 @@ function ListView({ searchQuery }) {
     openedNote,
     view,
     totalNotes,
+    searchCountQuery,
     searchByColor,
   } = useNotes();
   const { listLoading } = useNotesLoading();
@@ -668,8 +669,11 @@ function ListView({ searchQuery }) {
           {/* Search results header */}
           {searchMode && searchQuery && (
             <SectionTitle>
-              {listLoading ? (
-                <>Searching for "{searchQuery}"...</>
+              {(listLoading || searchCountQuery !== searchQuery) ? (
+                <>
+                  <CountPill $isDark={isDarkTheme}><CountSpinner /></CountPill>
+                  results for "{searchQuery}"
+                </>
               ) : (
                 <>
                   <CountPill $isDark={isDarkTheme}>{totalNotes}</CountPill>

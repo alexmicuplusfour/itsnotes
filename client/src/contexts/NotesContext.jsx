@@ -163,6 +163,11 @@ export const NotesProvider = ({ children }) => {
   const [page, setPage] = useState(1); // Current page number for API requests
   const [hasMore, setHasMore] = useState(true); // Indicates if more notes can be loaded
   const [totalNotes, setTotalNotes] = useState(0); // Total count of notes for the current view/search
+  // The query that `totalNotes` currently represents *as a search-result count*.
+  // `totalNotes` is shared with the main-list DB total, so a non-search write (loadNotes)
+  // sets this to null. The search header only trusts the count when this matches the live
+  // query, otherwise a stale/DB total could flash before a slow search response lands.
+  const [searchCountQuery, setSearchCountQuery] = useState(null);
 
   // View & Filtering State
   const [noteTags, setNoteTags] = useState({}); // Cache for tags associated with notes { noteId: Tag[] }
@@ -330,6 +335,7 @@ export const NotesProvider = ({ children }) => {
       }
 
       setTotalNotes(fetchedTotalCount);
+      setSearchCountQuery(null); // This count is the DB total, not a search-result count
 
       if (refresh) {
         console.log("loadNotes (refresh): Replacing notes state.");
@@ -483,6 +489,7 @@ export const NotesProvider = ({ children }) => {
       // Fetch only 1 result to get totalCount, with heavy truncation
       const response = await notesApi.searchNotes(query, 1, 1, searchSortOrder, true, true, 50, resolvedTagIdsRef.current);
       setTotalNotes(response.totalCount || 0);
+      setSearchCountQuery(query);
       console.log(`refreshSearchCount: Updated count to ${response.totalCount} for query "${query}"`);
     } catch (e) {
       console.error("refreshSearchCount: Error refreshing count:", e);
@@ -505,6 +512,7 @@ export const NotesProvider = ({ children }) => {
     setSearchBarActive(true);
     setListLoading(true);
     setSearchResults([]); // Clear previous results
+    setSearchCountQuery(null); // Count not yet valid for the new query
     setPage(1);
     setHasMore(false); // ID search usually doesn't paginate combined results
 
@@ -554,6 +562,7 @@ export const NotesProvider = ({ children }) => {
       console.log(`searchById: Final results count: ${results.length}`);
       setSearchResults(results);
       setTotalNotes(results.length);
+      setSearchCountQuery(displayQuery);
       setListLoading(false);
       return results;
     } catch (err) {
@@ -586,6 +595,7 @@ export const NotesProvider = ({ children }) => {
       setSearchMode(false);
       setSearchResults([]);
       setSearchQuery('');
+      setSearchCountQuery(null);
       setPage(1);
       resolvedTagIdsRef.current = {};
       lastUsedTagIdsRef.current = '';
@@ -658,6 +668,7 @@ export const NotesProvider = ({ children }) => {
       setListLoading(true);
       if (refreshSearch) {
         setSearchResults([]); // Clear previous results only on refresh
+        setSearchCountQuery(null); // Count not yet valid for the new query
         setPage(1); // Reset page only on refresh
         // Clear selection will be handled by NoteSelectionContext
       }
@@ -719,6 +730,7 @@ export const NotesProvider = ({ children }) => {
       const response = await notesApi.searchNotes(rawQuery, searchPage, cacheSettingsRef.current.PAGE_SIZE, searchSortOrder, true, true, 520, resolvedTagIdsRef.current);
   
       setTotalNotes(response.totalCount);
+      setSearchCountQuery(rawQuery);
       const fetchedNotes = response.notes || [];
   
       if (refreshSearch) {
@@ -2741,6 +2753,7 @@ export const NotesProvider = ({ children }) => {
     allNotesUnfiltered: searchMode ? searchResults : notes,
     error,
     totalNotes,
+    searchCountQuery,
     view,
     noteTags,
 
@@ -2861,7 +2874,7 @@ export const NotesProvider = ({ children }) => {
     getViewportPrefetchDelay
   }), [
     // Dependencies for the context value memoization
-    filteredNotes, pinnedNotes, unpinnedNotes, notes, error, totalNotes, view, noteTags, hasMore,
+    filteredNotes, pinnedNotes, unpinnedNotes, notes, error, totalNotes, searchCountQuery, view, noteTags, hasMore,
     searchMode, searchQuery, searchResults, searchBarActive, savedSearches,
     getSortForView, getAvailableSortsForView, SORT_LABELS,
     openedNote,

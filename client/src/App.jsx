@@ -152,6 +152,7 @@ const AppContent = () => {
     searchResults,
     searchQuery,
     totalNotes,
+    searchCountQuery,
     view,
     openedNote,
   } = notesContext;
@@ -300,7 +301,7 @@ const AppContent = () => {
                     path="/"
                     element={
                       <NotesList
-                        title={searchMode ? (listLoading ? `Searching for "${displaySearchQuery}"...` : `${totalNotes} result${totalNotes !== 1 ? 's' : ''} for "${displaySearchQuery}"`) : ""}
+                        title={searchMode ? ((listLoading || searchCountQuery !== searchQuery) ? `Searching for "${displaySearchQuery}"...` : `${totalNotes} result${totalNotes !== 1 ? 's' : ''} for "${displaySearchQuery}"`) : ""}
                         notes={searchMode ? searchResults : undefined}
                         showPinned={!searchMode && view === 'main'}
                       />

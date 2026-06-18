@@ -188,6 +188,23 @@ const CountPill = styled.span`
   margin-right: 6px;
 `;
 
+const countSpin = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
+
+// Shown inside the count pill while the search-result count for the current query
+// is still loading, so a stale/DB total never flashes in its place.
+const CountSpinner = styled.span`
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: var(--text-color-contrast);
+  border-radius: 50%;
+  animation: ${countSpin} 0.7s linear infinite;
+`;
+
 export const LoadingMessage = styled.div`
   text-align: center;
   padding: 20px;
@@ -673,6 +690,16 @@ const NotesList = ({ title, notes, showPinned }) => {
                 </>
               );
             }
+            // Search count still loading: show a spinner in the pill instead of a stale count
+            const loadingMatch = title.match(/^Searching for "(.+)"\.\.\.$/);
+            if (loadingMatch) {
+              return (
+                <>
+                  <CountPill $isDark={isDarkTheme}><CountSpinner /></CountPill>
+                  results for "{loadingMatch[1]}"
+                </>
+              );
+            }
             return title;
           })()}
         </SectionTitle>
@@ -883,4 +910,4 @@ const NotesList = ({ title, notes, showPinned }) => {
 };
 
 export default NotesList;
-export { MonthSeparator, MonthLabel, SectionTitle, CountPill };
+export { MonthSeparator, MonthLabel, SectionTitle, CountPill, CountSpinner };
