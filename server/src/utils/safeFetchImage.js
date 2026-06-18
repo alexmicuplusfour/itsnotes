@@ -49,7 +49,7 @@ async function resolveAndValidate(hostname) {
     if (isPrivateAddress(hostname)) {
       throw new Error(`Blocked private address: ${hostname}`);
     }
-    return { address: hostname, family: net.isIP(hostname) };
+    return [{ address: hostname, family: net.isIP(hostname) }];
   }
   const addrs = await dns.lookup(hostname, { all: true });
   if (!addrs || addrs.length === 0) {
@@ -60,7 +60,7 @@ async function resolveAndValidate(hostname) {
       throw new Error(`Blocked private address ${address} for ${hostname}`);
     }
   }
-  return addrs[0];
+  return addrs;
 }
 
 function fetchOnce(currentUrl, { maxBytes, timeoutMs, requireImageContentType }) {
@@ -70,7 +70,7 @@ function fetchOnce(currentUrl, { maxBytes, timeoutMs, requireImageContentType })
       throw new Error(`Blocked URL scheme: ${parsed.protocol}`);
     }
     const hostname = parsed.hostname;
-    const chosen = await resolveAndValidate(hostname);
+    const validated = await resolveAndValidate(hostname);
     const isHttps = parsed.protocol === 'https:';
     const protocol = isHttps ? https : http;
     const port = parsed.port ? Number(parsed.port) : (isHttps ? 443 : 80);
@@ -85,10 +85,16 @@ function fetchOnce(currentUrl, { maxBytes, timeoutMs, requireImageContentType })
           Accept: 'image/*',
         },
         timeout: timeoutMs,
-        // Pin the connection to the address we already validated. This both
+        // Pin the connection to the addresses we already validated. This both
         // skips Node's internal DNS lookup and prevents DNS-rebinding (the
-        // second lookup that would otherwise happen at connect time).
-        lookup: (_h, _o, cb) => cb(null, chosen.address, chosen.family),
+        // second lookup that would otherwise happen at connect time). Node's
+        // autoSelectFamily (Happy Eyeballs, default-on in Node 20+) calls this
+        // with { all: true } and expects an array of { address, family }; the
+        // legacy single-address path expects (err, address, family).
+        lookup: (_h, options, cb) =>
+          options && options.all
+            ? cb(null, validated)
+            : cb(null, validated[0].address, validated[0].family),
       }, (response) => {
         const status = response.statusCode || 0;
 
