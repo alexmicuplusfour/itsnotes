@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import api from '../services/api';
+import api, { API_URL } from '../services/api';
 import Icon from './Icons';
 import Switch from './Switch';
 import { useAuth } from '../contexts/AuthContext';
@@ -476,11 +476,47 @@ const BackupRestore = ({ isDarkTheme }) => {
       const formData = new FormData();
       formData.append('backup', file);
 
-      await api.post('/backup/restore', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
+      // The server streams whitespace heartbeats while the (potentially long)
+      // restore runs, then ends with a single JSON object. We read the stream
+      // and apply an idle timeout — abort only if no bytes arrive for a while —
+      // rather than a blind total-request timeout that would either give up too
+      // early or hang forever.
+      const IDLE_TIMEOUT_MS = 120000;
+      const controller = new AbortController();
+      let idleTimer;
+      const resetIdle = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => controller.abort(), IDLE_TIMEOUT_MS);
+      };
+
+      let body;
+      try {
+        const token = localStorage.getItem('authToken');
+        resetIdle();
+        const response = await fetch(`${API_URL}/backup/restore`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+          signal: controller.signal
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let text = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          resetIdle();
+          text += decoder.decode(value, { stream: true });
         }
-      });
+        body = JSON.parse(text.trim());
+      } finally {
+        clearTimeout(idleTimer);
+      }
+
+      if (!body.ok) {
+        throw new Error(body.details || body.error || 'Failed to restore backup');
+      }
 
       setStatus({ type: 'success', message: 'Backup restored successfully! Please refresh the page.' });
 
@@ -490,10 +526,10 @@ const BackupRestore = ({ isDarkTheme }) => {
 
     } catch (error) {
       console.error('Error restoring backup:', error);
-      setStatus({
-        type: 'error',
-        message: error.response?.data?.error || 'Failed to restore backup'
-      });
+      const message = error.name === 'AbortError'
+        ? 'Restore timed out — the server stopped responding. Check the server logs; the restore may have partially completed.'
+        : error.message || 'Failed to restore backup';
+      setStatus({ type: 'error', message });
     } finally {
       setRestoring(false);
       event.target.value = '';

@@ -168,6 +168,24 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
   const config = getDbConfig();
   const extractDir = path.join(os.tmpdir(), `itsnotes-restore-${Date.now()}`);
 
+  // A large restore can run for minutes. Stream whitespace heartbeats so the
+  // connection never idles out at a proxy and the client can apply an idle
+  // timeout instead of a blind total-request timeout. The final response body
+  // is a single JSON object (leading whitespace is ignored by JSON.parse).
+  req.setTimeout(3600000);
+  res.setTimeout(3600000);
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+  const heartbeat = setInterval(() => res.write(' '), 15000);
+  const sendFinal = (statusOk, payload) => {
+    clearInterval(heartbeat);
+    res.write(JSON.stringify({ ...payload, ok: statusOk }));
+    res.end();
+  };
+
   try {
     console.log('[RESTORE] Extracting backup archive:', uploadedFile.originalname);
     console.log('[RESTORE] File size:', uploadedFile.size, 'bytes');
@@ -231,7 +249,7 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
     await fs.unlink(uploadedFile.path);
     await fs.rm(extractDir, { recursive: true, force: true });
 
-    res.json({
+    sendFinal(true, {
       message: 'Backup restored successfully',
       filename: uploadedFile.originalname,
       uploadsRestored
@@ -241,7 +259,7 @@ router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) =
     console.error('[RESTORE] Error restoring backup:', error);
     try { await fs.unlink(uploadedFile.path); } catch {}
     try { await fs.rm(extractDir, { recursive: true, force: true }); } catch {}
-    res.status(500).json({ error: 'Failed to restore backup', details: error.message });
+    sendFinal(false, { error: 'Failed to restore backup', details: error.message });
   }
 });
 
