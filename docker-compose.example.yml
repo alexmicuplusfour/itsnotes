@@ -5,14 +5,13 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: itsnotesuser
+      POSTGRES_PASSWORD: change-this-password
+      POSTGRES_DB: itsnotes
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db_init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U itsnotesuser -d itsnotes"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,14 +22,20 @@ services:
     depends_on:
       itsnotes-db:
         condition: service_healthy
-    env_file: .env
     environment:
       NODE_ENV: production
       PORT: 5000
       DB_HOST: itsnotes-db
       DB_PORT: 5432
+      DB_USER: itsnotesuser
+      DB_PASSWORD: change-this-password
+      DB_NAME: itsnotes
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       BACKUP_PATH: /app/backups
+      # Optional — set a fixed auth secret (otherwise auto-generated on first run):
+      # JWT_SECRET: generate-with-openssl-rand-hex-32
+      # Optional — AI features:
+      # OPENAI_API_KEY: sk-...
     volumes:
       - attachments_data:/app/uploads
       - backups_data:/app/backups

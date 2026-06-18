@@ -43,16 +43,13 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
 
 ## Setup
 
-Requires Docker and Docker Compose.
+Requires Docker and Docker Compose. No clone needed — the compose file pulls prebuilt images from GHCR. Grab it and rename it:
 
 ```bash
-git clone https://github.com/alexmicuplusfour/itsnotes
-cd itsnotes
-cp .env.example .env
-cp docker-compose.example.yml docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/docker-compose.example.yml
 ```
 
-Edit `.env` to set your database credentials, then:
+Edit the database credentials (and any optional settings) directly in `docker-compose.yml`, then:
 
 ```bash
 docker compose up -d
@@ -62,18 +59,18 @@ The app will be available on port 80.
 
 ### With Caddy (HTTPS + domain)
 
-To run with automatic HTTPS via Caddy:
+To run with automatic HTTPS via Caddy, grab the Caddy compose file and a Caddyfile:
 
 ```bash
-cp docker-compose.caddy.example.yml docker-compose.yml
-cp Caddyfile.example Caddyfile
+curl -o docker-compose.yml https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/docker-compose.caddy.example.yml
+curl -o Caddyfile https://raw.githubusercontent.com/alexmicuplusfour/itsnotes/master/Caddyfile.example
 ```
 
-Edit `Caddyfile` to set your domain, then `docker compose up -d --build`. Caddy handles SSL certificates automatically.
+Edit `Caddyfile` to set your domain and the credentials in `docker-compose.yml`, then `docker compose up -d`. Caddy handles SSL certificates automatically.
 
 ## Configuration
 
-All configuration is via `.env`. See `.env.example` for available options.
+All configuration is via the `environment:` blocks in `docker-compose.yml`. See `.env.example` for the full list of available options.
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
