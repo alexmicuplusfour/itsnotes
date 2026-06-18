@@ -2,7 +2,21 @@
 
 # itsnotes
 
-A self-hosted Google Keep replacement with rich text, tagging, image attachments, and real-time sync across clients. Built with React, Node.js, PostgreSQL, and Socket.io.
+A self-hosted Google Keep alternative. It sticks to the familiar masonry layout but overhauls how you actually navigate and organize a large amount of notes.
+
+Instead of an endless wall of text, the feed is broken down by month markers. There are quick-search panels for colors and tags, a basic folder implementation, and a proper list view. It also handles data import natively, so moving off Keep or importing text files is straightforward.
+
+**Features:**
+
+- **Better navigation:** The timeline has month markers to break up the list. There are quick-access panels for colors, tags, saved searches, and a calendar.
+- **More ways to organize:** Basic folders, internal note linking, and the ability to rename color labels to whatever makes sense to you.
+- **View modes:** The standard masonry grid, a stacked view, and a proper dense list view.
+- **Customization:** A heavy settings modal to tweak layouts, page backgrounds, and form behaviors.
+- **Easy imports:** Drop in a Google Takeout `.zip` to import Keep data, or bulk upload `.txt` and `.md` files directly.
+- **Quality of life:** Built-in note history for revisions, plus automatic metadata fetching for books and movies.
+- **Optional AI stuff:** Hooks for auto-tagging and reminder parsing, plus a built-in MCP server so external AI clients can query your database.
+
+Built with React, Node.js, PostgreSQL, and Socket.io.
 
 ![grid-dark](docs/screenshots/grid-dark.png)
 
