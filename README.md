@@ -6,6 +6,8 @@ A self-hosted Google Keep alternative. It sticks to the familiar masonry layout 
 
 Instead of an endless wall of text, the feed is broken down by month markers. There are quick-search panels for colors and tags, a basic folder implementation, and a proper list view. It also handles data import natively, so moving off Keep or importing text files is straightforward.
 
+**[Try the demo →](https://try.itsnotes.app)**
+
 **Features:**
 
 - **Better navigation:** The timeline has month markers to break up the list. There are quick-access panels for colors, tags, saved searches, and a calendar.
