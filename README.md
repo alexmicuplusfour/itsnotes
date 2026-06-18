@@ -55,10 +55,12 @@ cp docker-compose.example.yml docker-compose.yml
 Edit `.env` to set your database credentials, then:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-The app will be available on port 80.
+This pulls prebuilt `amd64`/`arm64` images from GHCR. The app will be available on port 80.
+
+> Building from source instead? Replace the `image:` lines for `itsnotes-server` and `itsnotes-client` with `build: ./server` and `build: ./client`, then run `docker compose up -d --build`.
 
 ### With Caddy (HTTPS + domain)
 

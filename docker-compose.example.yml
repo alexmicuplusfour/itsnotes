@@ -18,7 +18,7 @@ services:
       retries: 5
 
   itsnotes-server:
-    build: ./server
+    image: ghcr.io/alexmicuplusfour/itsnotes-server:latest
     restart: unless-stopped
     depends_on:
       itsnotes-db:
@@ -36,7 +36,7 @@ services:
       - backups_data:/app/backups
 
   itsnotes-client:
-    build: ./client
+    image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
     restart: unless-stopped
     depends_on:
       - itsnotes-server
