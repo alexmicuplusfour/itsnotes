@@ -60,8 +60,6 @@ docker compose up -d
 
 This pulls prebuilt `amd64`/`arm64` images from GHCR. The app will be available on port 80.
 
-> Building from source instead? Replace the `image:` lines for `itsnotes-server` and `itsnotes-client` with `build: ./server` and `build: ./client`, then run `docker compose up -d --build`.
-
 ### With Caddy (HTTPS + domain)
 
 To run with automatic HTTPS via Caddy:
