@@ -575,6 +575,7 @@ const SettingsModal = ({ onClose }) => {
     pageBackgroundEnabled,
     setPageBackgroundEnabled,
     regenerateBackground,
+    pageBgPreview,
     setAiEnabled,
     notesFontFamily,
     notesBodyFontSize,
@@ -1455,20 +1456,32 @@ const SettingsModal = ({ onClose }) => {
                         <Label style={{ marginBottom: 0 }}>Enable page backgrounds</Label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           {pageBackgroundEnabled && (
-                            <button
-                              type="button"
-                              onClick={regenerateBackground}
-                              title="New gradient"
-                              aria-label="New gradient"
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                width: '30px', height: '30px', padding: 0, cursor: 'pointer',
-                                color: 'var(--text-color)', background: 'var(--hover-color)',
-                                border: '1px solid var(--border-color)', borderRadius: '8px',
-                              }}
-                            >
-                              <Icon name="refresh" size={15} />
-                            </button>
+                            <>
+                              {pageBgPreview && (
+                                <span
+                                  aria-hidden="true"
+                                  style={{
+                                    width: '30px', height: '30px', borderRadius: '8px',
+                                    backgroundImage: pageBgPreview, backgroundColor: 'var(--hover-color)',
+                                    border: '1px solid var(--border-color)', flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={regenerateBackground}
+                                title="New gradient"
+                                aria-label="New gradient"
+                                style={{
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  width: '30px', height: '30px', padding: 0, cursor: 'pointer',
+                                  color: 'var(--text-color)', background: 'var(--hover-color)',
+                                  border: '1px solid var(--border-color)', borderRadius: '8px',
+                                }}
+                              >
+                                <Icon name="refresh" size={15} />
+                              </button>
+                            </>
                           )}
                           <Switch
                             id="page-background-toggle"
