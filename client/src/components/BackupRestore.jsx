@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import api, { API_URL } from '../services/api';
 import Icon from './Icons';
 import Switch from './Switch';
+import { Button, SectionTitle } from './settings/styles';
 import { useAuth } from '../contexts/AuthContext';
 
 const Container = styled.div`
@@ -17,10 +18,11 @@ const Section = styled.div`
   gap: 12px;
 `;
 
-const SectionTitle = styled.h4`
-  font-size: 16px;
-  font-weight: 500;
-  margin: 0;
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 `;
 
 const Description = styled.p`
@@ -34,32 +36,6 @@ const ButtonGroup = styled.div`
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-`;
-
-const Button = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--foreground-color);
-  color: var(--text-color);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover:not(:disabled) {
-    background-color: ${props => props.$primary ? 'var(--primary-hover-color)' : 'var(--menu-item-hover)'};
-    border-color: ${props => props.$primary ? 'var(--primary-hover-color)' : 'var(--border-hover-color)'};
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
 `;
 
 const DemoNotice = styled.div`
@@ -112,10 +88,6 @@ const StatusMessage = styled.div`
   gap: 8px;
 `;
 
-const HiddenFileInput = styled.input`
-  display: none;
-`;
-
 const LoadingSpinner = styled.div`
   width: 16px;
   height: 16px;
@@ -127,17 +99,6 @@ const LoadingSpinner = styled.div`
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
-`;
-
-const SystemInfo = styled.div`
-  padding: 12px 16px;
-  border-radius: 6px;
-  background-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)'};
-  font-size: 13px;
-  color: var(--text-secondary-color);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 `;
 
 const Divider = styled.div`
@@ -264,26 +225,37 @@ const FileActions = styled.div`
   flex-shrink: 0;
 `;
 
-const SmallButton = styled.button`
-  padding: 5px 10px;
-  border-radius: 5px;
-  border: 1px solid ${props => props.$danger ? 'rgba(244, 67, 54, 0.4)' : 'var(--foreground-color)'};
-  color: ${props => props.$danger ? 'rgb(244, 67, 54)' : 'var(--text-color)'};
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s;
-
-  &:hover {
-    background-color: ${props => props.$danger ? 'rgba(244, 67, 54, 0.08)' : 'var(--menu-item-hover)'};
-  }
-`;
-
 const EmptyFiles = styled.div`
   font-size: 13px;
   color: var(--text-secondary-color);
   padding: 12px 0;
+`;
+
+const HiddenFileInput = styled.input`
+  display: none;
+`;
+
+const RestoreLink = styled.button`
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text-secondary-color);
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover:not(:disabled) {
+    color: var(--text-color);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 `;
 
 const formatFileSize = (bytes) => {
@@ -296,17 +268,17 @@ const formatDate = (isoString) => new Date(isoString).toLocaleString();
 
 const BackupRestore = ({ isDarkTheme }) => {
   const { isDemoMode, logout } = useAuth();
-  const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [restoringFile, setRestoringFile] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [status, setStatus] = useState(null);
   const [systemInfo, setSystemInfo] = useState(null);
-  const fileInputRef = useRef(null);
 
   const [autoConfig, setAutoConfig] = useState({ enabled: false, intervalHours: '24', retentionCount: '5' });
   const [autoFiles, setAutoFiles] = useState([]);
   const [autoBackupPath, setAutoBackupPath] = useState('');
   const [backingUpNow, setBackingUpNow] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchSystemInfo();
@@ -407,80 +379,15 @@ const BackupRestore = ({ isDarkTheme }) => {
     }
   };
 
-  const handleExportBackup = async () => {
-    setLoading(true);
-    setStatus(null);
-
-    try {
-      const response = await api.post('/backup/export', {}, {
-        responseType: 'blob'
-      });
-
-      const contentDisposition = response.headers['content-disposition'];
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      let filename = `itsnotes-backup-${timestamp}.zip`;
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match) filename = match[1];
-      }
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      setStatus({ type: 'success', message: 'Backup downloaded successfully!' });
-    } catch (error) {
-      console.error('Error exporting backup:', error);
-      setStatus({
-        type: 'error',
-        message: error.response?.data?.error || 'Failed to export backup'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImportBackup = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (!file.name.endsWith('.zip')) {
-      setStatus({ type: 'error', message: 'Please select a .zip backup file' });
-      return;
-    }
-
-    const confirmed = window.confirm(
-      '⚠️ WARNING: This will replace ALL data in your database and uploads folder with the backup.\n\n' +
-      'This action cannot be undone. Make sure you have a current backup before proceeding.\n\n' +
-      'Do you want to continue?'
-    );
-
-    if (!confirmed) {
-      event.target.value = '';
-      return;
-    }
-
+  // Drive a restore request to completion. The server streams whitespace
+  // heartbeats while the (potentially long) restore runs, then ends with a
+  // single JSON object. We read the stream and apply an idle timeout — abort
+  // only if no bytes arrive for a while — rather than a blind total-request
+  // timeout that would either give up too early or hang forever.
+  const runRestore = async (url, requestBody) => {
     setRestoring(true);
     setStatus(null);
-
     try {
-      const formData = new FormData();
-      formData.append('backup', file);
-
-      // The server streams whitespace heartbeats while the (potentially long)
-      // restore runs, then ends with a single JSON object. We read the stream
-      // and apply an idle timeout — abort only if no bytes arrive for a while —
-      // rather than a blind total-request timeout that would either give up too
-      // early or hang forever.
       const IDLE_TIMEOUT_MS = 120000;
       const controller = new AbortController();
       let idleTimer;
@@ -493,10 +400,10 @@ const BackupRestore = ({ isDarkTheme }) => {
       try {
         const token = localStorage.getItem('authToken');
         resetIdle();
-        const response = await fetch(`${API_URL}/backup/restore`, {
+        const response = await fetch(url, {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: formData,
+          body: requestBody,
           signal: controller.signal
         });
 
@@ -519,11 +426,7 @@ const BackupRestore = ({ isDarkTheme }) => {
       }
 
       setStatus({ type: 'success', message: 'Backup restored successfully! Please refresh the page.' });
-
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
+      setTimeout(() => window.location.reload(), 2000);
     } catch (error) {
       console.error('Error restoring backup:', error);
       const message = error.name === 'AbortError'
@@ -532,6 +435,56 @@ const BackupRestore = ({ isDarkTheme }) => {
       setStatus({ type: 'error', message });
     } finally {
       setRestoring(false);
+    }
+  };
+
+  const handleRestoreAutoBackup = async (filename) => {
+    const confirmed = window.confirm(
+      `⚠️ WARNING: This will replace ALL data in your database and uploads folder with the backup "${filename}".\n\n` +
+      'This action cannot be undone. Make sure you have a current backup before proceeding.\n\n' +
+      'Do you want to continue?'
+    );
+    if (!confirmed) return;
+
+    setRestoringFile(filename);
+    try {
+      await runRestore(`${API_URL}/backup/auto/restore/${encodeURIComponent(filename)}`);
+    } finally {
+      setRestoringFile(null);
+    }
+  };
+
+  const handleImportBackup = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.zip')) {
+      setStatus({ type: 'error', message: 'Please select a .zip backup file' });
+      event.target.value = '';
+      return;
+    }
+
+    const confirmed = window.confirm(
+      '⚠️ WARNING: This will replace ALL data in your database and uploads folder with the backup.\n\n' +
+      'This action cannot be undone. Make sure you have a current backup before proceeding.\n\n' +
+      'Do you want to continue?'
+    );
+    if (!confirmed) {
+      event.target.value = '';
+      return;
+    }
+
+    setRestoringFile('__upload__');
+    try {
+      const formData = new FormData();
+      formData.append('backup', file);
+      await runRestore(`${API_URL}/backup/restore`, formData);
+    } finally {
+      setRestoringFile(null);
       event.target.value = '';
     }
   };
@@ -549,7 +502,7 @@ const BackupRestore = ({ isDarkTheme }) => {
 
     try {
       await api.post('/backup/reset');
-      setStatus({ type: 'success', message: 'Reset complete. Reloading...' });
+      setStatus({ type: 'success', message: 'Reset complete. Reloading...', section: 'reset' });
       // The reset wiped the user account and rotated the JWT secret, so this
       // session is dead — drop the stored token before reloading so we land on
       // the setup screen instead of a broken authenticated state.
@@ -559,12 +512,18 @@ const BackupRestore = ({ isDarkTheme }) => {
       console.error('Error resetting:', error);
       setStatus({
         type: 'error',
-        message: error.response?.data?.error || 'Failed to reset'
+        message: error.response?.data?.error || 'Failed to reset',
+        section: 'reset'
       });
     } finally {
       setResetting(false);
     }
   };
+
+  // While a backup, restore, or reset is in flight, lock down every action in
+  // the backup section so the user can't kick off a conflicting operation.
+  const busy = restoring || backingUpNow || resetting;
+  const unavailable = systemInfo && !systemInfo.available;
 
   return (
     <Container>
@@ -580,18 +539,38 @@ const BackupRestore = ({ isDarkTheme }) => {
         </DemoNotice>
       )}
 
-      {/* Auto Backup */}
+      {/* Backup */}
       <Section>
-        <SectionTitle>Auto Backup</SectionTitle>
+        <SectionTitle>Backup</SectionTitle>
         <Description>
           Automatically back up your database and uploads on a schedule. Old backups beyond the retention limit are deleted automatically.
         </Description>
 
+        {systemInfo && !systemInfo.available && (
+          <WarningBox $isDark={isDarkTheme}>
+            <WarningIcon>
+              <Icon name="help" size={20} />
+            </WarningIcon>
+            <div>
+              <strong>PostgreSQL tools not available.</strong> Backup and restore require
+              <code style={{ margin: '0 4px', padding: '2px 6px', backgroundColor: 'var(--search-bg-color)', borderRadius: '4px' }}>
+                pg_dump
+              </code>
+              and
+              <code style={{ margin: '0 4px', padding: '2px 6px', backgroundColor: 'var(--search-bg-color)', borderRadius: '4px' }}>
+                psql
+              </code>
+              to be installed on the server.
+            </div>
+          </WarningBox>
+        )}
+
         <ToggleRow>
-          <ToggleLabel>Enable auto backup</ToggleLabel>
+          <ToggleLabel>Enable Auto Backup</ToggleLabel>
           <Switch
             checked={autoConfig.enabled}
             onChange={handleAutoToggle}
+            disabled={isDemoMode || busy}
           />
         </ToggleRow>
 
@@ -599,7 +578,7 @@ const BackupRestore = ({ isDarkTheme }) => {
           <ConfigGrid>
             <ConfigRow>
               <ConfigLabel>Interval</ConfigLabel>
-              <Select value={autoConfig.intervalHours} onChange={handleIntervalChange}>
+              <Select value={autoConfig.intervalHours} onChange={handleIntervalChange} disabled={isDemoMode || busy}>
                 <option value="6">Every 6 hours</option>
                 <option value="12">Every 12 hours</option>
                 <option value="24">Daily</option>
@@ -609,7 +588,7 @@ const BackupRestore = ({ isDarkTheme }) => {
             </ConfigRow>
             <ConfigRow>
               <ConfigLabel>Keep last</ConfigLabel>
-              <Select value={autoConfig.retentionCount} onChange={handleRetentionChange}>
+              <Select value={autoConfig.retentionCount} onChange={handleRetentionChange} disabled={isDemoMode || busy}>
                 <option value="3">3 backups</option>
                 <option value="5">5 backups</option>
                 <option value="10">10 backups</option>
@@ -629,7 +608,7 @@ const BackupRestore = ({ isDarkTheme }) => {
         <ButtonGroup>
           <Button
             onClick={handleBackupNow}
-            disabled={isDemoMode || backingUpNow || (systemInfo && !systemInfo.available)}
+            disabled={isDemoMode || busy || unavailable}
           >
             {backingUpNow ? (
               <>
@@ -655,12 +634,19 @@ const BackupRestore = ({ isDarkTheme }) => {
                     <FileMeta>{formatFileSize(file.size)} · {formatDate(file.createdAt)}</FileMeta>
                   </FileInfo>
                   <FileActions>
-                    <SmallButton onClick={() => handleDownloadAutoBackup(file.filename)}>
+                    <Button
+                      $size="small"
+                      onClick={() => handleRestoreAutoBackup(file.filename)}
+                      disabled={isDemoMode || busy || unavailable}
+                    >
+                      {restoringFile === file.filename ? 'Restoring...' : 'Restore'}
+                    </Button>
+                    <Button $size="small" onClick={() => handleDownloadAutoBackup(file.filename)} disabled={busy}>
                       Download
-                    </SmallButton>
-                    <SmallButton $danger onClick={() => handleDeleteAutoBackup(file.filename)}>
+                    </Button>
+                    <Button $size="small" $color="danger" onClick={() => handleDeleteAutoBackup(file.filename)} disabled={busy}>
                       Delete
-                    </SmallButton>
+                    </Button>
                   </FileActions>
                 </FileRow>
               ))}
@@ -669,131 +655,48 @@ const BackupRestore = ({ isDarkTheme }) => {
         ) : (
           <EmptyFiles>No backups yet</EmptyFiles>
         )}
-      </Section>
 
-      <Divider />
-
-      {/* Manual Export / Restore / System Info */}
-      <Section>
-        <SectionTitle>Database Backup & Restore</SectionTitle>
-        <Description>
-          Create a complete backup of your database and uploaded files, or restore from a previous backup.
-          This includes all notes, tags, attachments, settings, and other data.
-        </Description>
-
-        {systemInfo && !systemInfo.available && (
-          <WarningBox $isDark={isDarkTheme}>
-            <WarningIcon>
-              <Icon name="help" size={20} />
-            </WarningIcon>
-            <div>
-              <strong>PostgreSQL tools not available.</strong> The backup/restore functionality requires
-              <code style={{ margin: '0 4px', padding: '2px 6px', backgroundColor: 'var(--search-bg-color)', borderRadius: '4px' }}>
-                pg_dump
-              </code>
-              and
-              <code style={{ margin: '0 4px', padding: '2px 6px', backgroundColor: 'var(--search-bg-color)', borderRadius: '4px' }}>
-                psql
-              </code>
-              to be installed on the server.
-            </div>
-          </WarningBox>
-        )}
-
-        {systemInfo && (
-          <SystemInfo $isDark={isDarkTheme}>
-            <div><strong>Mode:</strong> {systemInfo.mode === 'docker' ? `Docker (${systemInfo.dockerContainer})` : 'Local'}</div>
-            <div><strong>Database:</strong> {systemInfo.database}</div>
-            <div><strong>Host:</strong> {systemInfo.host}:{systemInfo.port}</div>
-            <div><strong>pg_dump:</strong> {systemInfo.pgDumpAvailable ? '✓ Available' : '✗ Not available'}</div>
-            <div><strong>psql:</strong> {systemInfo.psqlAvailable ? '✓ Available' : '✗ Not available'}</div>
-          </SystemInfo>
-        )}
-      </Section>
-
-      <Section>
-        <SectionTitle>Export Backup</SectionTitle>
-        <Description>
-          Download a zip archive containing a full database dump and your uploads folder. Store this file in a safe location.
-        </Description>
-        <ButtonGroup>
-          <Button
-            onClick={handleExportBackup}
-            disabled={isDemoMode || loading || restoring || (systemInfo && !systemInfo.available)}
-            $primary
-          >
-            {loading ? (
-              <>
-                <LoadingSpinner />
-                Exporting...
-              </>
-            ) : (
-              <>
-                Export Backup
-              </>
-            )}
-          </Button>
-        </ButtonGroup>
-      </Section>
-
-      <Section>
-        <SectionTitle>Restore Backup</SectionTitle>
-        <Description>
-          Restore from a previous backup zip (.zip). This will replace all current database data and uploaded files.
-        </Description>
-        <WarningBox $isDark={isDarkTheme}>
-          <WarningIcon>
-            <Icon name="help" size={20} />
-          </WarningIcon>
-          <div>
-            <strong>Warning:</strong> Restoring a backup will completely replace all data in your database and uploads folder.
-            Make sure to export a current backup before proceeding.
-          </div>
-        </WarningBox>
-        <ButtonGroup>
-          <Button
-            onClick={handleImportBackup}
-            disabled={isDemoMode || loading || restoring || (systemInfo && !systemInfo.available)}
-          >
-            {restoring ? (
-              <>
-                <LoadingSpinner />
-                Restoring...
-              </>
-            ) : (
-              <>
-                Restore Backup ...
-              </>
-            )}
-          </Button>
-        </ButtonGroup>
+        <RestoreLink
+          onClick={handleImportBackup}
+          disabled={isDemoMode || busy || unavailable}
+        >
+          {restoringFile === '__upload__' ? (
+            <>
+              <LoadingSpinner />
+              Restoring…
+            </>
+          ) : (
+            'Restore from a backup file…'
+          )}
+        </RestoreLink>
         <HiddenFileInput
           ref={fileInputRef}
           type="file"
           accept=".zip"
           onChange={handleFileChange}
         />
+
+        {status && status.section !== 'reset' && (
+          <StatusMessage $error={status.type === 'error'}>
+            <Icon
+              name={status.type === 'error' ? 'close' : 'check'}
+              size={18}
+            />
+            {status.message}
+          </StatusMessage>
+        )}
       </Section>
 
+      <Divider />
+
       <Section>
-        <SectionTitle>Reset</SectionTitle>
-        <Description>
-          Permanently delete all data in the database and uploads folder. This cannot be undone.
-        </Description>
-        <WarningBox $isDark={isDarkTheme}>
-          <WarningIcon>
-            <Icon name="help" size={20} />
-          </WarningIcon>
-          <div>
-            <strong>Danger:</strong> This will wipe everything — all notes, tags, attachments, settings, and uploaded files.
-            Export a backup first if you want to keep your data.
-          </div>
-        </WarningBox>
-        <ButtonGroup>
+        <SectionHeader>
+          <SectionTitle>Reset</SectionTitle>
           <Button
             onClick={handleReset}
-            disabled={isDemoMode || loading || restoring || resetting}
-            style={{ borderColor: 'rgba(244, 67, 54, 0.5)', color: 'rgb(244, 67, 54)' }}
+            disabled={isDemoMode || busy}
+            $color="danger"
+            style={{ width: 'auto', whiteSpace: 'nowrap' }}
           >
             {resetting ? (
               <>
@@ -806,18 +709,30 @@ const BackupRestore = ({ isDarkTheme }) => {
               </>
             )}
           </Button>
-        </ButtonGroup>
-      </Section>
+        </SectionHeader>
+        <Description>
+          Permanently delete all data in the database and uploads folder. This cannot be undone.
+        </Description>
+        <WarningBox $isDark={isDarkTheme}>
+          <WarningIcon>
+            <Icon name="help" size={20} />
+          </WarningIcon>
+          <div>
+            <strong>Danger:</strong> This will wipe everything — all notes, tags, attachments, settings, and uploaded files.
+            Export a backup first if you want to keep your data.
+          </div>
+        </WarningBox>
 
-      {status && (
-        <StatusMessage $error={status.type === 'error'}>
-          <Icon
-            name={status.type === 'error' ? 'close' : 'check'}
-            size={18}
-          />
-          {status.message}
-        </StatusMessage>
-      )}
+        {status && status.section === 'reset' && (
+          <StatusMessage $error={status.type === 'error'}>
+            <Icon
+              name={status.type === 'error' ? 'close' : 'check'}
+              size={18}
+            />
+            {status.message}
+          </StatusMessage>
+        )}
+      </Section>
     </Container>
   );
 };

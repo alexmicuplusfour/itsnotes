@@ -4,18 +4,17 @@ const fs = require('fs').promises;
 const path = require('path');
 const multer = require('multer');
 const os = require('os');
-const archiver = require('archiver');
 const unzipper = require('unzipper');
 const settingsService = require('../services/settings');
 const backupScheduler = require('../services/backupScheduler');
 const { blockInDemo } = require('../middleware/demoGuard');
 const { rotateJwtSecret, resetUsersExistCache } = require('../middleware/auth');
-const { execFileAsync, spawnToFile } = require('../utils/childProcess');
+const { execFileAsync } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
 const getAutoBackupPath = () => process.env.BACKUP_PATH || path.join(__dirname, '../../backups');
 
-// Configure multer for zip file uploads
+// Configure multer for zip file uploads (restore-from-file)
 const upload = multer({
   dest: os.tmpdir(),
   limits: {
@@ -43,27 +42,9 @@ const getDbConfig = () => {
   };
 };
 
-// pg_dump args common to docker + native modes. The DB credentials reach
-// pg_dump as argv (no shell), and PGPASSWORD is passed via env on the native
-// path — so special characters in DB_PASSWORD/DB_NAME/etc. are safe.
-const PG_DUMP_FLAGS = ['--clean', '--if-exists', '--no-owner', '--no-privileges'];
-
-async function runPgDump(config, outPath) {
-  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
-  if (dockerContainer) {
-    await spawnToFile('docker', [
-      'exec', dockerContainer,
-      'pg_dump', '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
-    ], outPath);
-  } else {
-    const pgDumpPath = process.env.PG_DUMP_PATH || 'pg_dump';
-    await spawnToFile(pgDumpPath, [
-      '-h', config.host, '-p', String(config.port),
-      '-U', config.user, '-d', config.database, ...PG_DUMP_FLAGS,
-    ], outPath, { env: { ...process.env, PGPASSWORD: config.password } });
-  }
-}
-
+// The DB credentials reach psql as argv (no shell), and PGPASSWORD is passed
+// via env on the native path — so special characters in DB_PASSWORD/DB_NAME/etc.
+// are safe.
 async function runPsqlFile(config, sqlFilePath) {
   const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   if (dockerContainer) {
@@ -102,166 +83,6 @@ async function copyDir(src, dest) {
     }
   }
 }
-
-// POST /api/backup/export - Create and download backup zip (DB + uploads)
-router.post('/export', async (req, res) => {
-  const config = getDbConfig();
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const zipFilename = `itsnotes-backup-${timestamp}.zip`;
-  const tempSqlPath = path.join(os.tmpdir(), `itsnotes-db-${timestamp}.sql`);
-
-  try {
-    console.log('[BACKUP] Starting export...');
-
-    await runPgDump(config, tempSqlPath);
-    console.log('[BACKUP] SQL dump created');
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
-
-    const archive = archiver('zip', { zlib: { level: 6 } });
-
-    archive.on('error', (err) => {
-      console.error('[BACKUP] Archive error:', err);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Error creating backup archive' });
-      }
-    });
-
-    archive.pipe(res);
-    archive.file(tempSqlPath, { name: 'database.sql' });
-
-    try {
-      await fs.access(UPLOADS_PATH);
-      archive.directory(UPLOADS_PATH, 'uploads');
-      console.log('[BACKUP] Including uploads folder');
-    } catch {
-      console.log('[BACKUP] No uploads folder found, skipping');
-    }
-
-    await archive.finalize();
-    console.log('[BACKUP] Export complete');
-
-    try {
-      await fs.unlink(tempSqlPath);
-    } catch (err) {
-      console.error('[BACKUP] Error cleaning up temp SQL file:', err);
-    }
-
-  } catch (error) {
-    console.error('[BACKUP] Error creating backup:', error);
-    try { await fs.unlink(tempSqlPath); } catch {}
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Failed to create backup', details: error.message });
-    }
-  }
-});
-
-// POST /api/backup/restore - Restore database and uploads from backup zip
-router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) => {
-  const uploadedFile = req.file;
-
-  if (!uploadedFile) {
-    return res.status(400).json({ error: 'No backup file uploaded' });
-  }
-
-  const config = getDbConfig();
-  const extractDir = path.join(os.tmpdir(), `itsnotes-restore-${Date.now()}`);
-
-  // A large restore can run for minutes. Stream whitespace heartbeats so the
-  // connection never idles out at a proxy and the client can apply an idle
-  // timeout instead of a blind total-request timeout. The final response body
-  // is a single JSON object (leading whitespace is ignored by JSON.parse).
-  req.setTimeout(3600000);
-  res.setTimeout(3600000);
-  res.writeHead(200, {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive'
-  });
-  const heartbeat = setInterval(() => res.write(' '), 15000);
-  const sendFinal = (statusOk, payload) => {
-    clearInterval(heartbeat);
-    res.write(JSON.stringify({ ...payload, ok: statusOk }));
-    res.end();
-  };
-
-  try {
-    console.log('[RESTORE] Extracting backup archive:', uploadedFile.originalname);
-    console.log('[RESTORE] File size:', uploadedFile.size, 'bytes');
-
-    await fs.mkdir(extractDir, { recursive: true });
-    await require('fs').createReadStream(uploadedFile.path)
-      .pipe(unzipper.Extract({ path: extractDir }))
-      .promise();
-
-    const sqlFilePath = path.join(extractDir, 'database.sql');
-    const extractedUploadsPath = path.join(extractDir, 'uploads');
-
-    try {
-      await fs.access(sqlFilePath);
-    } catch {
-      throw new Error('Backup archive does not contain database.sql');
-    }
-
-    // Restore database
-    console.log('[RESTORE] Restoring database...');
-    const result = await runPsqlFile(config, sqlFilePath);
-    if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
-    if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
-    console.log('[RESTORE] Database restored successfully');
-
-    // Re-initialize settings from the restored DB so process.env reflects the restored state
-    // without requiring a server restart
-    await settingsService.init();
-
-    // Restore uploads folder (full replace)
-    let uploadsRestored = false;
-    let extractedUploadsExists = false;
-    try {
-      await fs.access(extractedUploadsPath);
-      extractedUploadsExists = true;
-    } catch {}
-
-    if (extractedUploadsExists) {
-      console.log('[RESTORE] Restoring uploads folder...');
-      try {
-        // Clear existing contents without removing the directory itself (safe for Docker volumes)
-        try {
-          const existing = await fs.readdir(UPLOADS_PATH);
-          await Promise.all(
-            existing.map(entry => fs.rm(path.join(UPLOADS_PATH, entry), { recursive: true, force: true }))
-          );
-        } catch {
-          await fs.mkdir(UPLOADS_PATH, { recursive: true });
-        }
-        await copyDir(extractedUploadsPath, UPLOADS_PATH);
-        uploadsRestored = true;
-        console.log('[RESTORE] Uploads folder restored');
-      } catch (err) {
-        console.error('[RESTORE] Error restoring uploads folder:', err);
-      }
-    } else {
-      console.log('[RESTORE] No uploads folder in backup, skipping');
-    }
-
-    // Cleanup
-    await fs.unlink(uploadedFile.path);
-    await fs.rm(extractDir, { recursive: true, force: true });
-
-    sendFinal(true, {
-      message: 'Backup restored successfully',
-      filename: uploadedFile.originalname,
-      uploadsRestored
-    });
-
-  } catch (error) {
-    console.error('[RESTORE] Error restoring backup:', error);
-    try { await fs.unlink(uploadedFile.path); } catch {}
-    try { await fs.rm(extractDir, { recursive: true, force: true }); } catch {}
-    sendFinal(false, { error: 'Failed to restore backup', details: error.message });
-  }
-});
 
 // POST /api/backup/reset - Truncate all tables and clear uploads
 router.post('/reset', blockInDemo, async (req, res) => {
@@ -432,6 +253,127 @@ router.delete('/auto/files/:filename', async (req, res) => {
   } catch {
     res.status(404).json({ error: 'Backup file not found' });
   }
+});
+
+// Restore the database + uploads from a backup zip, streaming heartbeats to the
+// client while the (potentially long) restore runs. A large restore can run for
+// minutes, so we stream whitespace so the connection never idles out at a proxy
+// and the client can apply an idle timeout instead of a blind total-request
+// timeout. The final response body is a single JSON object (leading whitespace
+// is ignored by JSON.parse). When deleteSource is set, the zip is removed after
+// (used for the temp file multer wrote for an uploaded restore).
+async function streamRestoreFromZip(req, res, zipPath, displayName, { deleteSource = false } = {}) {
+  const config = getDbConfig();
+  const extractDir = path.join(os.tmpdir(), `itsnotes-restore-${Date.now()}`);
+
+  req.setTimeout(3600000);
+  res.setTimeout(3600000);
+  res.writeHead(200, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
+  const heartbeat = setInterval(() => res.write(' '), 15000);
+  const sendFinal = (statusOk, payload) => {
+    clearInterval(heartbeat);
+    res.write(JSON.stringify({ ...payload, ok: statusOk }));
+    res.end();
+  };
+  const cleanupSource = async () => {
+    if (deleteSource) { try { await fs.unlink(zipPath); } catch {} }
+  };
+
+  try {
+    console.log('[RESTORE] Extracting backup:', displayName);
+
+    await fs.mkdir(extractDir, { recursive: true });
+    await require('fs').createReadStream(zipPath)
+      .pipe(unzipper.Extract({ path: extractDir }))
+      .promise();
+
+    const sqlFilePath = path.join(extractDir, 'database.sql');
+    const extractedUploadsPath = path.join(extractDir, 'uploads');
+
+    try {
+      await fs.access(sqlFilePath);
+    } catch {
+      throw new Error('Backup archive does not contain database.sql');
+    }
+
+    console.log('[RESTORE] Restoring database...');
+    const result = await runPsqlFile(config, sqlFilePath);
+    if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
+    if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
+    console.log('[RESTORE] Database restored successfully');
+
+    // Re-initialize settings from the restored DB so process.env reflects the
+    // restored state without requiring a server restart
+    await settingsService.init();
+
+    // Restore uploads folder (full replace)
+    let uploadsRestored = false;
+    let extractedUploadsExists = false;
+    try {
+      await fs.access(extractedUploadsPath);
+      extractedUploadsExists = true;
+    } catch {}
+
+    if (extractedUploadsExists) {
+      console.log('[RESTORE] Restoring uploads folder...');
+      try {
+        // Clear existing contents without removing the directory itself (safe for Docker volumes)
+        try {
+          const existing = await fs.readdir(UPLOADS_PATH);
+          await Promise.all(
+            existing.map(entry => fs.rm(path.join(UPLOADS_PATH, entry), { recursive: true, force: true }))
+          );
+        } catch {
+          await fs.mkdir(UPLOADS_PATH, { recursive: true });
+        }
+        await copyDir(extractedUploadsPath, UPLOADS_PATH);
+        uploadsRestored = true;
+        console.log('[RESTORE] Uploads folder restored');
+      } catch (err) {
+        console.error('[RESTORE] Error restoring uploads folder:', err);
+      }
+    } else {
+      console.log('[RESTORE] No uploads folder in backup, skipping');
+    }
+
+    await fs.rm(extractDir, { recursive: true, force: true });
+    await cleanupSource();
+
+    sendFinal(true, { message: 'Backup restored successfully', filename: displayName, uploadsRestored });
+
+  } catch (error) {
+    console.error('[RESTORE] Error restoring backup:', error);
+    try { await fs.rm(extractDir, { recursive: true, force: true }); } catch {}
+    await cleanupSource();
+    sendFinal(false, { error: 'Failed to restore backup', details: error.message });
+  }
+}
+
+// POST /api/backup/restore - restore from an uploaded backup zip
+router.post('/restore', blockInDemo, upload.single('backup'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No backup file uploaded' });
+  }
+  await streamRestoreFromZip(req, res, req.file.path, req.file.originalname, { deleteSource: true });
+});
+
+// POST /api/backup/auto/restore/:filename - restore from a saved backup file
+router.post('/auto/restore/:filename', blockInDemo, async (req, res) => {
+  const filename = path.basename(req.params.filename);
+  if (!filename.startsWith('itsnotes-backup-') || !filename.endsWith('.zip')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const zipPath = path.join(getAutoBackupPath(), filename);
+  try {
+    await fs.access(zipPath);
+  } catch {
+    return res.status(404).json({ error: 'Backup file not found' });
+  }
+  await streamRestoreFromZip(req, res, zipPath, filename, { deleteSource: false });
 });
 
 // POST /api/backup/auto/now - trigger an immediate auto-backup

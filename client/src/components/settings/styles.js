@@ -1,4 +1,52 @@
-import styled from 'styled-components';
+import styled, { css } from 'styled-components';
+
+// Shared danger styling so red buttons look identical everywhere: red
+// text/border with a light red fill on hover.
+const DANGER_COLOR = 'rgb(244, 67, 54)';
+const DANGER_BORDER = 'rgba(244, 67, 54, 0.5)';
+const DANGER_HOVER_BG = 'rgba(244, 67, 54, 0.08)';
+
+const buttonSizes = {
+  large: css`
+    width: 100%;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+  `,
+  small: css`
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: nowrap;
+  `,
+};
+
+// Centralized button for the settings modal.
+// Variants: $color = 'default' (black) | 'danger' (red); $size = 'large' | 'small'.
+export const Button = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid ${props => (props.$color === 'danger' ? DANGER_BORDER : 'var(--foreground-color)')};
+  color: ${props => (props.$color === 'danger' ? DANGER_COLOR : 'var(--text-color)')};
+  ${props => buttonSizes[props.$size] || buttonSizes.large}
+
+  &:hover:not(:disabled) {
+    background-color: ${props => (props.$color === 'danger' ? DANGER_HOVER_BG : 'var(--menu-item-hover)')};
+    border-color: ${props => (props.$color === 'danger' ? DANGER_BORDER : 'var(--border-hover-color)')};
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
 
 export const SectionContainer = styled.div`
   margin-bottom: 40px;

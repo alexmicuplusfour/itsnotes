@@ -26,7 +26,8 @@ const SwitchContainer = styled.div`
   width: 34px;
   position: relative;
   flex-shrink: 0;
-  cursor: pointer;
+  cursor: ${props => props.$disabled ? 'not-allowed' : 'pointer'};
+  opacity: ${props => props.$disabled ? 0.5 : 1};
   @media (max-width: 768px) {
     width: 38px;
     height: 24px;
@@ -74,21 +75,23 @@ const SwitchSlider = styled.span`
   }
 `;
 
-const Switch = ({ checked, onChange, id, variant }) => {
+const Switch = ({ checked, onChange, id, variant, disabled }) => {
   const colors = getColors(variant);
-  
+
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (disabled) return;
     onChange(e);
   };
 
   return (
-    <SwitchContainer onClick={handleClick}>
+    <SwitchContainer onClick={handleClick} $disabled={disabled}>
       <SwitchInput
         id={id}
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => {
           e.stopPropagation();
         }}
