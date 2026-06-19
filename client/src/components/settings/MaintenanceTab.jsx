@@ -1,6 +1,7 @@
 import React from 'react';
 import styled from 'styled-components';
 import Switch from '../Switch';
+import Icon from '../Icons';
 import {
   SectionContainer,
   SectionTitle,
@@ -34,6 +35,9 @@ const CardHeader = styled.div`
 const CardTitle = styled.div`
   font-size: 15px;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 `;
 
 const Hint = styled.p`
@@ -74,7 +78,7 @@ const MaintenanceTab = ({ settings, onChange, commit }) => {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>Auto-empty trash</CardTitle>
+            <CardTitle><Icon name="deleteForever" size={18} />Auto-empty trash</CardTitle>
           </div>
           <Switch
             id="trash-cleanup-toggle"
@@ -113,7 +117,7 @@ const MaintenanceTab = ({ settings, onChange, commit }) => {
       <Card>
         <CardHeader>
           <div>
-            <CardTitle>Auto-archive old notes</CardTitle>
+            <CardTitle><Icon name="archive" size={18} />Auto-archive old notes</CardTitle>
           </div>
           <Switch
             id="auto-archive-toggle"
