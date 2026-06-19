@@ -160,7 +160,7 @@ export const useImageManager = () => {
       console.log(`[useImageManager] removeImage called with imageId: ${imageId} (type: ${typeof imageId})`);
       console.log(`[useImageManager] Current images state:`, images.map(img => ({ id: img.id, type: typeof img.id, name: img.name })));
       
-      const imageToRemove = images.find(img => img.id === imageId);
+      const imageToRemove = images.find(img => String(img.id) === String(imageId));
 
       if (!imageToRemove) {
           console.error(`[useImageManager] Image not found in current state. Looking for ID: ${imageId} (${typeof imageId})`);
@@ -198,9 +198,9 @@ export const useImageManager = () => {
       }
 
       // --- Always update local state ---
-      setImages(prev => prev.filter(img => img.id !== imageId));
+      setImages(prev => prev.filter(img => String(img.id) !== String(imageId)));
       // Also remove from unsaved list if it happens to be there
-      setUnsavedImageIds(prev => prev.filter(id => id !== imageId));
+      setUnsavedImageIds(prev => prev.filter(id => String(id) !== String(imageId)));
       setIsLoading(false);
       return true; // Indicate success
 

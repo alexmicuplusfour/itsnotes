@@ -653,7 +653,31 @@ const TiptapEditor = forwardRef(({
       if (transaction?.getMeta('addToHistory') === false) {
         return;
       }
-      
+
+      // An inline image removed by editor-native editing (backspace, cut,
+      // select-all-delete) must still clean up its note_images row and gallery
+      // entry. The trash button already drives that via its own event and tags
+      // its strip with `imageRemovalHandled`, so skip those to avoid double-firing.
+      if (transaction?.docChanged && !transaction.getMeta('imageRemovalHandled') && typeof onImageDelete === 'function') {
+        const collectIds = (doc) => {
+          const ids = new Set();
+          doc.descendants((node) => {
+            if (node.type.name === 'inlineImage') {
+              const id = node.attrs['data-image-id'];
+              if (id) ids.add(String(id));
+            }
+          });
+          return ids;
+        };
+        const before = collectIds(transaction.before);
+        if (before.size > 0) {
+          const after = collectIds(transaction.doc);
+          before.forEach((id) => {
+            if (!after.has(id)) onImageDelete({ imageId: id });
+          });
+        }
+      }
+
       const html = getCleanHTML(editor);
       if (html !== content) {
         // console.log("[TiptapEditor onUpdate] Content changed, emitting update:", JSON.stringify(html));

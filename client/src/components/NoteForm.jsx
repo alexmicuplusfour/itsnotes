@@ -1769,8 +1769,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         contentInputRef.current.removeInlineImageById?.(imageId);
       }
 
-      const imageIdAsNumber = parseInt(imageId, 10);
-      const success = await removeImage(imageIdAsNumber, note?.id);
+      const success = await removeImage(imageId, note?.id);
       if (success) {
         markAsModified();
       } else {

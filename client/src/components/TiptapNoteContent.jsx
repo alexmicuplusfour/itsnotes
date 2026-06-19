@@ -493,8 +493,11 @@ const TiptapNoteContent = React.memo(forwardRef(({
           }
         });
 
-        // Apply the transaction if we found inline images to remove
+        // Apply the transaction if we found inline images to remove. Tag it so
+        // the editor's onUpdate removal-detection doesn't also fire for this
+        // strip (the trash-button path already handles the row + gallery).
         if (hasChanges) {
+          transaction = transaction.setMeta('imageRemovalHandled', true);
           editor.view.dispatch(transaction);
           evictInlineImageUrl(imageId);
           console.log(`[TiptapNoteContent] Removed inline image(s) with ID ${imageId} from content`);

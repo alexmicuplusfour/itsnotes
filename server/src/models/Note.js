@@ -1444,7 +1444,46 @@ class Note {
       .update(updateData)
       .returning('*');
 
+    // Reconcile inline images with their rows: every note_images row is always
+    // inlined into the body (each add path inserts a data-image-id node), so a
+    // row whose id no longer appears in the saved body is an orphan — e.g. the
+    // user deleted the image node directly instead of via the trash button.
+    // Only runs when the body itself is part of this update.
+    if (noteData.content !== undefined) {
+      await Note.reconcileInlineImages(id, noteData.content);
+    }
+
     return result[0];
+  }
+
+  // Delete note_images rows for a note that are no longer referenced by a
+  // data-image-id in the body HTML. Skipped if the body still carries temp-
+  // placeholders (an unsaved-temp state) so freshly-added images aren't lost.
+  // Best-effort: never let cleanup failures break the save.
+  static async reconcileInlineImages(noteId, content) {
+    try {
+      const referenced = new Set();
+      const re = /data-image-id="([^"]+)"/g;
+      let match;
+      while ((match = re.exec(content || '')) !== null) {
+        referenced.add(match[1]);
+      }
+
+      if ([...referenced].some(refId => refId.startsWith('temp-'))) {
+        return;
+      }
+
+      const rows = await db('note_images').select('id').where('note_id', noteId);
+      const orphanIds = rows
+        .map(row => row.id)
+        .filter(rowId => !referenced.has(String(rowId)));
+
+      if (orphanIds.length > 0) {
+        await db('note_images').whereIn('id', orphanIds).del();
+      }
+    } catch (error) {
+      console.error(`Error reconciling inline images for note ${noteId}:`, error);
+    }
   }
 
   static async delete(id) {
