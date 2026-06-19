@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import api, { API_URL } from '../services/api';
 import Icon from './Icons';
 import Switch from './Switch';
-import { Button, SectionTitle } from './settings/styles';
+import { Button, SectionTitle, Select as BaseSelect } from './settings/styles';
 import { useAuth } from '../contexts/AuthContext';
 
 const Container = styled.div`
@@ -136,24 +136,9 @@ const ConfigLabel = styled.label`
   min-width: 70px;
 `;
 
-const Select = styled.select`
+const Select = styled(BaseSelect)`
   flex: 1;
-  padding: 10px;
-  border-radius: 4px;
-  background-color: var(--input-bg-color, transparent);
-  color: var(--text-color);
-  border: 1px solid var(--menu-item-separator-dark);
-  cursor: pointer;
-
-  &:focus {
-    outline: none;
-    border-color: var(--foreground-color);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
+  width: auto;
 `;
 
 const PathRow = styled.div`
