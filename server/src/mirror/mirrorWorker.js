@@ -51,8 +51,11 @@ const toAbs = (root, rel) => path.join(root, ...rel.split('/'));
 // library this loop would otherwise monopolize the single event-loop thread and
 // freeze the whole app for the duration of a sweep, so we pause to let pending
 // requests run every YIELD_EVERY notes. Sweeps are background work — trading a
-// little wall-clock time for a responsive app is the right call.
-const YIELD_EVERY = 25;
+// lot of wall-clock time for a responsive app is the right call: we yield often
+// and sleep a real beat each time so request handling reliably wins the thread.
+const YIELD_EVERY = 8;
+const YIELD_PAUSE_MS = 20;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Render every note, assign a unique rel_path, hash the file. Returns the desired
 // list (for the planner) plus a cache of rendered content keyed by note id.
@@ -78,7 +81,7 @@ async function buildDesired(notes, objectTitles) {
 
     if (++sinceYield >= YIELD_EVERY) {
       sinceYield = 0;
-      await new Promise((resolve) => setImmediate(resolve));
+      await sleep(YIELD_PAUSE_MS);
     }
   }
 
