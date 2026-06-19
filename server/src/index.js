@@ -5,6 +5,7 @@ const fs = require('fs');       // <--- Import File System module
 const path = require('path');     // <--- Import Path module
 const socketIo = require('socket.io');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const db = require('./db');
@@ -36,6 +37,12 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.SERVER_PORT || process.env.PORT || 5000;
+
+// The server always runs behind the nginx client container (and optionally
+// Caddy), which forward the real client IP in X-Forwarded-For. Trust one hop so
+// rate limiters key on the actual client rather than the proxy's container IP.
+// Override with TRUST_PROXY_HOPS when fronted by additional proxies.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 
 // --- Determine if HTTPS should be used ---
 const useHttps = process.env.USE_HTTPS === 'true';
@@ -154,6 +161,22 @@ app.use((req, res, next) => {
 
 // Public, unauthenticated liveness probe for container/orchestrator healthchecks.
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+
+// Throttle credential endpoints to blunt online password brute-forcing. The
+// app is single-user, so legitimate login/setup/change-password traffic is
+// rare — a tight cap costs nothing and stops automated guessing of the one
+// account password. Counts failures and successes alike; successful logins are
+// infrequent enough not to trip it.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many attempts. Please try again later.' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/setup', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
 
 // Route prefixes
 app.use('/api/auth', authRoutes);
