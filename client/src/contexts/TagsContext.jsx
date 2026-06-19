@@ -217,6 +217,10 @@ export const TagsProvider = ({ children }) => {
   useEffect(() => {
     const socket = socketService.connect();
 
+    // Bulk operations emit one note event per note, so coalesce the resulting
+    // tag-count reloads into a single request instead of firing one per note.
+    let noteChangeTimer = null;
+
     const handleTagCreated = (tag) => {
       console.log("Socket: Tag created event received", tag);
       
@@ -296,8 +300,12 @@ export const TagsProvider = ({ children }) => {
     // Use silent mode so consumers gated on `loading` (QuickAccess pinned
     // folders) don't flicker empty during the refetch.
     const handleNoteChange = () => {
-      console.log("Socket: Note changed, reloading tags to update counts");
-      loadTags({ silent: true });
+      if (noteChangeTimer) clearTimeout(noteChangeTimer);
+      noteChangeTimer = setTimeout(() => {
+        noteChangeTimer = null;
+        console.log("Socket: Note(s) changed, reloading tags to update counts");
+        loadTags({ silent: true });
+      }, 300);
     };
 
     // Register event listeners
@@ -311,6 +319,7 @@ export const TagsProvider = ({ children }) => {
 
     // Cleanup on unmount
     return () => {
+      if (noteChangeTimer) clearTimeout(noteChangeTimer);
       socket.off('tag_created', handleTagCreated);
       socket.off('tag_updated', handleTagUpdated);
       socket.off('tag_deleted', handleTagDeleted);

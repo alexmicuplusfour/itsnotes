@@ -1058,8 +1058,12 @@ export const NotesProvider = ({ children }) => {
     const updateNotesList = (prevList) => {
       if (!noteIdOuter) return prevList; // Don't modify if ID is missing
 
-      // If note should be removed (updateFn is null and we only have an ID)
+      // If note should be removed (updateFn is null and we only have an ID).
+      // Return the same array reference when the note isn't present so already-
+      // removed notes (e.g. bulk socket events after optimistic removal) don't
+      // trigger needless re-renders.
       if (!updateFn && !isObjectOuter) {
+        if (!prevList.some(n => n.id === noteIdOuter)) return prevList;
         return prevList.filter(n => n.id !== noteIdOuter);
       }
 
