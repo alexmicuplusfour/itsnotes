@@ -30,10 +30,6 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        with:
-          # Pin binfmt/QEMU: the default :latest ships QEMU v10.2.3, which
-          # SIGILLs ("Illegal instruction") during arm64 `npm ci` emulation.
-          image: tonistiigi/binfmt:qemu-v9.2.2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
