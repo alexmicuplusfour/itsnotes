@@ -315,6 +315,8 @@ export const TagsProvider = ({ children }) => {
     socket.on('note_created', handleNoteChange);
     socket.on('note_updated', handleNoteChange);
     socket.on('note_deleted', handleNoteChange);
+    socket.on('notes_bulk_updated', handleNoteChange);
+    socket.on('notes_bulk_deleted', handleNoteChange);
     socket.on('bulk_tags_updated', handleNoteChange);
 
     // Cleanup on unmount
@@ -326,6 +328,8 @@ export const TagsProvider = ({ children }) => {
       socket.off('note_created', handleNoteChange);
       socket.off('note_updated', handleNoteChange);
       socket.off('note_deleted', handleNoteChange);
+      socket.off('notes_bulk_updated', handleNoteChange);
+      socket.off('notes_bulk_deleted', handleNoteChange);
       socket.off('bulk_tags_updated', handleNoteChange);
     };
   }, [loadTags]);

@@ -621,18 +621,11 @@ router.post('/bulk/archive', async (req, res) => {
     // 1. Perform the bulk update
     const count = await Note.bulkUpdate(noteIds, { is_archived: true });
 
-    // --- START ADDED CODE ---
-    // 2. Fetch the updated notes (important to get latest state like updated_at)
-    //    Use includeDetails: true so the socket event sends the same structure
-    //    as individual updates.
-    const updatedNotes = await Note.findManyByIds(noteIds, true); // Fetch with details
+    // 2. Fetch the updated notes (with details so the payload matches single updates)
+    const updatedNotes = await Note.findManyByIds(noteIds, true);
 
-    // 3. Emit individual 'note_updated' events
-    updatedNotes.forEach(note => {
-      console.log(`[SOCKET] Emitting note_updated for bulk archived note: ${note.id}`);
-      req.app.get('io').emit('note_updated', note);
-    });
-    // --- END ADDED CODE ---
+    // 3. Emit a single batched event so clients apply all updates in one render.
+    req.app.get('io').emit('notes_bulk_updated', { notes: updatedNotes });
 
     res.json({ message: `${count} notes archived successfully.` });
   } catch (error) {
@@ -651,16 +644,11 @@ router.post('/bulk/unarchive', async (req, res) => {
     // 1. Perform the bulk update
     const count = await Note.bulkUpdate(noteIds, { is_archived: false });
 
-    // --- START ADDED CODE ---
-    // 2. Fetch the updated notes
-    const updatedNotes = await Note.findManyByIds(noteIds, true); // Fetch with details
+    // 2. Fetch the updated notes (with details so the payload matches single updates)
+    const updatedNotes = await Note.findManyByIds(noteIds, true);
 
-    // 3. Emit individual 'note_updated' events
-    updatedNotes.forEach(note => {
-      console.log(`[SOCKET] Emitting note_updated for bulk unarchived note: ${note.id}`);
-      req.app.get('io').emit('note_updated', note);
-    });
-    // --- END ADDED CODE ---
+    // 3. Emit a single batched event so clients apply all updates in one render.
+    req.app.get('io').emit('notes_bulk_updated', { notes: updatedNotes });
 
     res.json({ message: `${count} notes unarchived successfully.` });
   } catch (error) {
@@ -680,16 +668,11 @@ router.post('/bulk/trash', async (req, res) => {
     // 1. Perform the bulk update
     const count = await Note.bulkUpdate(noteIds, { is_deleted: true });
 
-    // --- START ADDED CODE ---
-    // 2. Fetch the updated notes
-    const updatedNotes = await Note.findManyByIds(noteIds, true); // Fetch with details
+    // 2. Fetch the updated notes (with details so the payload matches single updates)
+    const updatedNotes = await Note.findManyByIds(noteIds, true);
 
-    // 3. Emit individual 'note_updated' events
-    updatedNotes.forEach(note => {
-      console.log(`[SOCKET] Emitting note_updated for bulk trashed note: ${note.id}`);
-      req.app.get('io').emit('note_updated', note);
-    });
-    // --- END ADDED CODE ---
+    // 3. Emit a single batched event so clients apply all updates in one render.
+    req.app.get('io').emit('notes_bulk_updated', { notes: updatedNotes });
 
     res.json({ message: `${count} notes moved to trash successfully.` });
   } catch (error) {
@@ -709,16 +692,11 @@ router.post('/bulk/restore', async (req, res) => {
     // 1. Perform the bulk update
     const count = await Note.bulkUpdate(noteIds, { is_deleted: false });
 
-    // --- START ADDED CODE ---
-    // 2. Fetch the updated notes
-    const updatedNotes = await Note.findManyByIds(noteIds, true); // Fetch with details
+    // 2. Fetch the updated notes (with details so the payload matches single updates)
+    const updatedNotes = await Note.findManyByIds(noteIds, true);
 
-    // 3. Emit individual 'note_updated' events
-    updatedNotes.forEach(note => {
-      console.log(`[SOCKET] Emitting note_updated for bulk restored note: ${note.id}`);
-      req.app.get('io').emit('note_updated', note);
-    });
-    // --- END ADDED CODE ---
+    // 3. Emit a single batched event so clients apply all updates in one render.
+    req.app.get('io').emit('notes_bulk_updated', { notes: updatedNotes });
 
     res.json({ message: `${count} notes restored successfully.` });
   } catch (error) {
@@ -759,11 +737,8 @@ router.post('/bulk/delete-permanently', async (req, res) => {
     const idsToDelete = [...noteIds]; // Make a copy
     const count = await Note.bulkDelete(idsToDelete);
 
-    // 2. Emit individual 'note_deleted' events using the copied IDs
-    idsToDelete.forEach(noteId => {
-      console.log(`[SOCKET] Emitting note_deleted for bulk deleted note: ${noteId}`);
-      req.app.get('io').emit('note_deleted', noteId); // Emit only the ID
-    });
+    // 2. Emit a single batched event so clients remove all in one render.
+    req.app.get('io').emit('notes_bulk_deleted', { noteIds: idsToDelete });
 
     res.json({ message: `${count} notes permanently deleted.` });
   } catch (error) {
@@ -785,16 +760,11 @@ router.post('/bulk/color', async (req, res) => {
     // 1. Perform bulk update
     const count = await Note.bulkUpdate(noteIds, { color });
 
-    // --- START ADDED CODE ---
-    // 2. Fetch updated notes
-    const updatedNotes = await Note.findManyByIds(noteIds, true); // Fetch with details
+    // 2. Fetch updated notes (with details so the payload matches single updates)
+    const updatedNotes = await Note.findManyByIds(noteIds, true);
 
-    // 3. Emit individual 'note_updated' events
-    updatedNotes.forEach(note => {
-      console.log(`[SOCKET] Emitting note_updated for bulk color change: ${note.id}`);
-      req.app.get('io').emit('note_updated', note);
-    });
-    // --- END ADDED CODE ---
+    // 3. Emit a single batched event so clients apply all updates in one render.
+    req.app.get('io').emit('notes_bulk_updated', { notes: updatedNotes });
 
     res.json({ message: `Color changed for ${count} notes successfully.` });
   } catch (error) {

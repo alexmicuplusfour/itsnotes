@@ -1232,7 +1232,7 @@ export const NotesProvider = ({ children }) => {
       return;
     }
 
-    console.log('[SOCKET] Received note_updated:', note);
+    console.log('[SOCKET] Processing note_updated:', note);
 
     // Invalidate cache for this note since it was updated
     removeFromCache(note.id);
@@ -1380,7 +1380,7 @@ export const NotesProvider = ({ children }) => {
       return;
     }
 
-    console.log('[SOCKET] Received note_deleted:', noteId);
+    console.log('[SOCKET] Processing note_deleted:', noteId);
 
     // Remove from cache when deleted
     removeFromCache(noteId);
@@ -1389,6 +1389,22 @@ export const NotesProvider = ({ children }) => {
 
     _updateOrRemoveNoteInState(noteId);
   }, [_updateOrRemoveNoteInState, removeFromCache]);
+
+  // Bulk routes emit one batched event instead of one-per-note. Delegate each
+  // note to the single-note handler: React batches the synchronous setState
+  // calls into a single render, while reusing all the per-note view/search
+  // logic above.
+  const handleSocketNotesBulkUpdated = useCallback(({ notes } = {}) => {
+    if (!Array.isArray(notes) || notes.length === 0) return;
+    console.log(`[SOCKET] Received notes_bulk_updated: ${notes.length} notes`);
+    notes.forEach(note => handleSocketNoteUpdated(note));
+  }, [handleSocketNoteUpdated]);
+
+  const handleSocketNotesBulkDeleted = useCallback(({ noteIds } = {}) => {
+    if (!Array.isArray(noteIds) || noteIds.length === 0) return;
+    console.log(`[SOCKET] Received notes_bulk_deleted: ${noteIds.length} notes`);
+    noteIds.forEach(noteId => handleSocketNoteDeleted(noteId));
+  }, [handleSocketNoteDeleted]);
 
   const handleSocketObjectUpdated = useCallback((updatedObject) => {
     if (manualRefreshInProgressRef.current) {
@@ -2552,6 +2568,8 @@ export const NotesProvider = ({ children }) => {
       'note_created': handleSocketNoteCreated,
       'note_updated': handleSocketNoteUpdated,
       'note_deleted': handleSocketNoteDeleted,
+      'notes_bulk_updated': handleSocketNotesBulkUpdated,
+      'notes_bulk_deleted': handleSocketNotesBulkDeleted,
       'object_updated': handleSocketObjectUpdated,
       'note_tag_updated': handleSocketNoteTagChange,
       'note_tags_changes': handleSocketNoteTagChange,
@@ -2563,6 +2581,7 @@ export const NotesProvider = ({ children }) => {
       'note_operation': (data) => console.log('[SOCKET] Note Operation:', data),
     };
   }, [handleSocketNoteCreated, handleSocketNoteUpdated, handleSocketNoteDeleted,
+      handleSocketNotesBulkUpdated, handleSocketNotesBulkDeleted,
       handleSocketObjectUpdated, handleSocketNoteTagChange, handleSocketNoteImageChange,
       handleSocketTagUpdated, handleBulkTagsUpdated]);
       
@@ -2632,6 +2651,8 @@ export const NotesProvider = ({ children }) => {
     handleSocketNoteCreated,
     handleSocketNoteUpdated,
     handleSocketNoteDeleted,
+    handleSocketNotesBulkUpdated,
+    handleSocketNotesBulkDeleted,
     handleSocketNoteTagChange, // This handles note_tag_updated, note_tags_changes, note_tags_updated
     handleSocketNoteImageChange, // This handles note_image_added, note_image_deleted
     handleSocketTagUpdated,

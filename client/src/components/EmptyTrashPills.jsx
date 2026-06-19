@@ -65,16 +65,31 @@ const EmptyTrashPills = ({ title }) => {
       });
     };
 
+    // Bulk routes emit a single batched event; fan it out to the per-note handlers.
+    const handleNotesBulkUpdated = ({ notes } = {}) => {
+      if (!Array.isArray(notes)) return;
+      notes.forEach(handleNoteUpdated);
+    };
+
+    const handleNotesBulkDeleted = ({ noteIds } = {}) => {
+      if (!Array.isArray(noteIds)) return;
+      noteIds.forEach(handleNoteDeleted);
+    };
+
     // Register socket listeners
     console.log('[EmptyTrashPills] Setting up socket listeners for trash count updates');
     socketService.on('note_updated', handleNoteUpdated);
     socketService.on('note_deleted', handleNoteDeleted);
+    socketService.on('notes_bulk_updated', handleNotesBulkUpdated);
+    socketService.on('notes_bulk_deleted', handleNotesBulkDeleted);
 
     // Cleanup function
     return () => {
       console.log('[EmptyTrashPills] Cleaning up socket listeners');
       socketService.off('note_updated', handleNoteUpdated);
       socketService.off('note_deleted', handleNoteDeleted);
+      socketService.off('notes_bulk_updated', handleNotesBulkUpdated);
+      socketService.off('notes_bulk_deleted', handleNotesBulkDeleted);
     };
   }, [isTrashView]);
   
