@@ -201,6 +201,16 @@ export const NoteSelectionProvider = ({ children }) => {
 
   const archiveSelectedNotes = useCallback(() => {
     const ids = Array.from(selectedNoteIds);
+    // Capture the notes + their positions before removal so undo can re-insert
+    // them in place instead of triggering a full refresh.
+    const ctx = notesContextRef.current;
+    const sourceList = ctx.searchMode ? ctx.searchResults : ctx.notes;
+    const archivedEntries = ids
+      .map(id => {
+        const index = sourceList.findIndex(n => n.id === id);
+        return index === -1 ? null : { note: { ...sourceList[index], is_archived: false }, index };
+      })
+      .filter(Boolean);
     const updateFn = (ids) => {
       ids.forEach(id => notesContextRef.current._updateOrRemoveNoteInState(id));
     };
@@ -208,6 +218,7 @@ export const NoteSelectionProvider = ({ children }) => {
       // Show success toast after successful operation
       notesContextRef.current.setOperationCount(ids.length);
       notesContextRef.current.setLastArchivedNoteIds(ids);
+      notesContextRef.current.captureArchivedNotesForUndo(archivedEntries);
       notesContextRef.current.setShowArchiveSuccess(true);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {

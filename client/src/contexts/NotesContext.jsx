@@ -93,6 +93,20 @@ const DEFAULT_BATCH_DELAY_MS = 500;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PAGE_SIZE = 80;
 
+// Re-inserts previously removed notes back into a list at their captured indices.
+// Used by undo so the loaded/scrolled list is restored in place rather than refetched.
+const reinsertNotesAtPositions = (prevList, ids, savedEntries) => {
+  const next = prevList.filter(n => !ids.includes(n.id));
+  savedEntries
+    .slice()
+    .sort((a, b) => a.index - b.index)
+    .forEach(({ note, index }) => {
+      const insertAt = Math.min(Math.max(index, 0), next.length);
+      next.splice(insertAt, 0, note);
+    });
+  return next;
+};
+
 // --- Provider Component ---
 export const NotesProvider = ({ children }) => {
   // --- Cache/Prefetch Settings (derived from shared SettingsContext) ---
@@ -216,9 +230,11 @@ export const NotesProvider = ({ children }) => {
   const [operationCount, setOperationCount] = useState(1); // Track how many notes were affected
   const [lastArchivedNoteIds, setLastArchivedNoteIds] = useState([]);
   const [lastTrashedNoteIds, setLastTrashedNoteIds] = useState([]);
-  // Captures full note objects (+ their search-result index) for the most recent
-  // trash op so undo can re-insert them in place instead of refetching the search.
+  // Captures full note objects (+ their list index) for the most recent trash op
+  // so undo can re-insert them in place instead of refetching/refreshing the list.
   const lastTrashedNotesRef = useRef([]);
+  // Same, for the most recent archive op.
+  const lastArchivedNotesRef = useRef([]);
 
   // Note Interaction State
   const [openedNote, setOpenedNote] = useState(null); // The note currently open in the editor/modal
@@ -1980,6 +1996,11 @@ export const NotesProvider = ({ children }) => {
   }, [_executeOptimisticUpdate]); // Removed notes, searchResults, openedNote - using refs instead
 
   const archiveNote = useCallback(async (id) => {
+    // Capture the note + its current list position before removal so undo can
+    // re-insert it in place instead of doing a full refresh.
+    const sourceList = searchModeRef.current ? searchResultsRef.current : notesRef.current;
+    const noteFromState = sourceList.find(note => note.id === id);
+    const archivedIndex = sourceList.findIndex(note => note.id === id);
     // First, immediately remove note from UI state in any view
     _updateOrRemoveNoteInState(id);
     const wasInSearchMode = searchModeRef.current;
@@ -2003,6 +2024,9 @@ export const NotesProvider = ({ children }) => {
       // Show success toast
       setOperationCount(1);
       setLastArchivedNoteIds([id]);
+      lastArchivedNotesRef.current = noteFromState
+        ? [{ note: { ...noteFromState, is_archived: false }, index: archivedIndex }]
+        : [];
       setShowArchiveSuccess(true);
 
       // Keep the socket block active for a little longer after operation completes
@@ -2157,11 +2181,21 @@ export const NotesProvider = ({ children }) => {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkUnarchiveNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
+      const saved = lastArchivedNotesRef.current;
+      const canRestoreLocally = saved.length > 0 &&
+        saved.length === ids.length &&
+        saved.every(entry => entry.note && ids.includes(entry.note.id));
       if (searchModeRef.current && searchQueryRef.current) {
+        // Archived notes were removed from search results; refetch to restore them.
         handleSearch(searchQueryRef.current, true, false, null, false, true);
+      } else if (canRestoreLocally) {
+        // Re-insert at original positions instead of refetching (which clears all
+        // loaded pages and scrolls back to the top).
+        setNotes(prev => reinsertNotesAtPositions(prev, ids, saved));
       } else {
         loadNotes(true);
       }
+      lastArchivedNotesRef.current = [];
     } catch (err) {
       console.error('Failed to undo archive:', err);
       setError('Failed to undo archive');
@@ -2175,6 +2209,11 @@ export const NotesProvider = ({ children }) => {
     lastTrashedNotesRef.current = Array.isArray(entries) ? entries : [];
   }, []);
 
+  // Same, for bulk archive in NoteSelectionContext.
+  const captureArchivedNotesForUndo = useCallback((entries) => {
+    lastArchivedNotesRef.current = Array.isArray(entries) ? entries : [];
+  }, []);
+
   const handleUndoTrash = useCallback(async () => {
     if (!lastTrashedNoteIds.length) return;
     const ids = lastTrashedNoteIds;
@@ -2183,29 +2222,23 @@ export const NotesProvider = ({ children }) => {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkRestoreNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
+      const saved = lastTrashedNotesRef.current;
+      const canRestoreLocally = saved.length > 0 &&
+        saved.length === ids.length &&
+        saved.every(entry => entry.note && ids.includes(entry.note.id));
       if (searchModeRef.current && searchQueryRef.current) {
-        const saved = lastTrashedNotesRef.current;
-        const canRestoreLocally = saved.length > 0 &&
-          saved.length === ids.length &&
-          saved.every(entry => entry.note && ids.includes(entry.note.id));
         if (canRestoreLocally) {
           // Re-insert the trashed notes at their original positions instead of
           // refetching the whole search (which clears results and scrolls to top).
-          setSearchResults(prev => {
-            const next = prev.filter(n => !ids.includes(n.id));
-            saved
-              .slice()
-              .sort((a, b) => a.index - b.index)
-              .forEach(({ note, index }) => {
-                const insertAt = Math.min(Math.max(index, 0), next.length);
-                next.splice(insertAt, 0, note);
-              });
-            return next;
-          });
+          setSearchResults(prev => reinsertNotesAtPositions(prev, ids, saved));
           refreshSearchCount(searchQueryRef.current);
         } else {
           handleSearch(searchQueryRef.current, true, false, null, false, true);
         }
+      } else if (canRestoreLocally) {
+        // Same in the main list: restore in place rather than reloading page 1
+        // and re-paginating back to the previous scroll position.
+        setNotes(prev => reinsertNotesAtPositions(prev, ids, saved));
       } else {
         loadNotes(true);
       }
@@ -2751,6 +2784,7 @@ export const NotesProvider = ({ children }) => {
     setLastArchivedNoteIds,
     setLastTrashedNoteIds,
     captureTrashedNotesForUndo,
+    captureArchivedNotesForUndo,
 
     // Pagination & Loading
     hasMore,
