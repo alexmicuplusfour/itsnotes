@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom'; // Temporary - for functions not yet migrated to NavigationService
-import { isEqual } from 'lodash-es'; // Or use another deep comparison
 import styled from 'styled-components';
 import api, { notesApi, tagsApi } from '../services/api';
 import socketService from '../services/socket';
@@ -32,8 +31,30 @@ export const useNotes = () => useContext(NotesContext);
 const NotesLoadingContext = createContext({ listLoading: false });
 export const useNotesLoading = () => useContext(NotesLoadingContext);
 
+// Cheap structural comparison for a notes array: same identity, length, order,
+// content revision (updated_at) and pin state. Avoids a deep walk over every
+// note's content/tags/images when only a reference upstream changed.
+const notesArrayEqual = (a, b) => {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (x === y) continue;
+    if (
+      x.id !== y.id ||
+      x.updated_at !== y.updated_at ||
+      x.is_pinned !== y.is_pinned ||
+      x.pinned_at !== y.pinned_at
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // --- Helper Hook for Stable Array Results ---
-const useStableArrayResult = (factory, deps) => {
+const useStableArrayResult = (factory, deps, areEqual = notesArrayEqual) => {
   const previousResultRef = useRef(null);
   const previousDepsRef = useRef(deps);
 
@@ -47,7 +68,7 @@ const useStableArrayResult = (factory, deps) => {
     // Dependencies changed or first run, calculate new result
     const newResult = factory();
     // Only update if the new result is actually different from the previous one
-    if (result === null || !isEqual(newResult, result)) {
+    if (result === null || !areEqual(newResult, result)) {
       // console.log("useStableArrayResult: Result changed, returning new reference.");
       result = newResult;
     } else {
