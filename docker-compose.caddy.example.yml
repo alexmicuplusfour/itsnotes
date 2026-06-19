@@ -32,6 +32,8 @@ services:
       DB_NAME: itsnotes
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       BACKUP_PATH: /app/backups
+      # Markdown Mirror target — exported .md files appear in ./notes-mirror on the host
+      MD_MIRROR_PATH: /data/notes-mirror
       # Optional — set a fixed auth secret (otherwise auto-generated on first run):
       # JWT_SECRET: generate-with-openssl-rand-hex-32
       # Optional — AI features:
@@ -39,6 +41,8 @@ services:
     volumes:
       - attachments_data:/app/uploads
       - backups_data:/app/backups
+      # Browsable folder for the Markdown Mirror feature (turn it on in Settings)
+      - ./notes-mirror:/data/notes-mirror
 
   itsnotes-client:
     image: ghcr.io/alexmicuplusfour/itsnotes-client:latest

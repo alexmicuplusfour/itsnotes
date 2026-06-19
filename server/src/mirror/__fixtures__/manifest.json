@@ -1,0 +1,42 @@
+{
+  "plain.html": {
+    "id": "c5e306d5-f331-4671-8e4e-c178e6d7162e",
+    "title": "Errands Saturday",
+    "bytes": 212
+  },
+  "tags.html": {
+    "id": "ef86ecf4-71d1-4a29-a210-a87fdaf54737",
+    "title": "",
+    "bytes": 852
+  },
+  "object-mention.html": {
+    "id": "fc2c5ce1-e84d-40f7-a121-eb18c2c21c9a",
+    "title": "Books to read this year",
+    "bytes": 934
+  },
+  "object-card.html": {
+    "id": "374b757c-ab1d-49ab-9ca7-aced514970f3",
+    "title": "Conclave",
+    "bytes": 1270
+  },
+  "image.html": {
+    "id": "9138df0a-598c-435f-b3cd-631884482304",
+    "title": "",
+    "bytes": 1909
+  },
+  "tasklist.html": {
+    "id": "0c51895c-f488-4521-9349-9ab651cf0c13",
+    "title": "Weekly reset",
+    "bytes": 701
+  },
+  "details.html": {
+    "id": "55d2fcdf-2837-4aa4-bd07-20ffd9b3b6a3",
+    "title": "",
+    "bytes": 3975
+  },
+  "attachment-table.html": {
+    "id": "9f6dbef5-f814-494f-bbd9-ee9db10ea225",
+    "title": "",
+    "bytes": 2503
+  }
+}

@@ -40,6 +40,9 @@ goodreads/
 #uploads and objects
 server/uploads/
 
+# Markdown mirror output (generated, per-environment)
+notes-mirror/
+
 # Logs
 logs/
 *.log

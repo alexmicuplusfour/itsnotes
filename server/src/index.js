@@ -25,10 +25,12 @@ const remindersRoutes = require('./routes/reminders');
 const settingsRoutes = require('./routes/settings');
 const foxitRoutes = require('./routes/foxit');
 const backupRoutes = require('./routes/backup');
+const mirrorRoutes = require('./routes/mirror');
 const scheduler = require('./services/scheduler');
 const demoReset = require('./services/demoReset');
 const settingsService = require('./services/settings');
 const backupScheduler = require('./services/backupScheduler');
+const mirrorWorker = require('./mirror/mirrorWorker');
 const { optionalAuth, authenticateToken, getJwtSecret } = require('./middleware/auth');
 const { handleMcpPost, handleMcpUnsupported } = require('./mcp/httpHandler');
 
@@ -188,6 +190,7 @@ app.use('/api/settings', optionalAuth, settingsRoutes);
 app.use('/api/objects', optionalAuth, objectsRoutes);
 app.use('/api/foxit', foxitRoutes); // No auth - snooper needs access
 app.use('/api/backup', optionalAuth, backupRoutes);
+app.use('/api/mirror', optionalAuth, mirrorRoutes);
 app.use('/api', optionalAuth, imagesRoutes);
 app.use('/api', optionalAuth, attachmentsRoutes);
 app.use('/api/import', optionalAuth, importRoutes);
@@ -313,6 +316,8 @@ async function startServer(retryCount = 0, maxRetries = 10) {
     await ensureJwtSecret();
     await settingsService.init();
     await backupScheduler.init();
+    // Markdown mirror (DB → folder). No-op unless MD_MIRROR_ENABLED=true.
+    mirrorWorker.init();
     // Listen on 0.0.0.0 to accept connections from other devices on the network
     server.listen(port, '0.0.0.0', () => {
       // Update log message to reflect HTTPS

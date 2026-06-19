@@ -28,22 +28,22 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy only production node_modules from deps stage
-COPY --from=deps /app/node_modules ./node_modules
-
-# Copy application code
-COPY . .
-
-# Create user for security
+# Create user for security (before copying so files land with correct ownership)
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodeuser -u 1001
 
-# Create directories and set permissions
+# Copy only production node_modules from deps stage, owned by nodeuser
+COPY --from=deps --chown=nodeuser:nodejs /app/node_modules ./node_modules
+
+# Copy application code, owned by nodeuser
+COPY --chown=nodeuser:nodejs . .
+
+# Create directories owned by nodeuser
 # /app/uploads and /app/backups must exist in the image so Docker initializes
 # their named volumes with nodeuser ownership (non-root server can't write a
 # root-owned bind mount)
 RUN mkdir -p /tmp/itsnotes-import /app/uploads /app/backups && \
-    chown -R nodeuser:nodejs /app /tmp/itsnotes-import
+    chown nodeuser:nodejs /tmp/itsnotes-import /app/uploads /app/backups
 
 # Switch to non-root user
 USER nodeuser

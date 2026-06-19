@@ -12,6 +12,7 @@ import TaggingTab from './settings/TaggingTab';
 import AiTab from './settings/AiTab';
 import NotificationsTab from './settings/NotificationsTab';
 import BackupTab from './settings/BackupTab';
+import MirrorTab from './settings/MirrorTab';
 import AdvancedTab from './settings/AdvancedTab';
 import IntegrationsTab from './settings/IntegrationsTab';
 import HelpTab from './settings/HelpTab';
@@ -114,6 +115,7 @@ const NAV_ITEMS = [
   { id: 'ai', label: 'AI Integration', icon: 'magic' },
   { id: 'notifications', label: 'Notifications', icon: 'bell' },
   { id: 'import', label: 'Backup & Restore', icon: 'database' },
+  { id: 'mirror', label: '.md Mirror', icon: 'folder' },
   { id: 'advanced', label: 'Advanced', icon: 'settings' },
   { id: 'integrations', label: 'Integrations', icon: 'link' },
   { id: 'help', label: 'Help', icon: 'help' },
@@ -152,6 +154,8 @@ const DEFAULT_SETTINGS = {
   AI_MODEL_OCR: '',
   AI_MODEL_REMINDER: '',
   AI_MODEL_AUTO_TAG: '',
+  MD_MIRROR_ENABLED: 'false',
+  MD_MIRROR_PATH: '',
 };
 
 const SettingsModal = ({ onClose }) => {
@@ -309,6 +313,8 @@ const SettingsModal = ({ onClose }) => {
         return <NotificationsTab settings={settings} onChange={handleChange} />;
       case 'import':
         return <BackupTab isDarkTheme={isDarkTheme} />;
+      case 'mirror':
+        return <MirrorTab settings={settings} onChange={handleChange} commit={commit} commitImmediate={commitImmediate} />;
       case 'advanced':
         return <AdvancedTab settings={settings} onChange={handleChange} onCacheSettingChange={handleCacheSettingChange} />;
       case 'integrations':
