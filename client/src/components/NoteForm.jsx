@@ -88,7 +88,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [titleFocused, setTitleFocused] = useState(false);
   const [isPinned, setIsPinned] = useState(note?.is_pinned || false);
-  const [internalNoteId, setInternalNoteId] = useState(note?.id); // Track the ID the form is currently displaying
+  const internalNoteIdRef = useRef(note?.id); // Track the ID the form is currently displaying (ref so updating it never re-triggers effects)
   const [isBeingTrashed, setIsBeingTrashed] = useState(false); // Track if note is being trashed
   const [isCreatingReminder, setIsCreatingReminder] = useState(false); // Track reminder creation status
   const [suggestedTags, setSuggestedTags] = useState([]); // Track suggested tags for auto-tagging
@@ -303,7 +303,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         // Let's assume note.id is valid or we use internalNoteId.
 
         const response = await api.post('/reminders/create', {
-          noteId: internalNoteId,
+          noteId: internalNoteIdRef.current,
           noteContent: content,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         });
@@ -322,7 +322,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
               const appliedTagNames = [];
               for (const tagId of reminderTagIds) {
                 try {
-                  await tagsApi.addTagToNote(internalNoteId, tagId);
+                  await tagsApi.addTagToNote(internalNoteIdRef.current, tagId);
                   const actualTag = tags.find(t => t.id === tagId);
                   if (actualTag?.name) appliedTagNames.push(actualTag.name);
                 } catch (tagError) {
@@ -351,7 +351,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         setIsCreatingReminder(false);
       }
     }
-  }, [internalNoteId, shouldAutoApply, shouldSuggestTag, getFeatureTags, refreshTags, tags, addSuggestedTags]);
+  }, [shouldAutoApply, shouldSuggestTag, getFeatureTags, refreshTags, tags, addSuggestedTags]);
 
   // Initialize UI interactions hook with all refs including tag picker refs
   const {
@@ -550,19 +550,23 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
   // Consolidated effect to handle note changes and state resets
   useEffect(() => {
-    // Check for immediate empty note state (should load instantly)
-    if (note && note.content === '' && !contentFullyLoaded) {
-      console.log('[NoteForm] Empty note detected, setting contentFullyLoaded to true immediately.');
-      setContentFullyLoaded(true);
-      return; // Early return to avoid redundant processing
-    }
-
     // Reset if the note ID actually changes OR if the isLoading state changes
-    const noteIdChanged = note?.id !== internalNoteId;
+    const noteIdChanged = note?.id !== internalNoteIdRef.current;
     const loadingStateChanged =
       note &&
       prevNoteRef.current?.id === note.id &&
       prevNoteRef.current?.isLoading !== note.isLoading;
+
+    // Empty note should mark content loaded immediately so the editor doesn't
+    // sit on a spinner. When the id or loading state changed, the main branch
+    // below already handles this in the same pass, so only short-circuit here
+    // when nothing else needs to run (same note, no loading change).
+    if (note && note.content === '' && !contentFullyLoaded && !noteIdChanged && !loadingStateChanged) {
+      console.log('[NoteForm] Empty note detected, setting contentFullyLoaded to true immediately.');
+      setContentFullyLoaded(true);
+      prevNoteRef.current = note;
+      return; // Early return to avoid redundant processing
+    }
 
     // Skip note updates if we're currently restoring a version
     if (isRestoringVersionRef.current) {
@@ -573,7 +577,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
     if (noteIdChanged || loadingStateChanged) {
       console.log(
-        `Note prop changed in NoteForm. Old: ${internalNoteId}, New: ${note?.id}. Resetting state.`,
+        `Note prop changed in NoteForm. Old: ${internalNoteIdRef.current}, New: ${note?.id}. Resetting state.`,
       );
       console.log(
         `Note loading state: ${note?.isLoading ? "Loading" : "Loaded"}`,
@@ -683,7 +687,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         loadImages(note.id);
       }
 
-      setInternalNoteId(note?.id); // Update the internal tracker
+      internalNoteIdRef.current = note?.id; // Update the internal tracker
       // Note: isModified is now managed internally by useNoteSaver hook
       setShowColorPicker(false);
       setShowTagsModal(false);
@@ -695,7 +699,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
     // Store the current note for comparison in the next render
     prevNoteRef.current = note;
-  }, [note, internalNoteId, setContent, resetImageState, loadImages, showSearch, handleSearchToggle, location.search, resetNoteScrollPosition]); // Consolidated dependencies
+  }, [note, resetImageState, loadImages, showSearch, handleSearchToggle, location.search, resetNoteScrollPosition]); // Consolidated dependencies
 
   // Load the gallery's note_images whenever a real, non-shell note is shown.
   // The consolidated effect above only loads images when the note id changes
