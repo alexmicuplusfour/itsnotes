@@ -96,28 +96,35 @@ router.get('/search', async (req, res) => {
       try { tagIdMap = JSON.parse(tagIds); } catch (e) { /* ignore malformed */ }
     }
 
-    // Pass sortOrder directly to Note.search
-    const notes = await Note.search(
-      query,
-      parseInt(page),
-      parseInt(limit),
-      sortOrder,
-      truncateContent === 'true' || truncateContent === true,
-      parseInt(contentLimit) || 601,
-      tagIdMap
-    );
+    // The result set and the total count are independent queries, so run them
+    // concurrently. The count scans the table on its own and doesn't need the
+    // fetched notes, so it overlaps with the search + tag/image/object enrichment.
+    const [notes, totalCount] = await Promise.all([
+      (async () => {
+        const results = await Note.search(
+          query,
+          parseInt(page),
+          parseInt(limit),
+          sortOrder,
+          truncateContent === 'true' || truncateContent === true,
+          parseInt(contentLimit) || 601,
+          tagIdMap
+        );
 
-    // Include tags and images if requested
-    if (includeDetails === 'true' && notes.length > 0) {
-      await Note.addTagsAndImages(notes);
-    }
+        // Include tags and images if requested
+        if (includeDetails === 'true' && results.length > 0) {
+          await Note.addTagsAndImages(results);
+        }
 
-    // Always add objects to notes
-    if (notes.length > 0) {
-      await Note.addObjects(notes);
-    }
+        // Always add objects to notes
+        if (results.length > 0) {
+          await Note.addObjects(results);
+        }
 
-    const totalCount = await Note.getSearchCount(query, tagIdMap);
+        return results;
+      })(),
+      Note.getSearchCount(query, tagIdMap)
+    ]);
 
     res.json({
       notes,

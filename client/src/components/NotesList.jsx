@@ -713,8 +713,9 @@ const NotesList = ({ title, notes, showPinned }) => {
 
       {/* Content Area: Handles loading/empty states within search context, or displays notes */}
       {listLoading && pinnedNotes.length === 0 && unpinnedNotes.length === 0 && (searchMode && searchQuery) ? ( // Changed from loading
-        // Case: Loading search results, no notes yet, but pills are shown.
-        <></>      
+        // Case: Loading search results, no notes yet. The footer's "Loading notes..."
+        // message covers this state, so keep the body empty to avoid a duplicate message.
+        <></>
 
       ) : !listLoading && pinnedNotes.length === 0 && unpinnedNotes.length === 0 && (searchMode && searchQuery) ? ( // Changed from loading
         // Case: Not loading, and no notes found for the search, pills are shown.
@@ -881,8 +882,9 @@ const NotesList = ({ title, notes, showPinned }) => {
       )}
       
       <div id="notes-list-footer">
-        {/* Show LoadTrigger if there are more notes OR if currently loading and some notes are already displayed */}
-        {(hasMore || (listLoading && (pinnedNotes.length > 0 || unpinnedNotes.length > 0))) && ( // Changed from loading
+        {/* Show LoadTrigger if there are more notes, OR if currently loading (either some
+            notes are already displayed, or a search is loading into an empty list) */}
+        {(hasMore || (listLoading && (pinnedNotes.length > 0 || unpinnedNotes.length > 0)) || (listLoading && searchMode && searchQuery)) && ( // Changed from loading
             <LoadTrigger ref={setObserverTarget} data-hasmore={hasMore}>
             {listLoading && ( // Changed from loading
                 <LoadingMessage>
