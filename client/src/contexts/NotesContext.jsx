@@ -2635,49 +2635,7 @@ export const NotesProvider = ({ children }) => {
     // Load notes with current sort order
     loadNotes(true);
   }, [view, mainViewSortOption]); // Use mainViewSortOption instead of currentSortOption
-  
-  // --- URL Synchronization Effects ---
-  
-  // Effect for pathname changes (view)
-  useEffect(() => {
-    const pathname = window.location.pathname;
-    const targetView = pathname === '/archive' ? 'archive' : pathname === '/trash' ? 'trash' : 'main';
 
-    console.log("Path Change Effect: Path:", pathname, "Target View:", targetView, "Current View:", view);
-    
-    if (targetView !== view) {
-      console.log(`Path Change Effect: Setting view to ${targetView}`);
-      
-      // Reset state for the new view - thorough cleanup
-      setNotes([]);
-      setPage(1);
-      setHasMore(true);
-      setListLoading(true);
-      setError(null);
-      
-      // Exit search mode if active
-      if (searchMode) {
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchQuery('');
-      }
-      
-      // Clear selection will be handled by NoteSelectionContext
-      if (false) { // Disabled - selection managed by NoteSelectionContext
-        // setSelectedNoteIds(new Set());
-      }
-      
-      // Update view
-      setView(targetView);
-      
-      // Reset scroll position to top - important for fresh view
-      window.scrollTo(0, 0);
-      
-      // Note: loadNotes(true) is handled by the Initial Load Effect when view changes
-    }
-  }, [location.pathname, view, searchMode, loadNotes]);
-  
-  
   // --- Derived Data & Filtering ---
   
   // Helper functions for grouping notes
