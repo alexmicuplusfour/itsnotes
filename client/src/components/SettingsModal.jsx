@@ -15,6 +15,7 @@ import BackupTab from './settings/BackupTab';
 import MirrorTab from './settings/MirrorTab';
 import AdvancedTab from './settings/AdvancedTab';
 import IntegrationsTab from './settings/IntegrationsTab';
+import MaintenanceTab from './settings/MaintenanceTab';
 import HelpTab from './settings/HelpTab';
 
 const DEBOUNCE_DELAY = 800; // ms to wait before auto-saving
@@ -119,6 +120,7 @@ const NAV_ITEMS = [
   { id: 'notifications', label: 'Notifications', icon: 'bell' },
   { id: 'import', label: 'Backup & Restore', icon: 'database' },
   { id: 'mirror', label: '.md Mirror', icon: 'folder' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'maintenance' },
   { id: 'advanced', label: 'Advanced', icon: 'settings' },
   { id: 'integrations', label: 'Integrations', icon: 'link' },
   { id: 'help', label: 'Help', icon: 'help' },
@@ -159,6 +161,10 @@ const DEFAULT_SETTINGS = {
   AI_MODEL_AUTO_TAG: '',
   MD_MIRROR_ENABLED: 'false',
   MD_MIRROR_PATH: '',
+  TRASH_CLEANUP_ENABLED: 'true',
+  TRASH_CLEANUP_AGE_DAYS: '30',
+  AUTO_ARCHIVE_ENABLED: 'false',
+  AUTO_ARCHIVE_AGE_DAYS: '365',
 };
 
 const SettingsModal = ({ onClose }) => {
@@ -320,6 +326,8 @@ const SettingsModal = ({ onClose }) => {
         return <MirrorTab settings={settings} onChange={handleChange} commit={commit} commitImmediate={commitImmediate} />;
       case 'advanced':
         return <AdvancedTab settings={settings} onChange={handleChange} onCacheSettingChange={handleCacheSettingChange} />;
+      case 'maintenance':
+        return <MaintenanceTab settings={settings} onChange={handleChange} commit={commit} />;
       case 'integrations':
         return <IntegrationsTab settings={settings} onChange={handleChange} commit={commit} />;
       case 'help':

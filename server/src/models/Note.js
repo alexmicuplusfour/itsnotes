@@ -1546,6 +1546,33 @@ class Note {
     return deleted.map(row => row.id);
   }
 
+  /**
+   * Auto-archive notes that haven't been edited in the given number of days.
+   * "Older than" is measured from updated_at (last edit). Skips notes that are
+   * pinned, already archived, or in the trash. Mirrors the state changes a
+   * manual archive makes (archived_at set, updated_at bumped). Returns the
+   * archived note IDs.
+   */
+  static async archiveOldNotes({ olderThanDays = 365 } = {}) {
+    const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+    const now = new Date();
+
+    const archived = await db('notes')
+      .where('is_archived', false)
+      .where('is_deleted', false)
+      .where('is_pinned', false)
+      .where('updated_at', '<', cutoff)
+      .update({
+        is_archived: true,
+        archived_at: now,
+        unarchived_at: null,
+        updated_at: now,
+      })
+      .returning('id');
+
+    return archived.map(row => row.id);
+  }
+
   static async getCount({ archived = false, deleted = false }) {
     const result = await db('notes')
       .where('is_archived', archived)

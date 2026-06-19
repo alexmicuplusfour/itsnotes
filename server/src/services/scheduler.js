@@ -29,19 +29,30 @@ class SchedulerService {
         }
 
         // Periodically purge notes that have sat in the trash past a retention
-        // window. Defaults to a daily 3 AM sweep; opt out with TRASH_CLEANUP_ENABLED=false.
-        if (process.env.TRASH_CLEANUP_ENABLED !== 'false') {
-            const trashCron = process.env.TRASH_CLEANUP_CRON || '0 3 * * *';
-            this.trashCleanupTask = cron.schedule(trashCron, () => {
-                this.cleanupOldTrash();
-            });
-            // Clear any existing backlog shortly after startup.
+        // window. The cron is always scheduled; the enabled flag is checked at
+        // sweep time so the Maintenance settings toggle takes effect without a
+        // server restart. Defaults to a daily 3 AM sweep.
+        const trashCron = process.env.TRASH_CLEANUP_CRON || '0 3 * * *';
+        this.trashCleanupTask = cron.schedule(trashCron, () => {
             this.cleanupOldTrash();
-        }
+        });
+        // Clear any existing backlog shortly after startup.
+        this.cleanupOldTrash();
+
+        // Periodically archive notes that haven't been edited in a long time.
+        // Same live-toggle approach as trash cleanup. Disabled by default.
+        const archiveCron = process.env.AUTO_ARCHIVE_CRON || '0 3 * * *';
+        this.autoArchiveTask = cron.schedule(archiveCron, () => {
+            this.archiveOldNotes();
+        });
+        this.archiveOldNotes();
     }
 
     async cleanupOldTrash() {
         try {
+            // Opt out with TRASH_CLEANUP_ENABLED=false. Unset means enabled.
+            if (process.env.TRASH_CLEANUP_ENABLED === 'false') return;
+
             const olderThanDays = parseInt(process.env.TRASH_CLEANUP_AGE_DAYS) || 30;
             const deletedIds = await Note.deleteOldTrashed({ olderThanDays });
 
@@ -53,6 +64,34 @@ class SchedulerService {
             }
         } catch (error) {
             console.error('SchedulerService: Error cleaning up old trash:', error);
+        }
+    }
+
+    async archiveOldNotes() {
+        try {
+            // Off by default; enable with AUTO_ARCHIVE_ENABLED=true.
+            if (process.env.AUTO_ARCHIVE_ENABLED !== 'true') return;
+
+            const olderThanDays = parseInt(process.env.AUTO_ARCHIVE_AGE_DAYS) || 365;
+            const archivedIds = await Note.archiveOldNotes({ olderThanDays });
+
+            if (archivedIds.length > 0) {
+                console.log(`SchedulerService: Auto-archived ${archivedIds.length} stale notes`);
+                if (this.io) {
+                    // Emit the full note so clients move it out of the active
+                    // list (and into the archive view) live.
+                    for (const id of archivedIds) {
+                        try {
+                            const fullNote = await Note.findById(id, true);
+                            if (fullNote) this.io.emit('note_updated', fullNote);
+                        } catch (err) {
+                            console.error(`SchedulerService: Failed to emit note_updated for ${id}`, err);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('SchedulerService: Error auto-archiving notes:', error);
         }
     }
 

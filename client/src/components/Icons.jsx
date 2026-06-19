@@ -215,6 +215,15 @@ const iconPaths = {
       { d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" }
     ]
   },
+  maintenance: {
+    paths: [
+      { elem: 'circle', cx: "12", cy: "12", r: "10" },
+      // 4-pointed sparkle (same shape as the AI 'magic' icon), offset toward
+      // the top-right inside the circle with room to spare from the edge.
+      { d: "M14 6.5 L14.9 9.1 L17.5 10 L14.9 10.9 L14 13.5 L13.1 10.9 L10.5 10 L13.1 9.1 Z" }
+    ],
+    noFill: true
+  },
   pin: {
     paths: [
       { d: "M12,16.181H4.724v-0.846l2.426-3.639V3.338c0-0.668,0.544-1.212,1.213-1.212h7.276c0.68,0,1.212,0.532,1.212,1.212v8.358l2.426,3.639v0.846H12v7.072V16.181z" }
