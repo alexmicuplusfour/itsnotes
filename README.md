@@ -15,6 +15,7 @@ Instead of an endless wall of text, the feed is broken down by month markers. Th
 - **View modes:** The standard masonry grid, a stacked view, and a proper dense list view.
 - **Customization:** A heavy settings modal to tweak layouts, page backgrounds, and form behaviors.
 - **Easy imports:** Drop in a Google Takeout `.zip` to import Keep data, or bulk upload `.txt` and `.md` files directly.
+- **Markdown mirror:** Continuously export every note to a folder as a `.md` file with a metadata header (tags, color, reminders, pin/archive/trash state), images and attachments alongside — great for backups, grep, git, or opening in Obsidian.
 - **Quality of life:** Built-in note history for revisions, plus automatic metadata fetching for books and movies.
 - **Optional AI stuff:** Hooks for auto-tagging and reminder parsing, plus a built-in MCP server so external AI clients can query your database.
 
@@ -80,9 +81,13 @@ services:
       DB_NAME: itsnotes
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       BACKUP_PATH: /app/backups
+      # Markdown Mirror target — exported .md files appear in ./notes-mirror on the host
+      MD_MIRROR_PATH: /data/notes-mirror
     volumes:
       - attachments_data:/app/uploads
       - backups_data:/app/backups
+      # Browsable folder for the Markdown Mirror feature (turn it on in Settings)
+      - ./notes-mirror:/data/notes-mirror
 
   itsnotes-client:
     image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
