@@ -2659,14 +2659,14 @@ export const NotesProvider = ({ children }) => {
 
   // --- Derived Data & Filtering ---
   
-  // Helper functions for grouping notes
-  const getPinnedNotes = useCallback(() => {
-    return notes.filter(note => note.is_pinned);
-  }, [notes]);
-
-  const getUnpinnedNotes = useCallback(() => {
-    return notes.filter(note => !note.is_pinned);
-  }, [notes]);
+  // Helper functions for grouping notes.
+  // Memoize the raw arrays so the getters return stable references (only changing
+  // when `notes` changes) — callers use these in render and feed them into memos,
+  // so a fresh array per call would defeat that memoization.
+  const rawPinnedNotes = useMemo(() => notes.filter(note => note.is_pinned), [notes]);
+  const rawUnpinnedNotes = useMemo(() => notes.filter(note => !note.is_pinned), [notes]);
+  const getPinnedNotes = useCallback(() => rawPinnedNotes, [rawPinnedNotes]);
+  const getUnpinnedNotes = useCallback(() => rawUnpinnedNotes, [rawUnpinnedNotes]);
   
   // Client-side filtering by hidden tags - using stable result hook
   const filteredNotes = useStableArrayResult(() => { // Use the new hook
