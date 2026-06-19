@@ -179,10 +179,16 @@ const SectionTitle = styled.h2`
 const CountPill = styled.span`
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 20px;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
   background-color: var(--foreground-color);
   color: var(--text-color-contrast);
   opacity: 0.8;
-  padding: 2px 6px;
+  padding: 0 6px;
   border-radius: 10px;
   font-size: 13px;
   margin-right: 6px;
@@ -197,8 +203,8 @@ const countSpin = keyframes`
 // is still loading, so a stale/DB total never flashes in its place.
 const CountSpinner = styled.span`
   display: inline-block;
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-top-color: var(--text-color-contrast);
   border-radius: 50%;
