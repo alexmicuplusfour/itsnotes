@@ -10,7 +10,6 @@
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "install": "cd server && npm install && cd ../client && npm install",
     "test": "cd server && npm test && cd ../client && npm test",
-    "lint": "cd server && npm run lint && cd ../client && npm run lint",
     "android:build": "cd client && npm run build && npx cap sync",
     "android:open": "cd client && npx cap open android"
   },

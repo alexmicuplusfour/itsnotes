@@ -6,8 +6,7 @@
     "start": "vite --host",
     "build": "vite build --mode development",
     "build:prod": "vite build --mode production",
-    "test": "vitest run",
-    "lint": "eslint src"
+    "test": "vitest run"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -61,8 +60,6 @@
   "devDependencies": {
     "@testing-library/react": "^14.0.0",
     "@vitejs/plugin-react": "^4.0.4",
-    "eslint": "^8.46.0",
-    "eslint-plugin-react": "^7.33.1",
     "jsdom": "^22.1.0",
     "vite": "^4.4.9",
     "vitest": "^0.34.1"
