@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const cron = require('node-cron');
 
 const repo = require('./mirrorRepo');
+const mirrorListener = require('./mirrorListener');
 const { renderNoteFile } = require('./noteFile');
 const { noteFileName } = require('./slugify');
 const { planReconcile } = require('./reconcile');
@@ -19,7 +20,10 @@ function getConfig() {
   return {
     enabled: process.env.MD_MIRROR_ENABLED === 'true',
     root: process.env.MD_MIRROR_PATH,
-    cron: process.env.MD_MIRROR_SWEEP_CRON || '*/5 * * * *',
+    // The live LISTEN/NOTIFY path keeps the folder fresh between sweeps, so the
+    // periodic sweep can be a slower correctness backstop rather than the primary
+    // freshness mechanism — lighter on a large library.
+    cron: process.env.MD_MIRROR_SWEEP_CRON || '*/15 * * * *',
   };
 }
 
@@ -233,6 +237,66 @@ async function runOnce() {
   }
 }
 
+// --- Live single-note reconcile (LISTEN/NOTIFY fast path) ---------------------
+
+// Reconcile just one note's file, triggered by a DB NOTIFY. Reuses the same
+// render → plan → apply pipeline as the sweep, scoped to a single note: a no-op
+// when nothing changed (hash matches), a rename/rewrite on edit, a delete when
+// the note is gone. The sweep stays the correctness backstop; if it's mid-run we
+// skip (it will cover this note anyway).
+async function reconcileOne(noteId) {
+  const { enabled, root } = getConfig();
+  if (!enabled || !root) return { skipped: true, reason: 'disabled' };
+  if (running) return { skipped: true, reason: 'busy' };
+  try {
+    await fs.mkdir(root, { recursive: true });
+
+    const note = await repo.loadNote(noteId);
+
+    // Resolve object titles only when the note actually embeds an object — avoids
+    // loading the whole objects table on every keystroke-debounced edit.
+    const needsObjects =
+      note && /data-type="object-(card|mention)"|data-object-id|objectid=/.test(note.content || '');
+    const objectTitles = needsObjects ? await repo.loadObjectTitles() : new Map();
+
+    const trackedAll = await repo.loadTracked();
+    const tracked = new Map();
+    const prev = trackedAll.get(noteId);
+    if (prev) tracked.set(noteId, prev);
+
+    let desired = [];
+    let rendered = new Map();
+    if (note) ({ desired, rendered } = await buildDesired([note], objectTitles));
+    // note === null (deleted/hard-removed) → empty desired → planReconcile emits
+    // a delete for the tracked row.
+
+    const onDisk = await scanOnDisk(root);
+    const actions = planReconcile({ desired, tracked, onDisk });
+    for (const action of actions) await applyAction(root, action, rendered);
+    if (note) await ensureResources(root, [note]);
+
+    if (actions.length) {
+      console.log('[md-mirror] live:', JSON.stringify({ noteId, actions: actions.map((a) => a.type) }));
+    }
+    return { actions: actions.length };
+  } catch (err) {
+    console.error('[md-mirror] live reconcile failed:', err.message);
+    return { error: err.message };
+  }
+}
+
+// Bring the live listener up or down to match the current config. Idempotent —
+// called at startup and on every sweep tick so toggling the feature at runtime
+// takes effect without a restart (mirrors how runOnce self-gates).
+function ensureListener() {
+  const { enabled, root } = getConfig();
+  if (enabled && root) {
+    mirrorListener.start({ reconcileOne, runSweep: runOnce });
+  } else {
+    mirrorListener.stop();
+  }
+}
+
 // Report the worker's current state for the Settings UI. Cheap — only scans the
 // folder (no DB) when a path is configured.
 async function getStatus() {
@@ -245,6 +309,7 @@ async function getStatus() {
     lastSweepAt: lastSweep ? lastSweep.at : null,
     lastSummary: lastSweep ? lastSweep.summary : null,
     nextSweepAt: cfg.enabled && cfg.root ? nextRunAt(cfg.cron) : null,
+    liveConnected: mirrorListener.isConnected(),
     pathExists: false,
     fileCount: 0,
   };
@@ -259,8 +324,10 @@ function init() {
   const cfg = getConfig();
   // Always schedule the periodic sweep; runOnce self-gates on enabled+path, so
   // toggling the feature on at runtime (Settings → Mirror) takes effect without
-  // a server restart.
-  cron.schedule(cfg.cron, runOnce);
+  // a server restart. Each tick also reconciles the live listener with the
+  // current config so it connects/disconnects on a runtime toggle too.
+  cron.schedule(cfg.cron, () => { ensureListener(); runOnce(); });
+  ensureListener();
   if (cfg.enabled && cfg.root) {
     console.log(`[md-mirror] enabled → ${cfg.root} (sweep: ${cfg.cron})`);
     runOnce(); // startup full reconcile
@@ -269,4 +336,4 @@ function init() {
   }
 }
 
-module.exports = { init, runOnce, getStatus, buildDesired, scanOnDisk };
+module.exports = { init, runOnce, reconcileOne, getStatus, buildDesired, scanOnDisk };

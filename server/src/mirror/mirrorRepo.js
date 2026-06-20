@@ -68,6 +68,57 @@ async function loadNotes() {
   return [...byId.values()];
 }
 
+// Load a single note in the same render-ready shape as loadNotes, for the live
+// (LISTEN/NOTIFY) fast path. Returns null if the note no longer exists.
+async function loadNote(noteId) {
+  const notes = await db.query(
+    `SELECT id, title, content, plain_content, color,
+            is_pinned, is_archived, is_deleted, created_at, updated_at
+       FROM notes WHERE id = $1`,
+    [noteId]
+  );
+  const n = notes.rows[0];
+  if (!n) return null;
+
+  const [tags, reminders, images, attachments] = await Promise.all([
+    db.query(
+      `SELECT t.name, t.is_folder
+         FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.note_id = $1`,
+      [noteId]
+    ),
+    db.query(`SELECT next_run_at, timezone, rrule FROM reminders WHERE note_id = $1`, [noteId]),
+    db.query(`SELECT id, type FROM note_images WHERE note_id = $1 ORDER BY id ASC`, [noteId]),
+    db.query(
+      `SELECT id, original_name, file_path FROM note_attachments WHERE note_id = $1 ORDER BY id ASC`,
+      [noteId]
+    ),
+  ]);
+
+  const note = {
+    id: n.id,
+    title: n.title,
+    content: n.content,
+    plainContent: n.plain_content,
+    color: n.color,
+    pinned: n.is_pinned,
+    archived: n.is_archived,
+    trashed: n.is_deleted,
+    created: n.created_at,
+    updated: n.updated_at,
+    tags: [],
+    folders: [],
+    reminders: [],
+    images: [],
+    attachments: [],
+  };
+  for (const t of tags.rows) (t.is_folder ? note.folders : note.tags).push(t.name);
+  for (const r of reminders.rows) note.reminders.push({ at: r.next_run_at, timezone: r.timezone, rrule: r.rrule });
+  for (const img of images.rows) note.images.push({ id: img.id, type: img.type });
+  for (const att of attachments.rows) note.attachments.push({ id: att.id, originalName: att.original_name, filePath: att.file_path });
+  return note;
+}
+
 // Object titles (object-card divs carry no title in the note HTML — resolve it here).
 async function loadObjectTitles() {
   const { rows } = await db.query(`SELECT id, title FROM objects`);
@@ -112,6 +163,7 @@ async function deleteTracked(noteId) {
 
 module.exports = {
   loadNotes,
+  loadNote,
   loadObjectTitles,
   loadImageData,
   loadTracked,

@@ -162,8 +162,9 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
             />
             <Hint style={{ marginTop: '6px' }}>
               Absolute path the server can write to (inside the container if self-hosted).
-              The folder is created if it doesn’t exist. A sweep runs automatically every
-              few minutes; use “Sync now” to export immediately.
+              The folder is created if it doesn’t exist. Edits mirror live within seconds,
+              and a full reconcile sweep runs periodically as a backstop; use “Sync now” to
+              export everything immediately.
             </Hint>
           </FormGroup>
 
@@ -192,6 +193,14 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
               <span>Next sync</span>
               <span>{nextAt ? fmtCountdown(nextAt - now) : '…'}</span>
             </StatusRow>
+            {status && status.enabled && (
+              <StatusRow>
+                <span>Live updates</span>
+                {status.liveConnected
+                  ? <Ok>On — changes mirror within seconds</Ok>
+                  : <Warn>connecting…</Warn>}
+              </StatusRow>
+            )}
             {summary && (
               <StatusRow>
                 <span>Last sync changes</span>
