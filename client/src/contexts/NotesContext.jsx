@@ -172,6 +172,7 @@ export const NotesProvider = ({ children }) => {
     isCacheValid,
     prefetchNoteToCache,
     cancelPendingPrefetches,
+    reconcileCacheWithList,
     getViewportPrefetchDelay,
     subscribeToCacheStatus,
     getNoteCacheStatus,
@@ -381,6 +382,10 @@ export const NotesProvider = ({ children }) => {
 
       if (refresh) {
         console.log("loadNotes (refresh): Replacing notes state.");
+        // Reconcile the full-content cache: a refresh is the resync that runs on
+        // (re)connect, so any prefetched note whose content changed while we were
+        // offline (e.g. phone backgrounded) is re-fetched here to stay warm.
+        reconcileCacheWithList(fetchedNotes);
         setNotes(fetchedNotes);
         setPage(2);
       } else {
@@ -425,7 +430,7 @@ export const NotesProvider = ({ children }) => {
         }, 100); // Reduced delay
       }
     }
-  }, [getSortForView, convertToLegacyParams]); // Removed: view, page, hasMore, searchMode, currentSortOption - now using refs
+  }, [getSortForView, convertToLegacyParams, reconcileCacheWithList]); // Removed: view, page, hasMore, searchMode, currentSortOption - now using refs
   
   // --- View Management ---
 
@@ -745,6 +750,9 @@ export const NotesProvider = ({ children }) => {
       const fetchedNotes = response.notes || [];
   
       if (refreshSearch) {
+        // Same cache reconcile as loadNotes: the reconnect resync can run in
+        // search mode, so refresh stale prefetched content here too.
+        reconcileCacheWithList(fetchedNotes);
         setSearchResults(fetchedNotes);
       } else {
         // Append results for pagination
@@ -774,7 +782,7 @@ export const NotesProvider = ({ children }) => {
     }
   }, [
     searchMode, searchQuery, view,
-    searchById, loadNotes, getSortForView
+    searchById, loadNotes, getSortForView, reconcileCacheWithList
   ]); // Removed navigate - using navigateRef; removed page - using pageRef
 
   const loadMoreSearchResults = useCallback(() => {

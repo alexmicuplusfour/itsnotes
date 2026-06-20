@@ -181,6 +181,33 @@ export const usePrefetch = (cacheSettings) => {
     pendingSetRef.current.clear();
   }, []);
 
+  // Reconcile the cache against a freshly-fetched note list. For any cached
+  // full-content entry whose server updated_at is newer than the cached copy,
+  // re-fetch fresh content into the cache so the note stays warm.
+  // This is the safety net for updates we missed while the socket was down
+  // (e.g. phone backgrounded): the reconnect resync carries fresh updated_at,
+  // so we use it to refresh stale content proactively rather than evict it and
+  // pay a fetch on open.
+  const reconcileCacheWithList = useCallback((notesList) => {
+    if (!Array.isArray(notesList)) return;
+    const cache = fullNotesCacheRef.current;
+    notesList.forEach((listNote) => {
+      if (!listNote || !listNote.id) return;
+      const cached = cache[listNote.id];
+      if (!cached) return;
+      const serverTime = new Date(listNote.updated_at).getTime();
+      const cachedTime = new Date(cached.updated_at).getTime();
+      // Refresh if either timestamp is unparseable or the server copy is newer.
+      if (Number.isNaN(serverTime) || Number.isNaN(cachedTime) || serverTime > cachedTime) {
+        console.log(`[CACHE] Reconcile re-fetching stale note ${listNote.id} (server updated_at newer than cached)`);
+        // Drop the stale entry first so prefetchNoteToCache doesn't short-circuit
+        // on the still-TTL-valid copy, then re-fetch fresh full content.
+        removeFromCache(listNote.id);
+        prefetchNoteToCache(listNote.id);
+      }
+    });
+  }, [removeFromCache, prefetchNoteToCache]);
+
   // Stable getter for the per-card viewport-prefetch debounce (reuses the
   // BATCH_DELAY_MS setting — how long a card must stay in view before fetching).
   const getViewportPrefetchDelay = useCallback(
@@ -203,6 +230,7 @@ export const usePrefetch = (cacheSettings) => {
     // Prefetch operations
     prefetchNoteToCache,
     cancelPendingPrefetches,
+    reconcileCacheWithList,
     getViewportPrefetchDelay,
 
     // Direct cache access (for migration)
