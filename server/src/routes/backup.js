@@ -7,6 +7,7 @@ const os = require('os');
 const unzipper = require('unzipper');
 const settingsService = require('../services/settings');
 const backupScheduler = require('../services/backupScheduler');
+const { runMigrations } = require('../migrate');
 const { blockInDemo } = require('../middleware/demoGuard');
 const { rotateJwtSecret, resetUsersExistCache } = require('../middleware/auth');
 const { execFileAsync } = require('../utils/childProcess');
@@ -53,7 +54,7 @@ async function runPsqlFile(config, sqlFilePath) {
     try {
       return await execFileAsync('docker', [
         'exec', dockerContainer,
-        'psql', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
+        'psql', '-v', 'ON_ERROR_STOP=1', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
       ], { maxBuffer: 100 * 1024 * 1024 });
     } finally {
       await execFileAsync('docker', ['exec', dockerContainer, 'rm', '-f', containerSqlPath]).catch(() => {});
@@ -62,11 +63,28 @@ async function runPsqlFile(config, sqlFilePath) {
   const psqlPath = process.env.PSQL_PATH || 'psql';
   return execFileAsync(psqlPath, [
     '-h', config.host, '-p', String(config.port),
-    '-U', config.user, '-d', config.database, '-f', sqlFilePath,
+    '-v', 'ON_ERROR_STOP=1', '-U', config.user, '-d', config.database, '-f', sqlFilePath,
   ], {
     maxBuffer: 100 * 1024 * 1024,
     env: { ...process.env, PGPASSWORD: config.password },
   });
+}
+
+// Wipe the public schema before replaying a dump. A pg_dump made with
+// --clean only drops the objects that existed when the backup was taken, so
+// restoring an older backup into a newer schema fails when a newly-added table
+// (e.g. note_files) holds a foreign key into a table the dump tries to drop.
+// Dropping and recreating the schema guarantees a clean slate regardless of
+// drift between backup-time and restore-time.
+async function resetPublicSchema(config) {
+  const sql = 'DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n';
+  const tempPath = path.join(os.tmpdir(), `itsnotes-schemareset-${Date.now()}.sql`);
+  await fs.writeFile(tempPath, sql);
+  try {
+    await runPsqlFile(config, tempPath);
+  } finally {
+    try { await fs.unlink(tempPath); } catch {}
+  }
 }
 
 // Recursively copy a directory
@@ -300,11 +318,20 @@ async function streamRestoreFromZip(req, res, zipPath, displayName, { deleteSour
       throw new Error('Backup archive does not contain database.sql');
     }
 
+    console.log('[RESTORE] Resetting public schema for a clean restore...');
+    await resetPublicSchema(config);
+
     console.log('[RESTORE] Restoring database...');
     const result = await runPsqlFile(config, sqlFilePath);
     if (result.stdout) console.log('[RESTORE] stdout:', result.stdout);
     if (result.stderr) console.log('[RESTORE] stderr:', result.stderr);
     console.log('[RESTORE] Database restored successfully');
+
+    // The backup may predate the current schema (it captures whatever migrations
+    // were applied when it was taken). Run migrations to bring the restored DB up
+    // to the current schema before the app touches it.
+    console.log('[RESTORE] Applying pending migrations...');
+    await runMigrations();
 
     // Re-initialize settings from the restored DB so process.env reflects the
     // restored state without requiring a server restart

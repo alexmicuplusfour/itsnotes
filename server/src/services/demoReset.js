@@ -4,6 +4,7 @@ const fsPromises = require('fs').promises;
 const os = require('os');
 const unzipper = require('unzipper');
 const settingsService = require('./settings');
+const { runMigrations } = require('../migrate');
 const { execFileAsync } = require('../utils/childProcess');
 
 const UPLOADS_PATH = path.join(__dirname, '../../uploads');
@@ -15,6 +16,44 @@ const getDbConfig = () => ({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'itsnotes'
 });
+
+async function runPsqlFile(config, sqlFilePath) {
+  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
+  if (dockerContainer) {
+    const containerSqlPath = `/tmp/itsnotes-demo-${Date.now()}.sql`;
+    await execFileAsync('docker', ['cp', sqlFilePath, `${dockerContainer}:${containerSqlPath}`]);
+    try {
+      return await execFileAsync('docker', [
+        'exec', dockerContainer,
+        'psql', '-v', 'ON_ERROR_STOP=1', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
+      ], { maxBuffer: 100 * 1024 * 1024 });
+    } finally {
+      await execFileAsync('docker', ['exec', dockerContainer, 'rm', '-f', containerSqlPath]).catch(() => {});
+    }
+  }
+  const psqlPath = process.env.PSQL_PATH || 'psql';
+  return execFileAsync(psqlPath, [
+    '-h', config.host, '-p', String(config.port),
+    '-v', 'ON_ERROR_STOP=1', '-U', config.user, '-d', config.database, '-f', sqlFilePath,
+  ], {
+    maxBuffer: 100 * 1024 * 1024,
+    env: { ...process.env, PGPASSWORD: config.password },
+  });
+}
+
+// Wipe the public schema before replaying the seed dump so schema drift between
+// when the seed was captured and the current schema can't block the restore.
+// See the matching note in routes/backup.js.
+async function resetPublicSchema(config) {
+  const sql = 'DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n';
+  const tempPath = path.join(os.tmpdir(), `itsnotes-demo-schemareset-${Date.now()}.sql`);
+  await fsPromises.writeFile(tempPath, sql);
+  try {
+    await runPsqlFile(config, tempPath);
+  } finally {
+    try { await fsPromises.unlink(tempPath); } catch {}
+  }
+}
 
 async function copyDir(src, dest) {
   const entries = await fsPromises.readdir(src, { withFileTypes: true });
@@ -32,7 +71,6 @@ async function copyDir(src, dest) {
 
 async function restoreFromZip(zipFilePath) {
   const config = getDbConfig();
-  const dockerContainer = process.env.DOCKER_DB_CONTAINER;
   const extractDir = path.join(os.tmpdir(), `itsnotes-demo-restore-${Date.now()}`);
 
   try {
@@ -47,30 +85,15 @@ async function restoreFromZip(zipFilePath) {
 
     await fsPromises.access(sqlFilePath);
 
+    console.log('[DEMO RESET] Resetting public schema...');
+    await resetPublicSchema(config);
+
     console.log('[DEMO RESET] Restoring database...');
-    if (dockerContainer) {
-      const containerSqlPath = `/tmp/itsnotes-demo-restore-${Date.now()}.sql`;
-      await execFileAsync('docker', ['cp', sqlFilePath, `${dockerContainer}:${containerSqlPath}`]);
-      try {
-        const result = await execFileAsync('docker', [
-          'exec', dockerContainer,
-          'psql', '-U', config.user, '-d', config.database, '-f', containerSqlPath,
-        ], { maxBuffer: 100 * 1024 * 1024 });
-        if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
-      } finally {
-        await execFileAsync('docker', ['exec', dockerContainer, 'rm', '-f', containerSqlPath]).catch(() => {});
-      }
-    } else {
-      const psqlPath = process.env.PSQL_PATH || 'psql';
-      const result = await execFileAsync(psqlPath, [
-        '-h', config.host, '-p', String(config.port),
-        '-U', config.user, '-d', config.database, '-f', sqlFilePath,
-      ], {
-        maxBuffer: 100 * 1024 * 1024,
-        env: { ...process.env, PGPASSWORD: config.password },
-      });
-      if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
-    }
+    const result = await runPsqlFile(config, sqlFilePath);
+    if (result.stderr) console.log('[DEMO RESET] psql stderr:', result.stderr);
+
+    console.log('[DEMO RESET] Applying pending migrations...');
+    await runMigrations();
 
     await settingsService.init();
 
