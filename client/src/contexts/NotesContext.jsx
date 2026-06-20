@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { useNavigate } from 'react-router-dom'; // Temporary - for functions not yet migrated to NavigationService
+import { useNavigate, useLocation } from 'react-router-dom'; // Temporary - for functions not yet migrated to NavigationService
 import styled from 'styled-components';
 import api, { notesApi, tagsApi } from '../services/api';
 import socketService from '../services/socket';
@@ -131,6 +131,11 @@ export const NotesProvider = ({ children }) => {
   const navigateRef = useRef(navigate);
   useEffect(() => { navigateRef.current = navigate; }, [navigate]);
 
+  // Subscribe to router location so the path-change effect re-runs on navigation,
+  // including browser back/forward (popstate). Without this, NotesProvider never
+  // re-renders on route changes and the view falls out of sync with the URL.
+  const location = useLocation();
+
   const { tags: allTagsFromContext, hiddenTagIds } = useTags(); // Get all tags for lookup and hidden tags
   const { shouldAutoApply, shouldSuggestTag, getFeatureSettings } = useAutoTagging(); // Get auto-tagging settings
   const {
@@ -177,15 +182,15 @@ export const NotesProvider = ({ children }) => {
 
   // --- State ---
 
-  // View state - managed by NavigationService via pathname, exposed here for business logic
-  // Initialize from URL so direct navigation to /archive or /trash loads the correct notes on first render
-  // (otherwise the initial-load effect races with the path-change effect — the first loadNotes('main')
-  // is still in flight when the path-change effect re-runs it, so the archive/trash fetch gets aborted)
-  const [view, setView] = useState(() => {
-    if (typeof window === 'undefined') return 'main';
-    const pathname = window.location.pathname;
+  // View is derived directly from the URL — the URL is the single source of truth.
+  // Because this is computed from the reactive router location, it updates automatically
+  // on any navigation (sidebar clicks, direct URL, browser back/forward), so the view can
+  // never drift out of sync with the address bar. There is intentionally no setView: to
+  // change the view you navigate the URL (NavigationService.changeView), and this recomputes.
+  const view = useMemo(() => {
+    const pathname = location.pathname;
     return pathname === '/archive' ? 'archive' : pathname === '/trash' ? 'trash' : 'main';
-  });
+  }, [location.pathname]);
 
   // Core Data State
   const [notes, setNotes] = useState([]); // Main list of notes for the current view
@@ -423,37 +428,6 @@ export const NotesProvider = ({ children }) => {
   }, [getSortForView, convertToLegacyParams]); // Removed: view, page, hasMore, searchMode, currentSortOption - now using refs
   
   // --- View Management ---
-
-  // Handle view change with URL synchronization
-  // Internal function to handle view change business logic (called when URL changes)
-  const handleViewChange = useCallback((newView) => {
-    // Only update if the view is actually changing
-    if (newView !== view) {
-      console.log(`Handling view change from ${view} to ${newView}`);
-
-      // Exit search mode if active
-      if (searchMode) {
-        setSearchMode(false);
-        setSearchResults([]);
-        setSearchQuery('');
-      }
-
-      // Reset state for the new view - thorough cleanup
-      setNotes([]);
-      setPage(1);
-      setHasMore(true);
-      setListLoading(true);
-      setError(null);
-
-      // Set the view state
-      setView(newView);
-
-      // Reset scroll position to top
-      window.scrollTo(0, 0);
-
-      // Note: loadNotes(true) is handled by the Initial Load Effect when view changes
-    }
-  }, [view, searchMode]);
 
   // --- Note Opening/Closing ---
 
@@ -2021,8 +1995,13 @@ export const NotesProvider = ({ children }) => {
     const sourceList = searchModeRef.current ? searchResultsRef.current : notesRef.current;
     const noteFromState = sourceList.find(note => note.id === id);
     const archivedIndex = sourceList.findIndex(note => note.id === id);
-    // First, immediately remove note from UI state in any view
+    // Remove from the main list. In search mode archived notes stay in the
+    // results, so keep the card and just flip its state in place (the ID-only
+    // call above is a no-op on search results).
     _updateOrRemoveNoteInState(id);
+    if (searchModeRef.current) {
+      setSearchResults(prev => prev.map(n => n.id === id ? { ...n, is_archived: true } : n));
+    }
     const wasInSearchMode = searchModeRef.current;
     const currentSearchQuery = searchQueryRef.current;
     
@@ -2206,8 +2185,10 @@ export const NotesProvider = ({ children }) => {
         saved.length === ids.length &&
         saved.every(entry => entry.note && ids.includes(entry.note.id));
       if (searchModeRef.current && searchQueryRef.current) {
-        // Archived notes were removed from search results; refetch to restore them.
-        handleSearch(searchQueryRef.current, true, false, null, false, true);
+        // Archived notes stayed in the search results, so flip their state back
+        // in place rather than refetching (which scrolls the list to the top).
+        setSearchResults(prev => prev.map(n => ids.includes(n.id) ? { ...n, is_archived: false } : n));
+        refreshSearchCount(searchQueryRef.current);
       } else if (canRestoreLocally) {
         // Re-insert at original positions instead of refetching (which clears all
         // loaded pages and scrolls back to the top).
@@ -2221,7 +2202,7 @@ export const NotesProvider = ({ children }) => {
       setError('Failed to undo archive');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastArchivedNoteIds, loadNotes, handleSearch]);
+  }, [lastArchivedNoteIds, loadNotes, handleSearch, refreshSearchCount]);
 
   // Lets external callers (e.g. bulk trash in NoteSelectionContext) supply the
   // full note objects + their search-result indices so undo can restore in place.
@@ -2715,6 +2696,18 @@ export const NotesProvider = ({ children }) => {
     loadNotes(true);
   }, [view, mainViewSortOption]); // Use mainViewSortOption instead of currentSortOption
 
+  // --- Scroll To Top On View Change ---
+  // When the view changes (main/archive/trash), reset scroll to the top. The state reset
+  // and reload are handled by the Initial Load Effect above; search exit is handled by the
+  // NavigationContext search watcher reacting to the URL losing its ?q param.
+  const prevViewForScrollRef = useRef(view);
+  useEffect(() => {
+    if (prevViewForScrollRef.current !== view) {
+      prevViewForScrollRef.current = view;
+      window.scrollTo(0, 0);
+    }
+  }, [view]);
+
   // --- Derived Data & Filtering ---
   
   // Helper functions for grouping notes.
@@ -2878,7 +2871,6 @@ export const NotesProvider = ({ children }) => {
     // bulkAddTagToNotes, bulkRemoveTagFromNotes,
 
     // UI Preferences & View Management
-    handleViewChange, // Internal function called by NavigationBridge when URL changes
     layoutView,
     toggleLayoutView,
     changeLayoutView: enhancedChangeLayoutView, // Use enhanced version
@@ -2922,7 +2914,7 @@ export const NotesProvider = ({ children }) => {
     loadNotes, handleSearch, loadMoreSearchResults, searchByTag, searchByColor, searchByBook, searchById, getReferenceCount, refreshSearchCount, saveSearch, removeSavedSearch,
     changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
     getNoteTags, addTagToNote, removeTagFromNote, updateNotesFromServer, openNoteById, closeNoteWithoutUrlUpdate,
-    handleViewChange, toggleLayoutView, enhancedChangeLayoutView, toggleQuickAccess, toggleMonthMarkers, toggleNoteTabs, setSearchBarActive, setError, _updateOrRemoveNoteInState,
+    toggleLayoutView, enhancedChangeLayoutView, toggleQuickAccess, toggleMonthMarkers, toggleNoteTabs, setSearchBarActive, setError, _updateOrRemoveNoteInState,
     reloadSettings,
     subscribeToCacheStatus, getNoteCacheStatus, prefetchNoteToCache, getViewportPrefetchDelay
   ]);

@@ -52,7 +52,6 @@ export class NavigationService {
   private closeNoteCallback?: () => Promise<void>;
   private searchCallback?: (query: string) => Promise<void>;
   private clearSearchCallback?: () => Promise<void>;
-  private viewChangeCallback?: (view: 'main' | 'archive' | 'trash') => Promise<void>;
 
   constructor(
     navigate: NavigateFunction,
@@ -104,13 +103,6 @@ export class NavigationService {
    */
   onClearSearch(callback: () => Promise<void>): void {
     this.clearSearchCallback = callback;
-  }
-
-  /**
-   * Set callback for view changes (main/archive/trash)
-   */
-  onViewChange(callback: (view: 'main' | 'archive' | 'trash') => Promise<void>): void {
-    this.viewChangeCallback = callback;
   }
 
   // ============ STATE ============
@@ -537,15 +529,11 @@ export class NavigationService {
     const targetPath = paths[view];
     console.log(`[NavigationService] Changing view to: ${view} (${targetPath})`);
 
-    // Clear search and notes from URL - start fresh for new view
+    // Clear search and notes from URL - start fresh for new view.
+    // NotesContext derives `view` from the path, so navigating is all that's needed —
+    // the view follows the URL reactively (no callback required).
     this.navigate(targetPath, { replace: false });
     this.notifySubscribers();
-
-    // Trigger view change callback to notify NotesContext
-    if (this.viewChangeCallback) {
-      console.log(`[NavigationService] Triggering viewChangeCallback for: ${view}`);
-      this.viewChangeCallback(view);
-    }
   }
 
   // ============ SPECIALIZED SEARCH METHODS ============

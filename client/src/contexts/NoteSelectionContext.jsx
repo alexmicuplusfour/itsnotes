@@ -213,6 +213,13 @@ export const NoteSelectionProvider = ({ children }) => {
       .filter(Boolean);
     const updateFn = (ids) => {
       ids.forEach(id => notesContextRef.current._updateOrRemoveNoteInState(id));
+      // In search mode archived notes stay in the results; keep the cards and
+      // just flip their state in place so they show as archived.
+      if (ctx.searchMode) {
+        notesContextRef.current.setSearchResults(prev =>
+          prev.map(n => ids.includes(n.id) ? { ...n, is_archived: true } : n)
+        );
+      }
     };
     _executeBulkAction('archive', notesApi.bulkArchiveNotes, updateFn).then(() => {
       // Show success toast after successful operation

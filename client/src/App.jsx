@@ -60,7 +60,7 @@ function App() {
 
 // Navigation Bridge Component - connects NotesContext callbacks to NavigationContext
 const NavigationBridge = ({ children }) => {
-  const { openNoteById, closeNoteWithoutUrlUpdate, handleSearch, handleViewChange } = useNotes();
+  const { openNoteById, closeNoteWithoutUrlUpdate, handleSearch } = useNotes();
   const { layoutView } = useUIPreferences();
   const { service, setViewType } = useNavigation();
 
@@ -110,13 +110,9 @@ const NavigationBridge = ({ children }) => {
     }
   }, [handleSearch]);
 
-  // View change callback - called when view changes (main/archive/trash)
-  const handleViewChangeFromNav = React.useCallback(async (view) => {
-    console.log('[NavigationBridge] View changed to:', view);
-    if (handleViewChange) {
-      handleViewChange(view);
-    }
-  }, [handleViewChange]);
+  // Note: view changes are driven entirely by the URL now. NavigationService.changeView
+  // navigates the path, and NotesContext derives `view` from the path reactively, so there
+  // is no view-change callback to register — the view follows the address bar automatically.
 
   // Set callbacks on the service when they're ready
   useEffect(() => {
@@ -125,8 +121,7 @@ const NavigationBridge = ({ children }) => {
     service.onCloseNote(handleCloseNote);
     service.onSearch(handleSearchFromNav);
     service.onClearSearch(handleClearSearch);
-    service.onViewChange(handleViewChangeFromNav);
-  }, [service, handleSaveNote, handleFetchNote, handleCloseNote, handleSearchFromNav, handleClearSearch, handleViewChangeFromNav]);
+  }, [service, handleSaveNote, handleFetchNote, handleCloseNote, handleSearchFromNav, handleClearSearch]);
 
   // Sync view type
   useEffect(() => {
