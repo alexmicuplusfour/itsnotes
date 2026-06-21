@@ -8,6 +8,11 @@
     "dev": "nodemon src/index.js",
     "test": "jest"
   },
+  "jest": {
+    "moduleNameMapper": {
+      "^marked$": "<rootDir>/node_modules/marked/lib/marked.umd.js"
+    }
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
