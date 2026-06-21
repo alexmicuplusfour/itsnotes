@@ -71,4 +71,88 @@ function renderNoteFile(note, options = {}) {
   return body ? `${doc}\n${body}\n` : doc;
 }
 
-module.exports = { buildFrontmatter, renderNoteFile, formatTimestamp };
+// --- Parsing (inverse of build/render): .md file -> metadata + Markdown body ---
+//
+// The body stays Markdown here; the import step converts it with markdownToHtml,
+// the same way renderNoteFile delegates the forward body conversion to
+// htmlToMarkdown. Parsing is deliberately tolerant: a file with no frontmatter (a
+// note someone created by hand) comes back as all-body with default metadata.
+
+// Leading `---` … `---` block, tolerating a BOM, CRLF, and trailing spaces on the
+// closing fence. Group 1 is the YAML between the fences.
+const FRONTMATTER_RE = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/;
+
+function toStringArray(value) {
+  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (value === undefined || value === null || value === '') return [];
+  return [String(value)];
+}
+
+function toBool(value) {
+  return value === true || value === 'true';
+}
+
+// Frontmatter timestamps are written Joplin-style (UTC, no zone) and js-yaml
+// parses them back into Dates; normalize anything date-like to ISO-8601 UTC.
+function toIso(value) {
+  if (!value && value !== 0) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+function parseReminders(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((r) => (r && typeof r === 'object' ? r : {}))
+    .map((r) => ({
+      at: toIso(r.at),
+      timezone: r.timezone != null ? String(r.timezone) : null,
+      rrule: r.rrule != null ? String(r.rrule) : null,
+    }))
+    .filter((r) => r.at);
+}
+
+// Coerce the raw YAML object into the exact shape buildFrontmatter emits.
+function normalizeFrontmatter(raw) {
+  const fm = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id: fm.id != null ? String(fm.id) : null,
+    title: fm.title != null ? String(fm.title) : '',
+    color: fm.color != null ? String(fm.color) : 'default',
+    pinned: toBool(fm.pinned),
+    archived: toBool(fm.archived),
+    trashed: toBool(fm.trashed),
+    tags: toStringArray(fm.tags),
+    folders: toStringArray(fm.folders),
+    created: toIso(fm.created),
+    updated: toIso(fm.updated),
+    reminders: parseReminders(fm.reminders),
+  };
+}
+
+function parseFrontmatter(text) {
+  if (!text || !text.trim()) return normalizeFrontmatter({});
+  return normalizeFrontmatter(yaml.load(text));
+}
+
+// Split a `.md` mirror file into { frontmatter, body }. `body` is the Markdown
+// after the fenced block, with the single separating blank line and trailing
+// whitespace stripped.
+function parseNoteFile(raw) {
+  const text = raw || '';
+  const m = FRONTMATTER_RE.exec(text);
+  if (!m) {
+    return { frontmatter: normalizeFrontmatter({}), body: text.replace(/^﻿/, '').trim() };
+  }
+  const frontmatter = parseFrontmatter(m[1]);
+  const body = text.slice(m[0].length).replace(/^\r?\n/, '').replace(/\s+$/, '');
+  return { frontmatter, body };
+}
+
+module.exports = {
+  buildFrontmatter,
+  renderNoteFile,
+  formatTimestamp,
+  parseFrontmatter,
+  parseNoteFile,
+};
