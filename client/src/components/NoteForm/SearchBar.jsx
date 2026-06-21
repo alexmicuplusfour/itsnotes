@@ -36,6 +36,19 @@ const SearchBar = ({
         type="text"
         value={searchQuery}
         onChange={(e) => onSearchChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            // Prevent the parent <Form> from submitting (which closes the note)
+            e.preventDefault();
+            if (matchCount > 0) {
+              if (e.shiftKey) {
+                onPrevMatch();
+              } else {
+                onNextMatch();
+              }
+            }
+          }
+        }}
         placeholder="Search in note..."
       />
       {searchQuery && (
