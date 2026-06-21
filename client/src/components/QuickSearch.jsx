@@ -193,6 +193,7 @@ const ColorsPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange })
 
   // Get data from contexts
   const { handleSearch } = useNotes();
+  const { getColorLabel } = useUIPreferences();
 
   // Close panel when clicking outside or scrolling
   useEffect(() => {
@@ -259,15 +260,20 @@ const ColorsPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange })
             <Section>
               <SectionTitle></SectionTitle>
               <ItemsGrid>
-                {COLORS.filter(color => color !== 'default').map(color => (
-                  <ColorCircle
-                    key={`color-${color}`}
-                    $color={color}
-                    theme={isDarkTheme ? 'dark' : 'light'}
-                    onClick={() => handleColorClick(color)}
-                    title={`Search color: ${color}`}
-                  />
-                ))}
+                {COLORS.filter(color => color !== 'default').map(color => {
+                  const label = getColorLabel(color);
+                  return (
+                    <ColorChip
+                      key={`color-${color}`}
+                      theme={isDarkTheme ? 'dark' : 'light'}
+                      onClick={() => handleColorClick(color)}
+                      title={`Search color: ${label}`}
+                    >
+                      <ColorDot $color={color} />
+                      {truncateText(label, 14)}
+                    </ColorChip>
+                  );
+                })}
               </ItemsGrid>
             </Section>
           </QuickSearchPanel>
@@ -1459,20 +1465,21 @@ const RemoveButton = styled.button`
   }
 `;
 
-const ColorCircle = styled.span`
+const ColorChip = styled(BaseItem)`
+  gap: 7px;
+  padding-left: 6px;
+  text-transform: capitalize;
+`;
+
+const ColorDot = styled.span`
   display: inline-block;
-  width: 30px;
-  height: 30px;
+  width: 16px;
+  height: 16px;
   border-radius: 50vh;
+  flex-shrink: 0;
   background-color: var(--note-color-${props => props.$color});
   outline: 1px solid var(--border-transparent);
   outline-offset: -1px;
-  cursor: pointer;
-
-  &:hover {
-    outline: 2px solid var(--foreground-color);
-    outline-offset: -2px;  
-  }
 `;
 
 const FolderInputWrapper = styled.div`

@@ -338,6 +338,7 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
               <ColorLabelInput
                 type="text"
                 placeholder={color}
+                maxLength={16}
                 value={colorLabels[color] || ''}
                 onChange={(e) => handleColorLabelChange(color, e.target.value)}
               />
