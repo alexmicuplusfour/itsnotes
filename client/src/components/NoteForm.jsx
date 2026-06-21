@@ -444,11 +444,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     resetImageState, // Function to reset state
   } = useImageManager();
 
-  // The add-content (+) button shows a spinner while any of its async actions
-  // is in flight: image upload, AI summarize, OCR, or reminder generation.
-  const isAddContentBusy =
-    isUploadingImage || isSummarizing || isExtractingOCR || isCreatingReminder;
-
   // Extract URLs from note content. Cheap early-out for the common case
   // of a note with no URL-shaped substring at all — skips the regex pass.
   const noteUrls = useMemo(() => {
@@ -1136,6 +1131,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     onAutoApplyTags: handleAutoApplyTags,
     onSuggestTags: handleSuggestTags,
   });
+
+  // The add-content (+) button shows a spinner while any of its async actions
+  // is in flight: image upload, AI summarize, OCR, reminder generation, or
+  // pulling content from a clipboard URL (plain URL, Goodreads, IMDb/TMDB).
+  const isAddContentBusy =
+    isUploadingImage || isSummarizing || isExtractingOCR || isCreatingReminder ||
+    isExtracting || isGoodreadsExtracting || isImdbExtracting;
 
   const titleInputRef = useRef();
   const autoSaveTimerRef = useRef(null);
