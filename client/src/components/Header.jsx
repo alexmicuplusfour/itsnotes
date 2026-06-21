@@ -545,7 +545,7 @@ const NewNoteButton = styled.button`
     right: 0;
     margin-left: auto;
     margin-right: auto;
-    width: ${props => props.$isHeaderHidden ? '56px' : '100px'};
+    width: 80px;
   }
 
   &:hover {
@@ -2035,7 +2035,7 @@ const Header = () => {
           setIsProcessing(false); // Reset processing state
         }
       }} $headerHidden={isHeaderHidden}>
-        {isProcessing ? <Spinner /> : <Icon name="newNote" size={28} strokeWidth={2.5} />}
+        {isProcessing ? <Spinner /> : <Icon name="add" size={28} strokeWidth={2.5} />}
       </NewNoteButton>
       )}
 
