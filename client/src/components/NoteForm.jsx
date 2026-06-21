@@ -263,9 +263,9 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   useEffect(() => { notesRef.current = notes; }, [notes]);
 
   // Single entry point for "I want to surface a suggested tag." Dedups against
-  // current suggestions and applied tags. The action bar surfacing itself is
-  // handled by DynamicActionBarsWrapper, which forces visible while
-  // suggestedTags is non-empty (so focus/scroll/hide races can't suppress it).
+  // current suggestions and applied tags. DynamicActionBarsWrapper surfaces the
+  // action bar once when suggestedTags goes from empty to non-empty; after that
+  // the bar follows normal scroll/focus hide behavior.
   const addSuggestedTags = useCallback((newSuggestions) => {
     if (!newSuggestions || newSuggestions.length === 0) return;
     setSuggestedTags(prev => {
