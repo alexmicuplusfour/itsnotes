@@ -147,7 +147,7 @@ const FixedTabs = () => {
     const { starredNoteIds, toggleStar, removeStar, getNoteScrollPosition, setNoteScrollPosition } = useStarredNotes();
     const { notes, searchResults, searchMode, openedNote } = useNotes();
     const { showNoteTabs } = useUIPreferences();
-    const { isTyping } = useTyping(); // Get isTyping state from context
+    const { isTyping, inNoteSearchActive } = useTyping(); // Get isTyping state from context
 
     // NEW: Use centralized navigation system
     const { openNote, closeNote } = useNavigation();
@@ -548,6 +548,12 @@ const FixedTabs = () => {
     // Render nothing if there are no tabs to display after filtering
     if (!tabNotesData || tabNotesData.length === 0) {
         console.log('[FixedTabs] No tabs to display, rendering null');
+        return null;
+    }
+
+    // Step aside while in-note search shows its floating pill in the same spot.
+    // Checked here (after all hooks) so toggling search never changes hook count.
+    if (inNoteSearchActive) {
         return null;
     }
 

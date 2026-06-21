@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import Mark from 'mark.js';
 
+// Minimum query length before in-note search actually highlights matches
+const MIN_SEARCH_LENGTH = 3;
+
 /**
  * Custom hook for in-note search functionality with Mark.js highlighting
  * 
@@ -97,10 +100,19 @@ export const useInNoteSearch = (
             done: (count) => {
               console.log(`[useInNoteSearch] Highlighted ${count} instances of "${query}"`);
               setMatchCount(count);
-              
+
               if (count > 0) {
                 // If matches found, always start with the first one
                 setCurrentMatchIndex(0);
+                // Apply the current-match class to the first match right away.
+                // mark() just stripped all highlights, and the scroll effect only
+                // re-applies it when the index/count actually change — which they
+                // don't when refining a query (e.g. "rent" -> still 1/2, index 0).
+                const highlightElements = node.querySelectorAll(`.${highlightClassName}`);
+                highlightElements.forEach(el => el.classList.remove(currentMatchClassName));
+                if (highlightElements[0]) {
+                  highlightElements[0].classList.add(currentMatchClassName);
+                }
               } else {
                 // No matches found
                 setCurrentMatchIndex(-1);
@@ -121,12 +133,15 @@ export const useInNoteSearch = (
   }, [
     contentContainerRef,
     highlightClassName,
+    currentMatchClassName,
     separateWordSearch,
     accuracy
   ]);
   // Effect to handle search highlighting when query or content changes
   useEffect(() => {
-    if (showSearch && searchQuery && contentContainerRef.current) {
+    // Don't search until the query is long enough to be meaningful
+    const queryIsLongEnough = searchQuery.trim().length >= MIN_SEARCH_LENGTH;
+    if (showSearch && queryIsLongEnough && contentContainerRef.current) {
       // Clear any pending debounce timer since we're running immediately
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);

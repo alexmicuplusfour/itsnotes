@@ -65,7 +65,9 @@ import {
   HighlightContainer,
   FloatingActionsPill,
   ExternalActionsPill,
+  InNoteSearchPill,
   ActionButton,
+  NavButton,
   SaveIndicator
 } from "./NoteForm/NoteForm.styles";
 
@@ -904,7 +906,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   }, [note?.id, editorInstance, fetchNoteVersions, setTitle, setColor, commitContent, showToast]);
   // --- End Version History Modal Logic ---
 
-  const { isTyping, setIsTyping } = useTyping(); // Use the context hook
+  const { isTyping, setIsTyping, setInNoteSearchActive } = useTyping(); // Use the context hook
+
+  // Tell the rest of the app when in-note search is showing its right-edge
+  // floating pill so the starred note tabs (same position) step aside.
+  useEffect(() => {
+    setInNoteSearchActive(showSearch);
+    return () => setInNoteSearchActive(false);
+  }, [showSearch, setInNoteSearchActive]);
 
   // Sync the hook's isTyping state with the context - optimized
   useEffect(() => {
@@ -2350,7 +2359,44 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
               onNextMatch={handleNextMatch}
               onCloseSearch={customHandleSearchToggle}
               color={color}
+              showInlineNav={false}
             />
+          )}
+          {/* Floating search-nav pill: right edge of screen, vertically centered */}
+          {showSearch && (
+            <InNoteSearchPill
+              $isDarkTheme={isDarkTheme}
+              style={
+                color && color !== 'default'
+                  ? { '--search-pill-color': `var(--note-color-${color})` }
+                  : {}
+              }
+              onClick={(e) => e.stopPropagation()}
+            >
+              {matchCount > 0 && (
+                <div className="search-pill-count">
+                  {currentMatch + 1 > 0 ? currentMatch + 1 : 0}/{matchCount}
+                </div>
+              )}
+              <NavButton
+                onClick={handlePrevMatch}
+                disabled={matchCount === 0 || currentMatch <= 0}
+                type="button"
+                title="Previous match"
+                theme={isDarkTheme ? "dark" : "light"}
+              >
+                <Icon name="arrow_up_caret" size={20} strokeWidth="3" />
+              </NavButton>
+              <NavButton
+                onClick={handleNextMatch}
+                disabled={matchCount === 0 || currentMatch >= matchCount - 1}
+                type="button"
+                title="Next match"
+                theme={isDarkTheme ? "dark" : "light"}
+              >
+                <Icon name="arrow_down_caret" size={20} strokeWidth="3" />
+              </NavButton>
+            </InNoteSearchPill>
           )}
           <ScrollableContent ref={scrollableFormRef} className="note-scrollable-content" $showSearch={showSearch} $fullscreen={effectiveFullscreen}>
             <ContentWrapper $fullscreen={effectiveFullscreen}>

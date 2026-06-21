@@ -379,7 +379,7 @@ export const SearchBar = styled.div`
   padding: 0;
   min-height: 56px; /* Fixed height to prevent resizing */
   /* Use CSS variable set inline via style prop to avoid regenerating classes per color */
-  background-color: var(--search-bar-color, var(--note-bg-color));
+  background-color: var(--search-bar-color, var(--mobile-note-bg-color));
   border-bottom: 1px solid
     ${(props) =>
     props.theme === "dark"
@@ -753,5 +753,46 @@ export const ExternalActionsPill = styled.div`
   /* Hide on mobile */
   @media (max-width: 768px) {
     display: none;
+  }
+`;
+
+// Floating pill for in-note search navigation (match count + prev/next).
+// Fixed to the right edge, vertically centered — occupies the same spot as the
+// starred note tabs, which are hidden while search is active.
+export const InNoteSearchPill = styled.div`
+  position: fixed;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 1102;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+
+  /* Large radius keeps the top/bottom fully rounded (capsule) at any width */
+  border-radius: 999px;
+
+  background-color: var(--search-pill-color, var(--note-bg-color));
+
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15),
+              0 1px 3px rgba(0, 0, 0, 0.1);
+
+  border: 1px solid ${props =>
+    props.$isDarkTheme
+      ? 'rgba(255, 255, 255, 0.05)'
+      : 'rgba(255, 255, 255, 0.3)'};
+
+  transition: opacity 0.2s ease, transform 0.2s ease;
+
+  /* Match count readout */
+  .search-pill-count {
+    font-size: 11px;
+    font-weight: normal;
+    opacity: 0.9;
+    padding: 8px 0 4px;
+    text-align: center;
   }
 `;

@@ -22,7 +22,8 @@ const SearchBar = ({
   onPrevMatch,
   onNextMatch,
   onCloseSearch,
-  color
+  color,
+  showInlineNav = true
 }) => {
   // Set color via CSS variable to avoid styled-components regenerating classes per color
   const colorStyle = color && color !== 'default'
@@ -64,7 +65,7 @@ const SearchBar = ({
         </ActionButton>
       )}
       <SearchNavigation>
-        {matchCount > 0 && (
+        {showInlineNav && matchCount > 0 && (
           <div
             style={{
               margin: "0 8px",
@@ -78,22 +79,26 @@ const SearchBar = ({
             {matchCount}
           </div>
         )}
-        <NavButton
-          onClick={onPrevMatch}
-          disabled={matchCount === 0}
-          type="button"
-          theme={isDarkTheme ? "dark" : "light"}
-        >
-          <Icon name="sortNewest" size={20} strokeWidth="3" />
-        </NavButton>
-        <NavButton
-          onClick={onNextMatch}
-          disabled={matchCount === 0}
-          type="button"
-          theme={isDarkTheme ? "dark" : "light"}
-        >
-          <Icon name="sortOldest" size={20} strokeWidth="3" />
-        </NavButton>{" "}
+        {showInlineNav && (
+          <NavButton
+            onClick={onPrevMatch}
+            disabled={matchCount === 0}
+            type="button"
+            theme={isDarkTheme ? "dark" : "light"}
+          >
+            <Icon name="sortNewest" size={20} strokeWidth="3" />
+          </NavButton>
+        )}
+        {showInlineNav && (
+          <NavButton
+            onClick={onNextMatch}
+            disabled={matchCount === 0}
+            type="button"
+            theme={isDarkTheme ? "dark" : "light"}
+          >
+            <Icon name="sortOldest" size={20} strokeWidth="3" />
+          </NavButton>
+        )}{" "}
         <Spacer />
         <Spacer />
         <Spacer />
