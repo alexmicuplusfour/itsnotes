@@ -25,4 +25,27 @@ router.post('/sync', async (req, res) => {
   }
 });
 
+// Read-only dry run: classify on-disk files against the DB without changing anything.
+router.post('/import/preview', async (req, res) => {
+  try {
+    res.json(await mirrorWorker.previewImport());
+  } catch (error) {
+    console.error('[md-mirror] import preview failed:', error);
+    res.status(500).json({ message: 'Import preview failed', error: error.message });
+  }
+});
+
+// Apply the import (writes to the DB), then return the result counts + fresh status.
+router.post('/import/apply', async (req, res) => {
+  try {
+    const result = await mirrorWorker.applyImport();
+    await mirrorWorker.broadcastImportResult(result);
+    const status = await mirrorWorker.getStatus();
+    res.json({ result, status });
+  } catch (error) {
+    console.error('[md-mirror] import apply failed:', error);
+    res.status(500).json({ message: 'Import apply failed', error: error.message });
+  }
+});
+
 module.exports = router;

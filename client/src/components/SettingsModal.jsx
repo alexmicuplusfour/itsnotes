@@ -35,6 +35,7 @@ const Sidebar = styled.div`
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   flex-shrink: 0;
   @media (max-width: 600px) {

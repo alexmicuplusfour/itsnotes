@@ -317,7 +317,7 @@ async function startServer(retryCount = 0, maxRetries = 10) {
     await settingsService.init();
     await backupScheduler.init();
     // Markdown mirror (DB → folder). No-op unless MD_MIRROR_ENABLED=true.
-    mirrorWorker.init();
+    mirrorWorker.init({ io });
     // Listen on 0.0.0.0 to accept connections from other devices on the network
     server.listen(port, '0.0.0.0', () => {
       // Update log message to reflect HTTPS

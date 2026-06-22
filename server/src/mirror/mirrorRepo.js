@@ -1,6 +1,8 @@
 'use strict';
 
 const db = require('../db');
+const Note = require('../models/Note');
+const Tag = require('../models/Tag');
 
 // Data layer for the Markdown mirror. Loads every note in a render-ready shape
 // (note row + its tags/folders/reminders/images/attachments) and owns the
@@ -161,6 +163,53 @@ async function deleteTracked(noteId) {
   await db.query(`DELETE FROM note_files WHERE note_id = $1`, [noteId]);
 }
 
+// Import writes (folder → DB) ------------------------------------------------
+//
+// These are the only places the mirror mutates note content, routed through the
+// same Note/Tag models the app uses so plain-text indexing, versioning and
+// inline-image reconciliation all happen exactly as they do for a normal edit.
+
+// Update an existing note's columns from an imported file.
+async function importUpdateNote(noteId, fields) {
+  await Note.update(noteId, fields);
+}
+
+// Create a note from a hand-made / untracked file. `created` (optional ISO) lets a
+// hand-authored file keep its own timestamp. Returns the new note id.
+async function importCreateNote(fields, created) {
+  const row = await Note.create({ ...fields, created_at: created || undefined });
+  return row.id;
+}
+
+// Make a note's tag + folder associations match the file's labels exactly: add
+// missing ones (creating the tag/folder row by name on first use), drop any the
+// file no longer lists. Folders are tag rows with is_folder = true; hierarchical
+// names ("a/b") live in a single row, so a plain name lookup is sufficient.
+async function syncNoteTags(noteId, { tags = [], folders = [] }) {
+  const desired = [
+    ...tags.map((name) => ({ name, isFolder: false })),
+    ...folders.map((name) => ({ name, isFolder: true })),
+  ];
+
+  const desiredIds = new Set();
+  for (const { name, isFolder } of desired) {
+    if (!name) continue;
+    let tag = await Tag.findByName(name);
+    if (!tag) tag = await Tag.create(name, true, isFolder);
+    desiredIds.add(tag.id);
+  }
+
+  const current = await Tag.findTagsByNoteId(noteId);
+  const currentIds = new Set(current.map((t) => t.id));
+
+  for (const id of desiredIds) {
+    if (!currentIds.has(id)) await Tag.addTagToNote(noteId, id);
+  }
+  for (const t of current) {
+    if (!desiredIds.has(t.id)) await Tag.removeTagFromNote(noteId, t.id);
+  }
+}
+
 module.exports = {
   loadNotes,
   loadNote,
@@ -169,4 +218,7 @@ module.exports = {
   loadTracked,
   upsertTracked,
   deleteTracked,
+  importUpdateNote,
+  importCreateNote,
+  syncNoteTags,
 };
