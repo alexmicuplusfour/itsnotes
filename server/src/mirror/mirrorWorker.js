@@ -251,6 +251,22 @@ async function readRawAt(root, relPath) {
   catch { return null; }
 }
 
+// Best-guess original date for a brand-new imported file that carries no `created:`
+// in its frontmatter — so importing e.g. an Obsidian vault preserves its chronology
+// instead of stamping every note "now". Uses the EARLIER of the file's birth time
+// and last-modified time: copying a vault in typically resets birth time to the copy
+// moment but preserves mtime, so the min is the closest signal to the real date.
+// Birth time isn't reported on every filesystem (0) — then mtime stands alone.
+// Returns undefined on error so the caller falls back to the DB default (now).
+async function fileOriginAt(root, relPath) {
+  try {
+    const st = await fs.stat(toAbs(root, relPath));
+    const birth = st.birthtimeMs > 0 ? st.birthtimeMs : Infinity;
+    const ms = Math.min(birth, st.mtimeMs);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
+  } catch { return undefined; }
+}
+
 // Render just the named notes (HTML→Markdown + hash) and return their current DB
 // hashes plus the rendered content. Used to resolve the small set of notes whose
 // files drifted — so import can tell a one-sided file edit from a true two-sided
@@ -367,7 +383,9 @@ async function applyImport() {
     const raw = await readRawAt(root, c.relPath);
     if (raw == null) continue;
     const { fields, tags, folders, created } = fileToNoteFields(raw, { resolveTag });
-    const newId = await repo.importCreateNote(fields, created);
+    // Frontmatter `created:` wins; otherwise fall back to the file's own date so an
+    // imported library keeps its chronology instead of all landing at "now".
+    const newId = await repo.importCreateNote(fields, created || await fileOriginAt(root, c.relPath));
     await repo.syncNoteTags(newId, { tags, folders });
     await repo.upsertTracked(newId, c.relPath, fingerprint(raw));
     createdIds.push(newId);

@@ -424,6 +424,19 @@ describe('applyImport (folder → DB writes against a temp folder)', () => {
     expect(created.tags).toEqual(expect.arrayContaining(['cooking', 'recipe']));
   });
 
+  // Importing an Obsidian-style library should keep each note's date. With no
+  // `created:` in the file, the note takes the file's own (earlier of birth/mtime)
+  // date instead of "now", so chronology survives.
+  test('a new file with no frontmatter created keeps the file’s own date', async () => {
+    const p = path.join(dir, 'old-idea.md');
+    await fs.writeFile(p, '# Old idea\n\nfrom way back\n', 'utf8');
+    const past = new Date('2021-03-04T05:06:07Z');
+    await fs.utimes(p, past, past); // birth time stays ~now; mtime moves to the past
+    await applyImport();
+    const created = (await repo.loadNotes()).find((n) => n.id !== ID);
+    expect(new Date(created.created).getUTCFullYear()).toBe(2021);
+  });
+
   // The crux of safe hand-editing: an imported file must keep the name the user
   // gave it. If the export renamed it to a slug-id, the user's still-open editor
   // would re-save the old name as a brand-new (untracked) file → a duplicate note.
