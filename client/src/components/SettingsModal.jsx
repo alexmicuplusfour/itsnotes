@@ -186,10 +186,16 @@ const SettingsModal = ({ onClose }) => {
   } = useUIPreferences();
 
   useEffect(() => {
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
     const originalOverflow = document.body.style.overflow;
+    const originalPadding = document.body.style.paddingRight;
+
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
     document.body.style.overflow = 'hidden';
+
     return () => {
       document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPadding;
     };
   }, []);
 
