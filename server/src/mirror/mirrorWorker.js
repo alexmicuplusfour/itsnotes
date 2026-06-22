@@ -349,63 +349,77 @@ async function applyImport() {
   if (!enabled || !root) return { skipped: true, reason: 'disabled' };
   if (!(await exists(root))) return { skipped: true, reason: 'no-path' };
 
-  const { rendered, plan } = await loadImportState();
+  // Run through the same one-at-a-time queue as the export sweep and live reconcile.
+  // Import mutates the folder + note_files tracking exactly as they do, so an import
+  // overlapping an in-flight export would interleave writes on the same rows/files —
+  // the very race serialize() exists to prevent (orphaned duplicates, mistracked
+  // hashes, even a spurious conflict). Both the manual route and the auto poll call
+  // this, so wrapping here (not at the call sites) covers them with one queue. Note:
+  // autoImportTick must therefore NOT wrap this again, or it would await itself.
+  return serialize(async () => {
+    running = true;
+    try {
+      const { rendered, plan } = await loadImportState();
 
-  // Restore the data-tag-id on inline #tag mentions, which the `.md` form drops
-  // (tags are written as plain `#label`). Loaded once for the whole pass.
-  const tagIds = await repo.loadTagIdsByName();
-  const resolveTag = (label) => tagIds.get(label) || null;
+      // Restore the data-tag-id on inline #tag mentions, which the `.md` form drops
+      // (tags are written as plain `#label`). Loaded once for the whole pass.
+      const tagIds = await repo.loadTagIdsByName();
+      const resolveTag = (label) => tagIds.get(label) || null;
 
-  // Track which notes the import actually changed in the DB so the route can push
-  // live socket updates to connected clients (the import bypasses the note routes
-  // that normally broadcast). Conflicts and pure renames don't touch note content,
-  // so they need no broadcast.
-  const createdIds = [];
-  const updatedIds = [];
+      // Track which notes the import actually changed in the DB so the route can push
+      // live socket updates to connected clients (the import bypasses the note routes
+      // that normally broadcast). Conflicts and pure renames don't touch note content,
+      // so they need no broadcast.
+      const createdIds = [];
+      const updatedIds = [];
 
-  // Import a file's contents into an existing note, then point tracking at that
-  // file's hash so we don't immediately re-detect it (the export side will reconcile
-  // any canonical-form drift on its next pass). The file is re-read fresh here rather
-  // than carried from the scan, so tracking always reflects the bytes we just imported.
-  const importInto = async (noteId, relPath) => {
-    const raw = await readRawAt(root, relPath);
-    if (raw == null) return;
-    const { fields, tags, folders } = fileToNoteFields(raw, { resolveTag });
-    await repo.importUpdateNote(noteId, fields);
-    await repo.syncNoteTags(noteId, { tags, folders });
-    await repo.upsertTracked(noteId, relPath, fingerprint(raw));
-    updatedIds.push(noteId);
-  };
+      // Import a file's contents into an existing note, then point tracking at that
+      // file's hash so we don't immediately re-detect it (the export side will reconcile
+      // any canonical-form drift on its next pass). The file is re-read fresh here rather
+      // than carried from the scan, so tracking always reflects the bytes we just imported.
+      const importInto = async (noteId, relPath) => {
+        const raw = await readRawAt(root, relPath);
+        if (raw == null) return;
+        const { fields, tags, folders } = fileToNoteFields(raw, { resolveTag });
+        await repo.importUpdateNote(noteId, fields);
+        await repo.syncNoteTags(noteId, { tags, folders });
+        await repo.upsertTracked(noteId, relPath, fingerprint(raw));
+        updatedIds.push(noteId);
+      };
 
-  for (const e of plan.edited) await importInto(e.noteId, e.relPath);
+      for (const e of plan.edited) await importInto(e.noteId, e.relPath);
 
-  for (const c of plan.created) {
-    const raw = await readRawAt(root, c.relPath);
-    if (raw == null) continue;
-    const { fields, tags, folders, created } = fileToNoteFields(raw, { resolveTag });
-    // Frontmatter `created:` wins; otherwise fall back to the file's own date so an
-    // imported library keeps its chronology instead of all landing at "now".
-    const newId = await repo.importCreateNote(fields, created || await fileOriginAt(root, c.relPath));
-    await repo.syncNoteTags(newId, { tags, folders });
-    await repo.upsertTracked(newId, c.relPath, fingerprint(raw));
-    createdIds.push(newId);
-  }
+      for (const c of plan.created) {
+        const raw = await readRawAt(root, c.relPath);
+        if (raw == null) continue;
+        const { fields, tags, folders, created } = fileToNoteFields(raw, { resolveTag });
+        // Frontmatter `created:` wins; otherwise fall back to the file's own date so an
+        // imported library keeps its chronology instead of all landing at "now".
+        const newId = await repo.importCreateNote(fields, created || await fileOriginAt(root, c.relPath));
+        await repo.syncNoteTags(newId, { tags, folders });
+        await repo.upsertTracked(newId, c.relPath, fingerprint(raw));
+        createdIds.push(newId);
+      }
 
-  for (const r of plan.renamed) {
-    if (r.alsoEdited) await importInto(r.noteId, r.relPath);
-    else await repo.upsertTracked(r.noteId, r.relPath, r.hash);
-  }
+      for (const r of plan.renamed) {
+        if (r.alsoEdited) await importInto(r.noteId, r.relPath);
+        else await repo.upsertTracked(r.noteId, r.relPath, r.hash);
+      }
 
-  // Conflicts: DB wins. Preserve the user's on-disk edits in conflicts/ (outside
-  // the scanned dirs so it's never re-imported), then re-export the note so the
-  // main file matches the DB again and re-point tracking at the DB's hash.
-  for (const c of plan.conflict) {
-    await saveConflictFile(root, c.relPath, await readRawAt(root, c.relPath));
-    await writeFileAt(root, c.relPath, rendered.get(c.noteId));
-    await repo.upsertTracked(c.noteId, c.relPath, fingerprint(rendered.get(c.noteId)));
-  }
+      // Conflicts: DB wins. Preserve the user's on-disk edits in conflicts/ (outside
+      // the scanned dirs so it's never re-imported), then re-export the note so the
+      // main file matches the DB again and re-point tracking at the DB's hash.
+      for (const c of plan.conflict) {
+        await saveConflictFile(root, c.relPath, await readRawAt(root, c.relPath));
+        await writeFileAt(root, c.relPath, rendered.get(c.noteId));
+        await repo.upsertTracked(c.noteId, c.relPath, fingerprint(rendered.get(c.noteId)));
+      }
 
-  return { ...summarizePlan(plan).counts, createdIds, updatedIds };
+      return { ...summarizePlan(plan).counts, createdIds, updatedIds };
+    } finally {
+      running = false;
+    }
+  });
 }
 
 // Park a conflicting file's contents under conflicts/<name>.<timestamp>.md so the
@@ -649,9 +663,10 @@ async function hasPendingImport(root) {
 let autoImporting = false;
 
 // One unattended import pass: only fires when the feature + auto-import are on and
-// the cheap gate finds work. Serializes the real apply behind any in-flight sweep/
-// reconcile (same queue as runOnce) so the two writers never race on note_files,
-// then broadcasts whatever notes it changed.
+// the cheap gate finds work. applyImport() self-serializes (same queue as the sweep
+// and live reconcile), so the two writers never race on note_files; we just call it
+// directly — wrapping it in serialize() again here would make it await itself. The
+// `autoImporting` guard only stops overlapping *ticks*, not the queue.
 async function autoImportTick() {
   const { enabled, root, autoImport } = getConfig();
   if (!enabled || !root || !autoImport || autoImporting) return;
@@ -660,11 +675,7 @@ async function autoImportTick() {
     if (!(await exists(root))) return;
     if (!(await hasPendingImport(root))) return;
 
-    const result = await serialize(async () => {
-      running = true;
-      try { return await applyImport(); }
-      finally { running = false; }
-    });
+    const result = await applyImport();
 
     if (result && !result.skipped) {
       const changed = (result.createdIds || []).length + (result.updatedIds || []).length;

@@ -521,6 +521,22 @@ describe('applyImport (folder → DB writes against a temp folder)', () => {
     expect(result.updatedIds).toEqual([]);
   });
 
+  // A manual import fired while an export sweep is in flight must not interleave
+  // writes with it — applyImport now rides the same one-at-a-time queue, so the two
+  // run in sequence and leave a single, consistent file (no orphan/duplicate, no
+  // mistracked hash). Also proves the self-serialization doesn't deadlock.
+  test('a manual import overlapping a sweep is serialized, not raced', async () => {
+    await fs.appendFile(path.join(dir, FILE), '\nedited by hand\n', 'utf8');
+
+    const [, imp] = await Promise.all([runOnce(), applyImport()]);
+    expect(imp.edited).toBe(1);
+
+    const mdFiles = (await fs.readdir(dir)).filter((f) => f.endsWith('.md'));
+    expect(mdFiles).toEqual([FILE]);
+    const [note] = await repo.loadNotes();
+    expect(note.content).toContain('edited by hand');
+  });
+
   test('skips cleanly when the feature is disabled', async () => {
     delete process.env.MD_MIRROR_ENABLED;
     expect(await applyImport()).toEqual({ skipped: true, reason: 'disabled' });
