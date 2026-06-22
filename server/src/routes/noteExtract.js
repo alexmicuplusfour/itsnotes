@@ -33,6 +33,12 @@ const CHALLENGE_MARKERS = [
     'access denied | cloudflare',
     'one moment, please',
     'verify you are human',
+    // Cloudflare's older "One more step" reCAPTCHA interstitial — the one
+    // archive.today (archive.ph) throws at datacenter IPs. Distinct wording
+    // from "Attention Required", so it needs its own markers.
+    'please complete the security check to access',
+    'why do i have to complete a captcha',
+    'completing the captcha proves you are a human',
 ];
 
 // Markers that suggest the page is gated behind a paywall or signup. False
@@ -60,6 +66,28 @@ const PAYWALL_MARKERS = [
     'become a member to read',
     'this is a paid article',
 ];
+
+// A real desktop Chrome UA + headers. Sending these (instead of axios's default
+// `axios/1.x` UA, which sites block or 429 on sight) lets the lightweight fetch
+// tiers actually succeed on the many sites that only do shallow UA filtering.
+const BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+};
+
+// Run Readability over rendered HTML, falling back to the raw body when it
+// can't isolate an article. Returns { content, title } with content never null.
+function parseHtmlToArticle(html, url) {
+    const doc = new JSDOM(html, { url });
+    const reader = new Readability(doc.window.document.cloneNode(true));
+    const article = reader.parse();
+    if (article && article.content) {
+        return { content: article.content, title: article.title || '' };
+    }
+    const bodyHtml = doc.window.document.body ? doc.window.document.body.innerHTML : '';
+    return { content: bodyHtml || '', title: doc.window.document.title || '' };
+}
 
 // Returns null if the page looks usable, otherwise 'challenge' | 'paywall'.
 // Both outcomes mean "discard and try the next tier" — archive.org in
@@ -198,6 +226,13 @@ async function extractViaJina(url) {
     };
     if (process.env.JINA_API_KEY) {
         headers['Authorization'] = `Bearer ${process.env.JINA_API_KEY}`;
+        // Route the fetch through Jina's residential proxy pool. This is the
+        // piece that actually beats Vercel/Cloudflare walls: without it Jina
+        // fetches from its own datacenter IPs and gets the same challenge we
+        // do (verified: aeon returns an 80-char checkpoint without this header
+        // and the full 28k-char article with it). Premium feature, so it's
+        // gated on having a key.
+        headers['X-Proxy'] = 'auto';
     }
     const response = await axios.get(jinaUrl, { headers, timeout: 45000 });
     const data = response.data?.data || response.data;
@@ -207,6 +242,88 @@ async function extractViaJina(url) {
     const html = marked.parse(markdown);
     return { title, content: html };
 }
+
+// archive.today (a.k.a. archive.ph / archive.is) is a *separate* archive from
+// the Wayback Machine and often has captures — including pre-paywall ones —
+// that archive.org doesn't. The catch: it sits behind its own Cloudflare wall
+// that challenges datacenter IPs, so we render `/newest/<url>` through the
+// stealth Playwright browser rather than plain axios (which just gets a
+// challenge page). Reached only as the very last resort.
+async function extractViaArchiveToday(url) {
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (!chromiumPath) throw new Error('PUPPETEER_EXECUTABLE_PATH not set; archive.today tier unavailable.');
+
+    const cleaned = stripTrackingParams(url);
+    // `/newest/` redirects straight to the most recent snapshot when one exists.
+    const lookupUrl = `https://archive.ph/newest/${cleaned}`;
+
+    let browser = null;
+    try {
+        browser = await chromium.launch({
+            headless: true,
+            executablePath: chromiumPath,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        });
+        const page = await browser.newPage({
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        });
+        await page.goto(lookupUrl, { waitUntil: 'networkidle', timeout: 30000 });
+
+        // A real capture redirects to a short snapshot id (e.g. archive.ph/AbCdE)
+        // whose URL no longer contains the original address. If we're still
+        // sitting on a URL that echoes the target back, there's no snapshot —
+        // archive.today landed us on its empty search/listing page.
+        const targetTail = cleaned.replace(/^https?:\/\//, '');
+        if (page.url().includes(targetTail) || page.url().includes('/newest/')) {
+            throw new Error('No archive.today snapshot available.');
+        }
+
+        const article = parseHtmlToArticle(await page.content(), cleaned);
+        if (!article.content) throw new Error('Readability could not parse the archive.today snapshot.');
+        return { title: article.title, content: article.content };
+    } finally {
+        if (browser) { try { await browser.close(); } catch (e) { /* ignore */ } }
+    }
+}
+
+// Report the remaining token balance for the configured Jina key. Backs the
+// "Refresh tokens" button in Settings → Integrations. Hits the same dashboard
+// backend the Jina API Key & Billing page uses (undocumented but stable):
+// a bad key returns 401, a good one returns the account's wallet.
+// POST (not GET) so it doesn't collide with the GET /notes/:id route, which
+// would otherwise treat "jina-balance" as a note id — same reason extract-url
+// is a POST.
+router.post('/jina-balance', async (req, res) => {
+    const key = process.env.JINA_API_KEY;
+    if (!key) return res.json({ configured: false });
+
+    try {
+        const resp = await axios.get('https://embeddings-dashboard-api.jina.ai/api/v1/api_key/user', {
+            params: { api_key: key },
+            timeout: 10000,
+        });
+        // Shape isn't formally documented, so unwrap defensively and log the
+        // raw wallet once so the field names can be confirmed against a live key.
+        const body = resp.data?.data || resp.data || {};
+        const wallet = body.wallet || body;
+        console.log('[jina-balance] wallet payload:', JSON.stringify(wallet));
+
+        const num = (...cands) => cands.find(v => typeof v === 'number');
+        const balance = num(wallet.total_balance, wallet.regular_balance, wallet.balance, body.total_balance);
+
+        return res.json({
+            configured: true,
+            valid: true,
+            balance: balance ?? null,
+        });
+    } catch (e) {
+        if (e.response?.status === 401 || e.response?.status === 403) {
+            return res.json({ configured: true, valid: false, error: 'Invalid API key' });
+        }
+        console.error('[jina-balance] lookup failed:', e.message);
+        return res.json({ configured: true, valid: true, balance: null, error: 'Could not fetch balance' });
+    }
+});
 
 // Extract content from URL - Puppeteer first, Axios fallback
 router.post('/extract-url', async (req, res) => {
@@ -271,26 +388,28 @@ router.post('/extract-url', async (req, res) => {
             console.log(`Navigating (Playwright) to ${url}...`);
             await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
             console.log(`Getting rendered content (Playwright) for ${url}...`);
-            const html = await page.content();
+            let article = parseHtmlToArticle(await page.content(), url);
+
+            // Vercel/Cloudflare JS checkpoints often clear themselves a few
+            // seconds after the initial load (the page runs a proof-of-work
+            // then swaps in the real content). If the first grab looks like a
+            // challenge, wait and re-read once before giving up on this tier.
+            if (detectBlocker(article.title, article.content) === 'challenge') {
+                console.warn(`Playwright got a challenge for ${url}; waiting for it to clear...`);
+                try {
+                    await page.waitForTimeout(6000);
+                    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+                    article = parseHtmlToArticle(await page.content(), url);
+                } catch (retryErr) {
+                    console.warn(`Playwright challenge re-read failed for ${url}: ${retryErr.message}`);
+                }
+            }
+
             await page.close();
             console.log(`Page closed for ${url}.`);
 
-            // --- JSDOM + Readability part ---
-            const doc = new JSDOM(html, { url });
-            const reader = new Readability(doc.window.document.cloneNode(true));
-            const article = reader.parse();
-
-            if (article && article.content) {
-                extractedContent = article.content; // Return HTML directly instead of converting to text
-                extractedTitle = article.title;
-                console.log(`Extraction successful via Playwright for ${url}.`);
-            } else {
-                console.warn(`Readability (Playwright) failed for ${url}, falling back to rendered body text.`);
-                const bodyHtml = doc.window.document.body ? doc.window.document.body.innerHTML : '';
-                extractedContent = bodyHtml || "";
-                extractedTitle = doc.window.document.title || '';
-                if (extractedContent === null) extractedContent = "";
-            }
+            extractedContent = article.content;
+            extractedTitle = article.title;
 
             // Reject anti-bot interstitials and paywalls so we proceed to the
             // next tier instead of writing junk into the note.
@@ -300,6 +419,8 @@ router.post('/extract-url', async (req, res) => {
                 extractedContent = null;
                 extractedTitle = null;
                 finalError = new Error(`${blockerPw} detected (Playwright tier).`);
+            } else {
+                console.log(`Extraction successful via Playwright for ${url}.`);
             }
             // --- End JSDOM part ---
 
@@ -325,26 +446,16 @@ router.post('/extract-url', async (req, res) => {
     if (extractedContent === null) {
         console.log(`Attempting Axios fallback extraction for ${url}...`);
         try {
-            // ... Axios logic ...
-            const response = await axios.get(url, { /* ... */ });
-            const html = response.data;
-            const doc = new JSDOM(html, { url });
-            const reader = new Readability(doc.window.document.cloneNode(true));
-            const article = reader.parse();
-
-            if (article && article.content) {
-                 extractedContent = article.content; // Return HTML directly instead of converting to text
-                 extractedTitle = article.title;
-                 console.log(`Extraction successful via Axios fallback for ${url}.`);
-                 finalError = null;
-            } else {
-                 console.warn(`Readability (Axios fallback) failed for ${url}, trying body text.`);
-                 const bodyHtml = doc.window.document.body ? doc.window.document.body.innerHTML : '';
-                 extractedContent = bodyHtml || "";
-                 extractedTitle = doc.window.document.title || '';
-                 finalError = null;
-                 if (extractedContent === null) extractedContent = "";
-             }
+            const response = await axios.get(url, {
+                headers: BROWSER_HEADERS,
+                timeout: 15000,
+                maxRedirects: 5,
+            });
+            const article = parseHtmlToArticle(response.data, url);
+            extractedContent = article.content;
+            extractedTitle = article.title;
+            finalError = null;
+            console.log(`Extraction successful via Axios fallback for ${url}.`);
 
             const blockerAx = detectBlocker(extractedTitle, extractedContent);
             if (blockerAx) {
@@ -401,6 +512,28 @@ router.post('/extract-url', async (req, res) => {
         } catch (jinaError) {
             console.error(`Jina Reader fallback failed for ${url}:`, jinaError.message);
             if (!finalError) finalError = jinaError;
+        }
+    }
+
+    // --- Attempt 5: archive.today snapshot (last resort) ---
+    // A different archive from the Wayback Machine, with different (and often
+    // pre-paywall) captures. Rendered through Playwright to clear its own
+    // Cloudflare wall, so it only runs when chromium is configured.
+    if (extractedContent === null) {
+        console.log(`Attempting archive.today fallback for ${url}...`);
+        try {
+            const at = await extractViaArchiveToday(url);
+            const blockerAt = detectBlocker(at.title, at.content);
+            if (blockerAt) {
+                throw new Error(`archive.today snapshot looks like a ${blockerAt}.`);
+            }
+            extractedContent = at.content;
+            extractedTitle = at.title;
+            finalError = null;
+            console.log(`Extraction successful via archive.today for ${url}.`);
+        } catch (archiveTodayError) {
+            console.error(`archive.today fallback failed for ${url}:`, archiveTodayError.message);
+            if (!finalError) finalError = archiveTodayError;
         }
     }
 

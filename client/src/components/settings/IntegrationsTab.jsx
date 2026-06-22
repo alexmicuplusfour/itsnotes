@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import Switch from '../Switch';
+import { notesApi } from '../../services/api';
 import {
   SectionContainer,
   SectionTitle,
@@ -10,6 +11,33 @@ import {
 
 const IntegrationsTab = ({ settings, onChange, commit }) => {
   const foxitEnabled = settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true';
+
+  const [jinaLoading, setJinaLoading] = useState(false);
+  const [jinaStatus, setJinaStatus] = useState(null);
+
+  const refreshJinaTokens = useCallback(async () => {
+    setJinaLoading(true);
+    setJinaStatus(null);
+    try {
+      const data = await notesApi.getJinaBalance();
+      setJinaStatus(data);
+    } catch (e) {
+      setJinaStatus({ error: 'Could not fetch balance' });
+    } finally {
+      setJinaLoading(false);
+    }
+  }, []);
+
+  // Friendly one-liner describing the last token check.
+  const jinaMessage = () => {
+    if (!jinaStatus) return null;
+    if (jinaStatus.configured === false) return 'Save an API key first, then check again.';
+    if (jinaStatus.valid === false) return 'Invalid API key.';
+    if (typeof jinaStatus.balance === 'number') {
+      return `${jinaStatus.balance.toLocaleString()} tokens remaining`;
+    }
+    return jinaStatus.error || "Couldn't read the balance for this key.";
+  };
 
   return (
     <>
@@ -27,6 +55,52 @@ const IntegrationsTab = ({ settings, onChange, commit }) => {
             onChange={onChange}
             placeholder="Enter your TMDB API key"
           />
+        </FormGroup>
+      </SectionContainer>
+      <SectionContainer>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <SectionTitle style={{ margin: 0 }}>Jina Reader</SectionTitle>
+          <button
+            onClick={refreshJinaTokens}
+            disabled={jinaLoading}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '12px',
+              cursor: jinaLoading ? 'not-allowed' : 'pointer',
+              color: 'var(--text-secondary-color)',
+              opacity: jinaLoading ? 0.6 : 1,
+            }}
+          >
+            {jinaLoading ? 'Checking...' : '↻ Refresh tokens'}
+          </button>
+        </div>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+          Improves article extraction for tough sites. When the built-in methods are blocked by a paywall or an anti-bot wall (Cloudflare, Vercel), the article is fetched through Jina's premium renderer instead. Optional &mdash; extraction still works without a key, just less reliably. Get one at jina.ai/reader.
+        </p>
+        <FormGroup>
+          <Label>API Key</Label>
+          <Input
+            type="password"
+            name="JINA_API_KEY"
+            value={settings.JINA_API_KEY || ''}
+            onChange={onChange}
+            placeholder="jina_..."
+            autoComplete="off"
+          />
+          {jinaStatus && (
+            <p style={{
+              marginTop: '6px',
+              fontSize: '13px',
+              color: (jinaStatus.valid === false || (jinaStatus.error && jinaStatus.balance == null))
+                ? 'var(--danger-color, #d9534f)'
+                : 'var(--text-secondary-color)',
+            }}>
+              {jinaMessage()}
+            </p>
+          )}
         </FormGroup>
       </SectionContainer>
       <SectionContainer>

@@ -270,6 +270,12 @@ export const notesApi = {
     return response.data; // Should return { title, content, images? }
   },
 
+  // Remaining token balance for the configured Jina Reader key
+  getJinaBalance: async () => {
+    const response = await api.post('/notes/jina-balance');
+    return response.data; // { configured, valid?, balance?, error? }
+  },
+
   // --- Version History ---
   getNoteVersions: async (noteId) => {
     const response = await api.get(`/notes/${noteId}/versions`);
