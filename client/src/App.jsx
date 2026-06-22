@@ -259,7 +259,7 @@ const AppContent = () => {
   const isImportPage = location.pathname === '/import';
 
   // ListView (when layoutView === 'list') handles its own NoteForm in split pane
-  // Grid/Stacked/Overview views use the NoteForm rendered below
+  // Grid/Stacked views use the NoteForm rendered below
 
   return (
     <TypingProvider> {/* Wrap the entire app content */}
@@ -289,7 +289,7 @@ const AppContent = () => {
                     <Route path="/import" element={<ImportPage />} />
                   </Routes>
                 ) : (
-                  // Grid/Stacked/Overview Views - existing layout
+                  // Grid/Stacked Views - existing layout
                   <>
                     <Routes>
                   <Route

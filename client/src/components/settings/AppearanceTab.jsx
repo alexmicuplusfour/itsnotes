@@ -163,15 +163,6 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
               <Icon name="layoutSidebar" size={16} />
               List
             </ModeButton>
-            <ModeButton
-              $active={layoutView === 'overview'}
-              onClick={() => changeLayoutView('overview')}
-              title="Overview layout"
-            >
-              {layoutView === 'overview' && <Icon name="check" size={16} strokeWidth="2.5"/>}
-              <Icon name="viewOverview" size={16} />
-              Overview
-            </ModeButton>
           </ModeSelector>
         </OptionRow>
         <OptionRow>

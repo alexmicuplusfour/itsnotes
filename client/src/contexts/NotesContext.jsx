@@ -2652,27 +2652,13 @@ export const NotesProvider = ({ children }) => {
   
   // --- Enhanced UI Preference Functions ---
   
-  // Enhanced changeLayoutView that uses UIPreferences but handles overview logic
+  // Enhanced changeLayoutView that uses UIPreferences
   const enhancedChangeLayoutView = useCallback((newView) => {
-    if (layoutView === newView || !['grid', 'stacked', 'list', 'overview'].includes(newView)) return;
-
-    const switchingFromOverview = layoutView === 'overview' && newView !== 'overview';
-
-    if (switchingFromOverview) {
-      // Reset state before changing layout
-      setNotes([]);
-      setPage(1);
-      setHasMore(true);
-      setListLoading(true);
-    }
+    if (layoutView === newView || !['grid', 'stacked', 'list'].includes(newView)) return;
 
     // Use the UIPreferences function to update the layout
     changeLayoutView(newView);
-
-    if (switchingFromOverview) {
-      loadNotes(true);
-    }
-  }, [layoutView, changeLayoutView, loadNotes]);
+  }, [layoutView, changeLayoutView]);
   
   // --- Initial Load Effect ---
   // Effect to trigger initial load when view or sort order changes

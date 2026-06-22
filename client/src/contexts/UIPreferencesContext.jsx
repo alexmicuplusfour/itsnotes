@@ -25,11 +25,11 @@ export const UIPreferencesProvider = ({ children }) => {
   
   const [layoutView, setLayoutView] = useState(() => {
     const savedLayout = localStorage.getItem('layoutView');
-    // Support grid, stacked, list, and overview layouts
-    if (['grid', 'stacked', 'list', 'overview'].includes(savedLayout)) {
+    // Support grid, stacked, and list layouts
+    if (['grid', 'stacked', 'list'].includes(savedLayout)) {
       return savedLayout;
     }
-    return 'grid'; // Default 'grid'
+    return 'grid'; // Default 'grid' (also catches the removed 'overview' layout)
   });
   
   const [showQuickAccess, setShowQuickAccess] = useState(() => {
@@ -167,7 +167,7 @@ export const UIPreferencesProvider = ({ children }) => {
 
   const changeLayoutView = useCallback((newView) => {
     console.log('[UIPreferences] changeLayoutView called with:', newView, 'current:', layoutView);
-    if (layoutView === newView || !['grid', 'stacked', 'list', 'overview'].includes(newView)) {
+    if (layoutView === newView || !['grid', 'stacked', 'list'].includes(newView)) {
       console.log('[UIPreferences] changeLayoutView early return - same or invalid');
       return;
     }

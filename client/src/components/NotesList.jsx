@@ -38,39 +38,6 @@ const NotesContainer = styled.div`
   }
 `;
 
-// Overview Mode Container
-const OverviewContainer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px; /* Spacing between circles */
-  padding: 16px 0; /* Add some padding */
-  justify-content: center; /* Center circles horizontally */
-  margin-bottom: 60px; /* Consistent bottom margin */
-`;
-
-// Note Circle Component
-const NoteCircle = styled.div`
-  width: 36px; /* Size of the circle */
-  height: 36px;
-  border-radius: 50%;
-  background-color: ${props => { /* Correctly apply color using CSS variables */
-    if (props.color && props.color !== 'default') {
-      return `var(--note-color-${props.color})`;
-    }
-    return 'var(--note-bg-color)';
-  }};
-  transition: transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-
-  outline: 1px solid var(--border-transparent);
-  outline-offset: -1px;
-  cursor: pointer;
-
-  &:hover {
-    outline: 2px solid var(--text-color);
-  }
-`;
-
 // Stacked View Container
 const StackedViewContainer = styled.div`
   display: flex;
@@ -441,13 +408,6 @@ const NotesList = ({ title, notes, showPinned }) => {
     return () => window.removeEventListener('resize', calculateRootMargin);
   }, []); // Removed dependencies, as they don't directly influence rootMargin calculation logic itself
 
-  const handleNoteCircleClick = (noteId) => {
-    const currentSearch = new URLSearchParams(location.search);
-    currentSearch.set('note', noteId);
-    const searchString = currentSearch.toString();
-    navigate({ pathname: location.pathname, search: searchString }, { replace: false });
-  };
-
   const handleMonthLongPress = (e, year, monthShort) => {
     e.preventDefault();
     e.stopPropagation();
@@ -733,18 +693,12 @@ const NotesList = ({ title, notes, showPinned }) => {
                     <div key={note.id} className="masonry-item"><NoteCard note={note} searchQuery={searchQuery} onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></div>
                   ))}
                 </MasonryGrid>
-              ) : layoutView === 'stacked' ? (
+              ) : ( // layoutView === 'stacked'
                 <StackedViewContainer>
                   {pinnedNotes.map(note => (
                     <StackedItemWrapper key={note.id}><NoteCard note={note} searchQuery={searchQuery} layoutView="stacked" onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></StackedItemWrapper>
                   ))}
                 </StackedViewContainer>
-              ) : ( // layoutView === 'overview'
-                 <OverviewContainer>
-                   {pinnedNotes.map(note => (
-                     <NoteCircle key={note.id} color={note.color} title={note.title || 'Untitled Note'} onClick={() => handleNoteCircleClick(note.id)} />
-                   ))}
-                 </OverviewContainer>
               )}
               {unpinnedNotes.length > 0 && <SectionTitle>Others</SectionTitle>}
             </PinnedSection>
@@ -794,7 +748,7 @@ const NotesList = ({ title, notes, showPinned }) => {
                     </>
                   )}
                 </>
-              ) : layoutView === 'stacked' ? (
+              ) : ( // layoutView === 'stacked'
                 <>
                   {(!showPinned || searchMode || !showMonthMarkers || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
                     <StackedViewContainer>
@@ -830,46 +784,6 @@ const NotesList = ({ title, notes, showPinned }) => {
                               <StackedItemWrapper key={note.id}><NoteCard note={note} searchQuery={searchQuery} layoutView="stacked" onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></StackedItemWrapper>
                             ))}
                           </StackedViewContainer>
-                        </div>
-                      ))}
-                    </>
-                  )}
-                </>
-              ) : ( // layoutView === 'overview'
-                <>
-                 {(!showPinned || searchMode || !showMonthMarkers || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
-                     <OverviewContainer>
-                       {unpinnedNotes.map(note => (
-                         <NoteCircle key={note.id} color={note.color} title={note.title || 'Untitled Note'} onClick={() => handleNoteCircleClick(note.id)} />
-                       ))}
-                     </OverviewContainer>
-                  ) : (
-                    <>
-                      {notesByMonth.map((monthGroup, index) => (
-                        <div key={monthGroup.label}>
-                          {showMonthMarkers && (index > 0 || shouldShowPinnedSection) && (
-                            <MonthSeparator
-                              ref={registerMonthSeparatorRef(monthGroup.label)}
-                              data-month-label={monthGroup.label}
-                            >
-                               <MonthLabel 
-                                theme={isDarkTheme ? 'dark' : 'light'}
-                                onContextMenu={(e) => handleMonthLongPress(e, monthGroup.year, monthGroup.monthShort)}
-                               >
-                                {monthGroup.label}
-                                <MonthSearchStar 
-                                  year={monthGroup.year} 
-                                  monthShort={monthGroup.monthShort} 
-                                  monthLabel={monthGroup.label} 
-                                />
-                              </MonthLabel>
-                            </MonthSeparator>
-                          )}
-                           <OverviewContainer>
-                             {monthGroup.notes.map(note => (
-                               <NoteCircle key={note.id} color={note.color} title={note.title || 'Untitled Note'} onClick={() => handleNoteCircleClick(note.id)} />
-                             ))}
-                           </OverviewContainer>
                         </div>
                       ))}
                     </>

@@ -460,16 +460,6 @@ const iconPaths = {
       { elem: 'rect', x: "14", y: "14", width: "8", height: "8", rx: "1", ry: "1" }
     ]
   },
-  viewOverview: {
-    paths: [
-      { elem: 'circle', cx: "5", cy: "6", r: "2.5" },
-      { elem: 'circle', cx: "12", cy: "6", r: "2.5" },
-      { elem: 'circle', cx: "19", cy: "6", r: "2.5" },
-      { elem: 'circle', cx: "5", cy: "17", r: "2.5" },
-      { elem: 'circle', cx: "12", cy: "17", r: "2.5" },
-      { elem: 'circle', cx: "19", cy: "17", r: "2.5" }
-    ]
-  },
   undo: {
     paths: [
       { d: "M3 10h10c4.42 0 8 3.58 8 8v2" },

@@ -707,16 +707,6 @@ const ActionMenu = memo(({
             }
           </MenuItem>
 
-          <MenuItem onClick={() => { changeLayoutView('overview'); onClose(); }}>
-            <MenuIcon><Icon name="viewOverview" size={18} /></MenuIcon>
-            <div style={{ marginRight: '16px' }}>Overview</div>
-            {layoutView === 'overview' && 
-                <CheckMarkCircle>
-                  <Icon name="check" strokeWidth="3"/>
-                </CheckMarkCircle>
-            }
-          </MenuItem>
-            
           <MenuSeparator />
 
           {/* Other Menu Items */}
@@ -777,7 +767,7 @@ const Header = () => {
     // Legacy functions for backward compatibility
     setSortNewest, setSortOldest,
     loadNotes, searchQuery, searchBarActive, setSearchBarActive, createNote, addTagToNote, registerTagId,
-    changeLayoutView, // Enhanced version that handles overview mode refresh
+    changeLayoutView, // Enhanced version from NotesContext
     openedNote, // For hiding new note button in list view
   } = useNotes();
   const { listLoading } = useNotesLoading(); // Track if notes are loading to avoid blur during content changes
