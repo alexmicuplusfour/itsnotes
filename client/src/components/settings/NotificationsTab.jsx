@@ -1,22 +1,118 @@
-import React from 'react';
+import React, { useState } from 'react';
+import styled from 'styled-components';
 import {
   SectionContainer,
   SectionTitle,
   FormGroup,
   Label,
-  LabelBold,
   Input,
 } from './styles';
+import { notificationsApi } from '../../services/api';
+import pushoverLogo from '../../assets/images/favicon_pushover.png';
+import pushbulletLogo from '../../assets/images/favicon_pushbullet.png';
+import ntfyLogo from '../../assets/images/favicon_ntfy.png';
+
+const serviceLogoStyle = { width: 18, height: 18, borderRadius: 4, flexShrink: 0 };
+
+const Description = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary-color);
+  margin: 0;
+`;
+
+// Bordered card per service, matching the Maintenance tab.
+const Card = styled.div`
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+`;
+
+const CardTitle = styled.div`
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+// Subtle outline button, matching the "Refresh models" control in the AI tab.
+const TestButton = styled.button`
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: ${props => (props.disabled ? 'not-allowed' : 'pointer')};
+  color: var(--text-secondary-color);
+  opacity: ${props => (props.disabled ? 0.6 : 1)};
+  white-space: nowrap;
+  &:hover { border-color: var(--foreground-color); }
+`;
+
+const TestFeedback = styled.span`
+  font-size: 12px;
+  text-align: right;
+  color: ${props => (props.$ok ? 'var(--success-color, #2e9e44)' : 'var(--danger-color, #e5484d)')};
+`;
+
+// Self-contained "Send test" control for a single service.
+const TestControl = ({ service, config }) => {
+  const [status, setStatus] = useState('idle'); // idle | testing | ok | error
+  const [message, setMessage] = useState('');
+
+  const runTest = async () => {
+    setStatus('testing');
+    setMessage('');
+    try {
+      await notificationsApi.test(service, config);
+      setStatus('ok');
+      setMessage('Sent — check your device');
+    } catch (e) {
+      setStatus('error');
+      setMessage(e.response?.data?.message || 'Test failed');
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      {(status === 'ok' || status === 'error') && (
+        <TestFeedback $ok={status === 'ok'}>
+          {status === 'ok' ? '✓ ' : '✗ '}{message}
+        </TestFeedback>
+      )}
+      <TestButton onClick={runTest} disabled={status === 'testing'}>
+        {status === 'testing' ? 'Sending…' : 'Send test'}
+      </TestButton>
+    </div>
+  );
+};
 
 const NotificationsTab = ({ settings, onChange }) => (
   <SectionContainer>
     <SectionTitle>Notifications</SectionTitle>
-    <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
+    <Description>
       Configure where reminder notifications are sent.
-    </p>
+    </Description>
 
-    <SectionContainer>
-      <LabelBold>Pushover</LabelBold>
+    <Card>
+      <CardHeader>
+        <CardTitle><img src={pushoverLogo} alt="" style={serviceLogoStyle} />Pushover</CardTitle>
+        <TestControl
+          service="pushover"
+          config={{ user: settings.PUSHOVER_USER, token: settings.PUSHOVER_TOKEN }}
+        />
+      </CardHeader>
       <FormGroup>
         <Label>User Key</Label>
         <Input
@@ -35,10 +131,16 @@ const NotificationsTab = ({ settings, onChange }) => (
           onChange={onChange}
         />
       </FormGroup>
-    </SectionContainer>
+    </Card>
 
-    <SectionContainer>
-      <LabelBold>Pushbullet</LabelBold>
+    <Card>
+      <CardHeader>
+        <CardTitle><img src={pushbulletLogo} alt="" style={serviceLogoStyle} />Pushbullet</CardTitle>
+        <TestControl
+          service="pushbullet"
+          config={{ token: settings.PUSHBULLET_TOKEN }}
+        />
+      </CardHeader>
       <FormGroup>
         <Label>Access Token</Label>
         <Input
@@ -48,10 +150,16 @@ const NotificationsTab = ({ settings, onChange }) => (
           onChange={onChange}
         />
       </FormGroup>
-    </SectionContainer>
+    </Card>
 
-    <SectionContainer>
-      <LabelBold>Ntfy</LabelBold>
+    <Card>
+      <CardHeader>
+        <CardTitle><img src={ntfyLogo} alt="" style={serviceLogoStyle} />Ntfy</CardTitle>
+        <TestControl
+          service="ntfy"
+          config={{ server: settings.NTFY_SERVER, topic: settings.NTFY_TOPIC }}
+        />
+      </CardHeader>
       <FormGroup>
         <Label>Server URL</Label>
         <Input
@@ -71,7 +179,7 @@ const NotificationsTab = ({ settings, onChange }) => (
           onChange={onChange}
         />
       </FormGroup>
-    </SectionContainer>
+    </Card>
   </SectionContainer>
 );
 

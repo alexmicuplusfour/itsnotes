@@ -396,6 +396,16 @@ export const aiApi = {
   },
 };
 
+// Notifications API
+export const notificationsApi = {
+  // Send a test notification for a service. `config` carries the current
+  // (possibly unsaved) form values; the server falls back to saved settings.
+  test: async (service, config) => {
+    const response = await api.post('/settings/test-notification', { service, config });
+    return response.data;
+  },
+};
+
 // Objects API (centralized books, attachments, movies, etc.)
 export const objectsApi = {
   // Get all objects, optionally filtered by type
