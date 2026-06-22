@@ -16,6 +16,7 @@ jest.mock('./mirrorRepo', () => {
     __tracked: tracked,
     loadNotes: jest.fn(async () => notes),
     loadNote: jest.fn(async (id) => notes.find((n) => n.id === id) || null),
+    loadTagIdsByName: jest.fn(async () => new Map([['work', 'tag-work-id']])),
     loadObjectTitles: jest.fn(async () => new Map()),
     loadImageData: jest.fn(async () => PNG),
     loadTracked: jest.fn(async () => new Map(tracked)),
@@ -153,6 +154,38 @@ describe('runOnce (end-to-end against a temp folder)', () => {
     expect(bytes.length).toBeGreaterThan(0);
     const file = await fs.readFile(path.join(dir, 'hello-world-4f3c8a2b.md'), 'utf8');
     expect(file).toContain('![pic](_resources/img-9.png)');
+  });
+
+  // Blank scratch notes (no title, no text, nothing attached) aren't valid files.
+  const emptyNote = (over = {}) =>
+    baseNote({ id: 'empty-1', title: '', content: '<p></p>', plainContent: '', tags: [], ...over });
+
+  test('an empty note is not written to a file', async () => {
+    repo.__setNotes([emptyNote()]);
+    const summary = await runOnce();
+    expect(summary.created).toBe(0);
+    expect((await fs.readdir(dir)).filter((f) => f.endsWith('.md'))).toEqual([]);
+  });
+
+  test('a note that becomes empty has its file removed on the next sweep', async () => {
+    repo.__setNotes([baseNote()]);
+    await runOnce();
+    expect(await fs.readdir(dir)).toContain('hello-world-4f3c8a2b.md');
+
+    // Same note id, now blanked out.
+    repo.__setNotes([baseNote({ title: '', content: '<p></p>', plainContent: '', tags: [] })]);
+    const summary = await runOnce();
+    expect(summary.deleted).toBe(1);
+    expect(await fs.readdir(dir)).not.toContain('hello-world-4f3c8a2b.md');
+  });
+
+  test('a note with only an image is kept (not treated as empty)', async () => {
+    repo.__setNotes([emptyNote({
+      content: '<p><img data-image-id="9" alt="pic"></p>',
+      images: [{ id: 9, type: 'image/png' }],
+    })]);
+    const summary = await runOnce();
+    expect(summary.created).toBe(1);
   });
 
   test('externally deleted file is recreated on the next sweep', async () => {
@@ -354,6 +387,21 @@ describe('applyImport (folder → DB writes against a temp folder)', () => {
     expect(after.unchanged).toHaveLength(1);
   });
 
+  // The .md form keeps only `#work`; import must recover the tag's uuid from the DB
+  // so the inline mention isn't stripped of its data-tag-id on the round-trip.
+  test('an imported tag mention recovers its data-tag-id from the DB', async () => {
+    repo.__setNotes([baseNote({
+      content: '<p><span data-type="tag-mention" data-tag-id="tag-work-id" data-label="work">#work</span> hi</p>',
+    })]);
+    await runOnce(); // re-export the note with the inline tag mention
+    await fs.appendFile(path.join(dir, FILE), '\nedited by hand\n', 'utf8');
+
+    await applyImport();
+    const [note] = await repo.loadNotes();
+    expect(note.content).toContain('data-tag-id="tag-work-id"');
+    expect(note.content).toContain('data-label="work"');
+  });
+
   test('a hand-added file becomes a new note with a tracking row', async () => {
     await fs.writeFile(path.join(dir, 'my-idea.md'), '# My Idea\n\nbody text\n', 'utf8');
     const counts = await applyImport();
@@ -364,6 +412,16 @@ describe('applyImport (folder → DB writes against a temp folder)', () => {
     const created = notes.find((n) => n.id !== ID);
     expect(created.content).toContain('body text');
     expect([...repo.__tracked.values()].some((t) => t.relPath === 'my-idea.md')).toBe(true);
+  });
+
+  // A hand-written file using #tags inline (no frontmatter tags:) should tag the
+  // note, the same as typing #tag in the app — otherwise the mention renders but
+  // shows no tag chip.
+  test('inline #tags in a hand-made file attach as real tags on the new note', async () => {
+    await fs.writeFile(path.join(dir, 'dinner.md'), 'plan with #cooking and #recipe\n', 'utf8');
+    await applyImport();
+    const created = (await repo.loadNotes()).find((n) => n.id !== ID);
+    expect(created.tags).toEqual(expect.arrayContaining(['cooking', 'recipe']));
   });
 
   // The crux of safe hand-editing: an imported file must keep the name the user

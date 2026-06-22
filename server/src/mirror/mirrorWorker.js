@@ -96,6 +96,24 @@ const YIELD_EVERY = 8;
 const YIELD_PAUSE_MS = 20;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// A note with no title, no text, and nothing attached (the blank scratch notes the
+// app spins up) isn't worth a file — it would just be frontmatter with an empty
+// body. Excluded from the desired state so it's never written, and any file a past
+// version already wrote for one gets cleaned up (planReconcile deletes the now-
+// unwanted tracked file). Text is read off the HTML, not plain_content, so it holds
+// even when that column is stale.
+function isEmptyNote(note) {
+  if ((note.title || '').trim()) return false;
+  if ((note.content || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, '').trim()) return false;
+  return !(
+    (note.tags || []).length ||
+    (note.folders || []).length ||
+    (note.images || []).length ||
+    (note.attachments || []).length ||
+    (note.reminders || []).length
+  );
+}
+
 // Render every note, assign a unique rel_path, hash the file. `tracked` (the
 // note_files rows) makes filenames sticky: a note keeps the filename it was first
 // written under instead of being renamed every time its title changes. Returns the
@@ -107,6 +125,8 @@ async function buildDesired(notes, objectTitles, tracked = new Map()) {
 
   let sinceYield = 0;
   for (const note of notes) {
+    if (isEmptyNote(note)) continue;
+
     const imagesById = new Map(note.images.map((i) => [String(i.id), i.type]));
     const content = renderNoteFile(note, {
       resolveImage: (id) => imageResourceName(id, imagesById.get(String(id))),
@@ -315,6 +335,11 @@ async function applyImport() {
 
   const { rendered, plan } = await loadImportState();
 
+  // Restore the data-tag-id on inline #tag mentions, which the `.md` form drops
+  // (tags are written as plain `#label`). Loaded once for the whole pass.
+  const tagIds = await repo.loadTagIdsByName();
+  const resolveTag = (label) => tagIds.get(label) || null;
+
   // Track which notes the import actually changed in the DB so the route can push
   // live socket updates to connected clients (the import bypasses the note routes
   // that normally broadcast). Conflicts and pure renames don't touch note content,
@@ -329,7 +354,7 @@ async function applyImport() {
   const importInto = async (noteId, relPath) => {
     const raw = await readRawAt(root, relPath);
     if (raw == null) return;
-    const { fields, tags, folders } = fileToNoteFields(raw);
+    const { fields, tags, folders } = fileToNoteFields(raw, { resolveTag });
     await repo.importUpdateNote(noteId, fields);
     await repo.syncNoteTags(noteId, { tags, folders });
     await repo.upsertTracked(noteId, relPath, fingerprint(raw));
@@ -341,7 +366,7 @@ async function applyImport() {
   for (const c of plan.created) {
     const raw = await readRawAt(root, c.relPath);
     if (raw == null) continue;
-    const { fields, tags, folders, created } = fileToNoteFields(raw);
+    const { fields, tags, folders, created } = fileToNoteFields(raw, { resolveTag });
     const newId = await repo.importCreateNote(fields, created);
     await repo.syncNoteTags(newId, { tags, folders });
     await repo.upsertTracked(newId, c.relPath, fingerprint(raw));

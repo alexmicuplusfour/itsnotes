@@ -45,6 +45,7 @@ function markdownToHtml(md, options = {}) {
   transformTaskLists(doc, body);
   transformTagMentions(doc, body, opts);
   normalizeEmptyParagraphs(body);
+  stripBlockWhitespace(body);
 
   return body.innerHTML.trim();
 }
@@ -226,6 +227,24 @@ function transformTagMentions(doc, root, opts) {
     }
     if (last < value.length) frag.appendChild(doc.createTextNode(value.slice(last)));
     textNode.replaceWith(frag);
+  }
+}
+
+// `marked` pretty-prints with a newline between block elements (after each <li>,
+// around every <ul>, between top-level blocks). Those whitespace-only text nodes
+// are insignificant in HTML but they're not in Tiptap's canonical serialization, so
+// leaving them in means every imported note differs from how the editor would store
+// the same content — cosmetic DB drift the user sees in the round-trip. Strip them
+// from the block containers `marked` puts them in. Inline whitespace (e.g. the space
+// between two adjacent tag mentions inside a <p>) is untouched: those parents aren't
+// in the set, so meaningful spaces survive.
+const WS_BLOCK_PARENTS = new Set(['BODY', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR']);
+function stripBlockWhitespace(root) {
+  for (const el of [root, ...root.querySelectorAll('*')]) {
+    if (!WS_BLOCK_PARENTS.has(el.tagName)) continue;
+    for (const child of [...el.childNodes]) {
+      if (child.nodeType === 3 && child.textContent.trim() === '') child.remove();
+    }
   }
 }
 

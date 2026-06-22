@@ -97,6 +97,32 @@ describe('markdownToHtml unit behaviours', () => {
     expect(html).toContain('#work');
   });
 
+  test('resolveTag restores the data-tag-id on a tag mention', () => {
+    const html = markdownToHtml('a #work item', { resolveTag: (label) => `id-${label}` });
+    expect(html).toContain('data-tag-id="id-work"');
+    expect(html).toContain('data-label="work"');
+  });
+
+  test('without resolveTag a tag mention has a label but no id', () => {
+    const html = markdownToHtml('a #work item');
+    expect(html).toContain('data-label="work"');
+    expect(html).not.toContain('data-tag-id');
+  });
+
+  test('insignificant whitespace between block elements is stripped', () => {
+    // A loose list (blank lines between items) wraps each item in <p>, exactly the
+    // shape the user's note round-trips through — and the marker newlines must go.
+    const html = markdownToHtml('- one\n\n- two');
+    expect(html).toBe('<ul><li><p>one</p></li><li><p>two</p></li></ul>');
+    expect(html).not.toMatch(/>\s+</);
+  });
+
+  test('a meaningful space between inline mentions is preserved', () => {
+    const html = markdownToHtml('#cooking #recipe');
+    // The space separating the two tag spans must survive the whitespace strip.
+    expect(html).toMatch(/<\/span> <span/);
+  });
+
   test('tags inside code spans are left alone', () => {
     const html = markdownToHtml('use the `#channel` syntax');
     expect(html).not.toContain('tag-mention');

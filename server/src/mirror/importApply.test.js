@@ -52,6 +52,22 @@ describe('fileToNoteFields', () => {
     expect(out.fields.content).toContain('just some text');
   });
 
+  test('inline #tags in a hand-made body become real tags', () => {
+    const out = fileToNoteFields('dinner ideas with #cooking and #recipe\n');
+    expect(out.tags).toEqual(expect.arrayContaining(['cooking', 'recipe']));
+    expect(out.fields.content).toContain('data-type="tag-mention"');
+  });
+
+  test('inline tags are unioned with frontmatter tags without duplicates', () => {
+    const file = renderNoteFile({
+      ...baseNote,
+      tags: ['reading', 'cooking'],
+      content: '<p>see <span data-type="tag-mention" data-label="cooking">#cooking</span> and #recipe</p>',
+    });
+    const out = fileToNoteFields(file);
+    expect(out.tags.sort()).toEqual(['cooking', 'reading', 'recipe']);
+  });
+
   test('an empty body maps to empty content', () => {
     const out = fileToNoteFields(renderNoteFile({ ...baseNote, content: '<p></p>' }));
     expect(out.fields.content).toBe('');

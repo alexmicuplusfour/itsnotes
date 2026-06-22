@@ -121,6 +121,16 @@ async function loadNote(noteId) {
   return note;
 }
 
+// Tag label -> id, for restoring the data-tag-id on inline #tag mentions when
+// importing a file (the `.md` form keeps only the label). Folders excluded — only
+// real tags appear as inline mentions.
+async function loadTagIdsByName() {
+  const { rows } = await db.query(`SELECT id, name FROM tags WHERE is_folder = false`);
+  const map = new Map();
+  for (const r of rows) map.set(r.name, r.id);
+  return map;
+}
+
 // Object titles (object-card divs carry no title in the note HTML — resolve it here).
 async function loadObjectTitles() {
   const { rows } = await db.query(`SELECT id, title FROM objects`);
@@ -213,6 +223,7 @@ async function syncNoteTags(noteId, { tags = [], folders = [] }) {
 module.exports = {
   loadNotes,
   loadNote,
+  loadTagIdsByName,
   loadObjectTitles,
   loadImageData,
   loadTracked,
