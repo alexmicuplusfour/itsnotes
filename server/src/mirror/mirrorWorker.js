@@ -179,43 +179,110 @@ async function scanOnDisk(root) {
 
 const CONFLICTS_DIR = 'conflicts';
 
-// Read every `.md` file under the mount, fingerprinting each the same way the
-// export side stored it (see `fingerprint`: the whole file minus the volatile
-// `updated:` line), so a disk hash equal to the tracked content_hash means
-// "untouched since we wrote it". We also pull the frontmatter id so a moved/renamed file can still
-// be matched to its note, and keep the raw text so apply can convert it without
-// a second read. Unreadable files are skipped rather than aborting the run.
+// Per-file scan cache so the import check (polled every few seconds while the
+// Settings tab is open) doesn't re-read and re-hash every file on a large library
+// each pass. Keyed by ABSOLUTE path (stable for the one production mount; keeps
+// test temp dirs that reuse a rel name from colliding) → { mtimeMs, size, hash,
+// id }. A file whose mtime+size are unchanged since we last looked reuses its hash
+// and frontmatter id instead of being read again. Purely a read-side optimisation:
+// apply always re-reads the actual file, so a stale cache entry can never feed the
+// DB — at worst it would delay noticing an edit, which the mtime/size guard makes
+// effectively impossible for a real save.
+let diskScanCache = new Map();
+
+// Catalogue every `.md` file under the mount: its drift fingerprint (see
+// `fingerprint`: the whole file minus the volatile `updated:` line, so a disk hash
+// equal to the tracked content_hash means "untouched since we wrote it") and its
+// frontmatter id (so a moved/renamed file can still be matched to its note). Reads
+// only files that are new or whose mtime+size changed; the rest are served from the
+// cache. Unreadable files are skipped rather than aborting the run. Returns metadata
+// only — apply re-reads the few files it actually imports.
 async function gatherDiskFiles(root) {
   const relPaths = await scanOnDisk(root);
+  const next = new Map();
   const diskFiles = [];
   for (const relPath of relPaths) {
-    let raw;
-    try {
-      raw = await fs.readFile(toAbs(root, relPath), 'utf8');
-    } catch {
-      continue;
+    const abs = toAbs(root, relPath);
+    let st;
+    try { st = await fs.stat(abs); } catch { continue; }
+
+    const cached = diskScanCache.get(abs);
+    let entry;
+    if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) {
+      entry = cached;
+    } else {
+      let raw;
+      try { raw = await fs.readFile(abs, 'utf8'); } catch { continue; }
+      const { frontmatter } = parseNoteFile(raw);
+      entry = { mtimeMs: st.mtimeMs, size: st.size, hash: fingerprint(raw), id: frontmatter.id };
     }
-    const { frontmatter } = parseNoteFile(raw);
-    diskFiles.push({ relPath, hash: fingerprint(raw), id: frontmatter.id, raw });
+
+    next.set(abs, entry);
+    diskFiles.push({ relPath, hash: entry.hash, id: entry.id });
   }
+  // Rebuilt from the current listing, so files that vanished drop out of the cache.
+  diskScanCache = next;
   return diskFiles;
 }
 
-// Shared gather + plan for both the dry-run preview and the real apply. Builds the
-// current render hash of every live note (dbHashes) so a one-sided file edit can
-// be told apart from a true two-sided conflict, and caches the canonical rendered
-// content so the apply step can re-export a conflicting note without re-rendering.
-async function loadImportState() {
-  const [notes, objectTitles, tracked, diskFiles] = await Promise.all([
-    repo.loadNotes(),
-    repo.loadObjectTitles(),
-    repo.loadTracked(),
-    gatherDiskFiles(getConfig().root),
-  ]);
-  const { desired, rendered } = await buildDesired(notes, objectTitles, tracked);
+// Read one file's raw text on demand (apply path). Null if it vanished since the scan.
+async function readRawAt(root, relPath) {
+  try { return await fs.readFile(toAbs(root, relPath), 'utf8'); }
+  catch { return null; }
+}
+
+// Render just the named notes (HTML→Markdown + hash) and return their current DB
+// hashes plus the rendered content. Used to resolve the small set of notes whose
+// files drifted — so import can tell a one-sided file edit from a true two-sided
+// conflict — without rendering the whole library. Object titles are loaded only if
+// a rendered note actually embeds one.
+async function renderNotes(noteIds, tracked) {
+  if (!noteIds.length) return { dbHashes: new Map(), rendered: new Map() };
+  const notes = [];
+  for (const id of noteIds) {
+    const n = await repo.loadNote(id);
+    if (n) notes.push(n);
+  }
+  if (!notes.length) return { dbHashes: new Map(), rendered: new Map() };
+
+  const needObjects = notes.some(
+    (n) => /data-type="object-(card|mention)"|data-object-id|objectid=/.test(n.content || '')
+  );
+  const objectTitles = needObjects ? await repo.loadObjectTitles() : new Map();
+
+  const subset = new Map();
+  for (const id of noteIds) { const t = tracked.get(id); if (t) subset.set(id, t); }
+
+  const { desired, rendered } = await buildDesired(notes, objectTitles, subset);
   const dbHashes = new Map(desired.map((d) => [d.noteId, d.hash]));
+  return { dbHashes, rendered };
+}
+
+// Shared gather + plan for both the dry-run preview and the real apply.
+//
+// The whole library used to be rendered here just to get every note's current hash
+// (dbHashes), so a one-sided file edit could be told from a true two-sided conflict.
+// On a large library that all-notes render — run on a few-second poll while the
+// Settings tab is open — saturated the event loop and dropped the websocket.
+//
+// dbHashes is only ever consulted for a file that drifted at its tracked path, and
+// in the steady state nothing has drifted. So we first plan with no dbHashes (every
+// drifted-at-path file lands in `edited`), then render ONLY those candidate notes to
+// split real edits from conflicts. Idle import check → a folder scan and zero note
+// renders.
+async function loadImportState() {
+  const root = getConfig().root;
+  const [tracked, diskFiles] = await Promise.all([
+    repo.loadTracked(),
+    gatherDiskFiles(root),
+  ]);
+
+  const probe = planImport({ diskFiles, tracked });
+  const candidateIds = [...new Set(probe.edited.map((e) => e.noteId))];
+  const { dbHashes, rendered } = await renderNotes(candidateIds, tracked);
+
   const plan = planImport({ diskFiles, tracked, dbHashes });
-  return { tracked, diskFiles, rendered, plan };
+  return { tracked, rendered, plan };
 }
 
 // Strip the `raw`/`hash` internals from a plan so the preview the UI gets is just
@@ -246,8 +313,7 @@ async function applyImport() {
   if (!enabled || !root) return { skipped: true, reason: 'disabled' };
   if (!(await exists(root))) return { skipped: true, reason: 'no-path' };
 
-  const { diskFiles, rendered, plan } = await loadImportState();
-  const rawByPath = new Map(diskFiles.map((f) => [f.relPath, f.raw]));
+  const { rendered, plan } = await loadImportState();
 
   // Track which notes the import actually changed in the DB so the route can push
   // live socket updates to connected clients (the import bypasses the note routes
@@ -256,29 +322,34 @@ async function applyImport() {
   const createdIds = [];
   const updatedIds = [];
 
-  // Import a file's contents into an existing note, then point tracking at the
-  // file's hash so we don't immediately re-detect it (the export side will
-  // reconcile any canonical-form drift on its next pass).
-  const importInto = async (noteId, relPath, hash) => {
-    const { fields, tags, folders } = fileToNoteFields(rawByPath.get(relPath));
+  // Import a file's contents into an existing note, then point tracking at that
+  // file's hash so we don't immediately re-detect it (the export side will reconcile
+  // any canonical-form drift on its next pass). The file is re-read fresh here rather
+  // than carried from the scan, so tracking always reflects the bytes we just imported.
+  const importInto = async (noteId, relPath) => {
+    const raw = await readRawAt(root, relPath);
+    if (raw == null) return;
+    const { fields, tags, folders } = fileToNoteFields(raw);
     await repo.importUpdateNote(noteId, fields);
     await repo.syncNoteTags(noteId, { tags, folders });
-    await repo.upsertTracked(noteId, relPath, hash);
+    await repo.upsertTracked(noteId, relPath, fingerprint(raw));
     updatedIds.push(noteId);
   };
 
-  for (const e of plan.edited) await importInto(e.noteId, e.relPath, e.hash);
+  for (const e of plan.edited) await importInto(e.noteId, e.relPath);
 
   for (const c of plan.created) {
-    const { fields, tags, folders, created } = fileToNoteFields(rawByPath.get(c.relPath));
+    const raw = await readRawAt(root, c.relPath);
+    if (raw == null) continue;
+    const { fields, tags, folders, created } = fileToNoteFields(raw);
     const newId = await repo.importCreateNote(fields, created);
     await repo.syncNoteTags(newId, { tags, folders });
-    await repo.upsertTracked(newId, c.relPath, c.hash);
+    await repo.upsertTracked(newId, c.relPath, fingerprint(raw));
     createdIds.push(newId);
   }
 
   for (const r of plan.renamed) {
-    if (r.alsoEdited) await importInto(r.noteId, r.relPath, r.hash);
+    if (r.alsoEdited) await importInto(r.noteId, r.relPath);
     else await repo.upsertTracked(r.noteId, r.relPath, r.hash);
   }
 
@@ -286,7 +357,7 @@ async function applyImport() {
   // the scanned dirs so it's never re-imported), then re-export the note so the
   // main file matches the DB again and re-point tracking at the DB's hash.
   for (const c of plan.conflict) {
-    await saveConflictFile(root, c.relPath, rawByPath.get(c.relPath));
+    await saveConflictFile(root, c.relPath, await readRawAt(root, c.relPath));
     await writeFileAt(root, c.relPath, rendered.get(c.noteId));
     await repo.upsertTracked(c.noteId, c.relPath, fingerprint(rendered.get(c.noteId)));
   }
