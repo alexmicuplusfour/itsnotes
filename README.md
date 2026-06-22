@@ -42,7 +42,7 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
   </tr>
   <tr>
     <td><img src="docs/screenshots/tagging.png"/></td>
-    <td></td>
+    <td><img src="docs/screenshots/settings-ai.png"/></td>
   </tr>
 </table>
 
