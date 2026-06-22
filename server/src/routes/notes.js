@@ -2,6 +2,7 @@ const express = require('express');
 const Note = require('../models/Note');
 const Tag = require('../models/Tag');
 const db = require('../db');
+const { blockInDemo } = require('../middleware/demoGuard');
 const router = express.Router();
 
 // Pull unique object-card ids out of note HTML without spinning up a full DOM.
@@ -612,7 +613,7 @@ router.patch('/:id/color', async (req, res) => {
 // --- Bulk Actions ---
 
 // Bulk Archive Notes
-router.post('/bulk/archive', async (req, res) => {
+router.post('/bulk/archive', blockInDemo, async (req, res) => {
   try {
     const { noteIds } = req.body;
     if (!noteIds || !Array.isArray(noteIds) || noteIds.length === 0) {
@@ -659,7 +660,7 @@ router.post('/bulk/unarchive', async (req, res) => {
 
 
 // Bulk Trash Notes
-router.post('/bulk/trash', async (req, res) => {
+router.post('/bulk/trash', blockInDemo, async (req, res) => {
   try {
     const { noteIds } = req.body;
     if (!noteIds || !Array.isArray(noteIds) || noteIds.length === 0) {
@@ -706,7 +707,7 @@ router.post('/bulk/restore', async (req, res) => {
 });
 
 // Bulk Delete Notes Permanently
-router.post('/bulk/delete-permanently', async (req, res) => {
+router.post('/bulk/delete-permanently', blockInDemo, async (req, res) => {
   try {
     const { noteIds } = req.body;
     if (!noteIds || !Array.isArray(noteIds) || noteIds.length === 0) {

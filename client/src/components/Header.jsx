@@ -136,6 +136,14 @@ const MenuButton = styled.button`
         background-color: var(--button-hover-color);
       }
     }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    /* Let hover/tooltip events fall through to the wrapping span so the
+       "disabled in demo" title shows even though the button is disabled. */
+    pointer-events: none;
+  }
 `;
 
 const DropdownMenu = styled.div`
@@ -800,7 +808,11 @@ const Header = () => {
   } = useUIPreferences();
   
   const { tags, toggleTagsModal, createTag } = useTags();
-  const { logout, isSocketConnected } = useAuth();
+  const { logout, isSocketConnected, isDemoMode } = useAuth();
+
+  // In demo mode the destructive bulk actions (archive / trash / delete forever)
+  // are disabled so visitors can't wipe the shared demo notes.
+  const demoActionTooltip = 'Disabled in demo mode';
 
   // Helper to translate custom color labels back to actual color names in search query
   // e.g., "$moral $blue" -> "$coral $blue" (if "coral" was labeled "moral")
@@ -1945,16 +1957,20 @@ const Header = () => {
                 </MenuButton>
               ) : view === 'trash' ? (
                 /* Trash view: Show delete permanently button */
-                <MenuButton onClick={deleteForeverSelectedNotes} title="Delete permanently">
-                  <Icon name="deleteForever" size="22"/>
-                </MenuButton>
+                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                  <MenuButton onClick={deleteForeverSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Delete permanently"}>
+                    <Icon name="deleteForever" size="22"/>
+                  </MenuButton>
+                </span>
               ) : (
                 /* Main view: Show archive button */
-                <MenuButton onClick={archiveSelectedNotes} title="Archive selected">
-                  <Icon name="archive" size="22"/>
-                </MenuButton>
+                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                  <MenuButton onClick={archiveSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Archive selected"}>
+                    <Icon name="archive" size="22"/>
+                  </MenuButton>
+                </span>
               )}
-              
+
               {/* Show trash/restore button depending on view */}
               {view === 'trash' ? (
                 /* Trash view: Show restore button */
@@ -1963,9 +1979,11 @@ const Header = () => {
                 </MenuButton>
               ) : (
                 /* Main and Archive views: Show trash button */
-                <MenuButton onClick={trashSelectedNotes} title="Trash selected">
-                  <Icon name="trash" size="22"/>
-                </MenuButton>
+                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                  <MenuButton onClick={trashSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Trash selected"}>
+                    <Icon name="trash" size="22"/>
+                  </MenuButton>
+                </span>
               )}
             </BulkActionsContainer>
           ) : (
