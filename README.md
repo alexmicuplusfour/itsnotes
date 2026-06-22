@@ -30,19 +30,19 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
   </tr>
   <tr>
     <td><img src="docs/screenshots/search.png"/></td>
-    <td><img src="docs/screenshots/settings-backup.png"/></td>
+    <td><img src="docs/screenshots/tagging.png"/></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/settings-backup.png"/></td>
     <td><img src="docs/screenshots/settings-markdown.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/settings-tagging.png"/></td>
+    <td><img src="docs/screenshots/settings-ai.png"/></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/note-dark.png"/></td>
     <td><img src="docs/screenshots/note-fullscreen.png"/></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/tagging.png"/></td>
-    <td><img src="docs/screenshots/settings-ai.png"/></td>
   </tr>
 </table>
 
