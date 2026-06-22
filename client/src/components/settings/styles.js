@@ -24,8 +24,24 @@ const buttonSizes = {
   `,
 };
 
+// Square padding for icon-only buttons (no label), keyed by $size so the
+// button stays balanced around a single centered icon.
+const iconOnlySizes = {
+  large: css`
+    width: auto;
+    padding: 9px;
+    gap: 0;
+  `,
+  small: css`
+    padding: 6px;
+    gap: 0;
+  `,
+};
+
 // Centralized button for the settings modal.
-// Variants: $color = 'default' (black) | 'danger' (red); $size = 'large' | 'small'.
+// Variants: $color = 'default' (black) | 'danger' (red); $size = 'large' | 'small';
+// $iconOnly = true for a square button wrapping a single icon (no label);
+// $borderless = true to drop the border (the icon shows only a hover fill).
 export const Button = styled.button`
   display: inline-flex;
   align-items: center;
@@ -33,13 +49,14 @@ export const Button = styled.button`
   background: transparent;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid ${props => (props.$color === 'danger' ? DANGER_BORDER : 'var(--foreground-color)')};
+  border: 1px solid ${props => (props.$borderless ? 'transparent' : props.$color === 'danger' ? DANGER_BORDER : 'var(--foreground-color)')};
   color: ${props => (props.$color === 'danger' ? DANGER_COLOR : 'var(--text-color)')};
   ${props => buttonSizes[props.$size] || buttonSizes.large}
+  ${props => props.$iconOnly && (iconOnlySizes[props.$size] || iconOnlySizes.large)}
 
   &:hover:not(:disabled) {
     background-color: ${props => (props.$color === 'danger' ? DANGER_HOVER_BG : 'var(--menu-item-hover)')};
-    border-color: ${props => (props.$color === 'danger' ? DANGER_BORDER : 'var(--border-hover-color)')};
+    border-color: ${props => (props.$borderless ? 'transparent' : props.$color === 'danger' ? DANGER_BORDER : 'var(--border-hover-color)')};
   }
 
   &:disabled {

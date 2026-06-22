@@ -621,16 +621,37 @@ const BackupRestore = ({ isDarkTheme }) => {
                   <FileActions>
                     <Button
                       $size="small"
+                      $iconOnly
+                      $borderless
                       onClick={() => handleRestoreAutoBackup(file.filename)}
                       disabled={isDemoMode || busy || unavailable}
+                      title="Restore"
+                      aria-label="Restore"
                     >
-                      {restoringFile === file.filename ? 'Restoring...' : 'Restore'}
+                      {restoringFile === file.filename ? <LoadingSpinner /> : <Icon name="restore" size={16} />}
                     </Button>
-                    <Button $size="small" onClick={() => handleDownloadAutoBackup(file.filename)} disabled={busy}>
-                      Download
+                    <Button
+                      $size="small"
+                      $iconOnly
+                      $borderless
+                      onClick={() => handleDownloadAutoBackup(file.filename)}
+                      disabled={busy}
+                      title="Download"
+                      aria-label="Download"
+                    >
+                      <Icon name="download" size={16} />
                     </Button>
-                    <Button $size="small" $color="danger" onClick={() => handleDeleteAutoBackup(file.filename)} disabled={busy}>
-                      Delete
+                    <Button
+                      $size="small"
+                      $iconOnly
+                      $borderless
+                      $color="danger"
+                      onClick={() => handleDeleteAutoBackup(file.filename)}
+                      disabled={busy}
+                      title="Delete"
+                      aria-label="Delete"
+                    >
+                      <Icon name="deleteForever" size={16} />
                     </Button>
                   </FileActions>
                 </FileRow>
