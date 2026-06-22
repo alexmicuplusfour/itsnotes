@@ -178,7 +178,7 @@ export function useNoteFormInteractions({
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(false);
         typingTimeoutRef.current = null;
-      }, 1200);
+      }, 900);
     }
   }, [isMobile]); // Removed isTyping dependency - use ref instead
 
