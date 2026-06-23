@@ -1928,7 +1928,7 @@ const Header = () => {
               {view !== "trash" &&
               <MenuButton
                 ref={bulkTagButtonRef} // Add ref
-                onClick={() => setShowBulkTagPicker(true)}
+                onClick={() => setShowBulkTagPicker(!showBulkTagPicker)}
                 title="Add/Remove tags"
               >
                 <Icon name="tag" size="22"/>
