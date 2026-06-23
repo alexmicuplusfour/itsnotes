@@ -9,6 +9,11 @@ const fs = require('fs');
 const path = require('path');
 const { db } = require('./knex');
 const { keepNoteToContent } = require('./utils/keepNoteToContent');
+const { processNoteImage } = require('./utils/imageProcessing');
+
+// Where note_attachments files live (server/uploads); inside the container this
+// resolves to the mounted attachments volume.
+const UPLOADS_DIR = path.join(__dirname, '../uploads');
 
 // Color mapping from Google Keep to our app
 const COLOR_MAP = {
@@ -69,6 +74,77 @@ function usecToIso(usec, fallbackIso) {
   return fallbackIso || new Date().toISOString();
 }
 
+// Keep occasionally records a filePath whose extension differs from the actual
+// exported file (e.g. .jpeg vs .jpg). Fall back to matching any sibling file
+// with the same basename — the numeric id Keep uses is unique within the folder.
+function resolveAttachmentPath(keepDir, rel) {
+  const direct = path.join(keepDir, rel);
+  if (fs.existsSync(direct)) return direct;
+
+  const stem = path.basename(rel, path.extname(rel));
+  try {
+    const match = fs.readdirSync(keepDir)
+      .find(f => path.basename(f, path.extname(f)) === stem);
+    return match ? path.join(keepDir, match) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Import a Keep note's attachments. Image attachments become note_images rows
+// (re-encoded to WebP like the normal upload path, shown in the note's gallery);
+// anything else is copied into the uploads dir as a note_attachments row.
+// Failures are per-attachment and non-fatal so one bad file can't sink the note.
+async function importNoteAttachments(trx, note, keepDir, noteId) {
+  const attachments = Array.isArray(note.attachments) ? note.attachments : [];
+  const counts = { images: 0, files: 0, skipped: 0 };
+
+  for (const att of attachments) {
+    const rel = att && att.filePath;
+    if (!rel) { counts.skipped++; continue; }
+
+    const srcPath = resolveAttachmentPath(keepDir, rel);
+    if (!srcPath) {
+      console.warn(`Attachment file not found for note ${noteId}: ${rel}`);
+      counts.skipped++;
+      continue;
+    }
+
+    const mime = (att.mimetype || '').toLowerCase();
+    try {
+      if (mime.startsWith('image/')) {
+        const processed = await processNoteImage(fs.readFileSync(srcPath));
+        await trx('note_images').insert({
+          note_id: noteId,
+          data: processed.data,
+          thumbnail: processed.thumbnail,
+          name: path.basename(rel),
+          type: processed.type,
+          size: processed.size
+        });
+        counts.images++;
+      } else {
+        if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+        const destName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(rel)}`;
+        fs.copyFileSync(srcPath, path.join(UPLOADS_DIR, destName));
+        await trx('note_attachments').insert({
+          note_id: noteId,
+          file_path: destName,
+          original_name: path.basename(rel),
+          mime_type: att.mimetype || null,
+          size: fs.statSync(srcPath).size
+        });
+        counts.files++;
+      }
+    } catch (e) {
+      console.warn(`Failed to import attachment ${rel} for note ${noteId}: ${e.message}`);
+      counts.skipped++;
+    }
+  }
+
+  return counts;
+}
+
 // Process a single Google Keep note file in its own transaction.
 async function processNoteFile(filePath) {
   try {
@@ -111,7 +187,7 @@ async function processNoteFile(filePath) {
 
     // One transaction per note. db.transaction checks out its own connection
     // from the shared pool, so notes stay isolated from one another.
-    const { id, labelsImported } = await db.transaction(async (trx) => {
+    const { id, labelsImported, attachments } = await db.transaction(async (trx) => {
       const inserted = await trx('notes')
         .insert({
           title: mappedNote.title,
@@ -158,14 +234,21 @@ async function processNoteFile(filePath) {
         }
       }
 
-      return { id: noteId, labelsImported: associated };
+      // Import images/attachments into the same transaction so a note and its
+      // media commit (or roll back) together.
+      const attachments = await importNoteAttachments(trx, note, path.dirname(filePath), noteId);
+
+      return { id: noteId, labelsImported: associated, attachments };
     });
 
     return {
       success: true,
       id,
       filename: path.basename(filePath),
-      labels: labelsImported
+      labels: labelsImported,
+      images: attachments.images,
+      files: attachments.files,
+      skippedAttachments: attachments.skipped
     };
   } catch (error) {
     return {
@@ -190,6 +273,9 @@ async function processGoogleKeepImport(directoryPath) {
     successful: 0,
     failed: 0,
     labelsImported: 0,
+    imagesImported: 0,
+    attachmentsImported: 0,
+    attachmentsSkipped: 0,
     failures: []
   };
 
@@ -202,6 +288,9 @@ async function processGoogleKeepImport(directoryPath) {
     if (result.success) {
       results.successful++;
       results.labelsImported += result.labels || 0;
+      results.imagesImported += result.images || 0;
+      results.attachmentsImported += result.files || 0;
+      results.attachmentsSkipped += result.skippedAttachments || 0;
     } else {
       results.failed++;
       results.failures.push({ file: result.filename, error: result.error });
@@ -219,6 +308,11 @@ async function processGoogleKeepImport(directoryPath) {
   console.log(`Total notes: ${results.total}`);
   console.log(`Successfully imported: ${results.successful}`);
   console.log(`Tags/labels imported: ${results.labelsImported}`);
+  console.log(`Images imported: ${results.imagesImported}`);
+  console.log(`Other attachments imported: ${results.attachmentsImported}`);
+  if (results.attachmentsSkipped > 0) {
+    console.log(`Attachments skipped (missing/unreadable): ${results.attachmentsSkipped}`);
+  }
   console.log(`Failed: ${results.failed}`);
 
   if (results.failures.length > 0) {
@@ -259,5 +353,6 @@ if (require.main === module) {
 // Export functions for use in the API
 module.exports = {
   processGoogleKeepImport,
-  usecToIso
+  usecToIso,
+  resolveAttachmentPath
 };

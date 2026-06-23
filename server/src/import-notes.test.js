@@ -1,4 +1,7 @@
-const { usecToIso } = require('./import-notes');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { usecToIso, resolveAttachmentPath } = require('./import-notes');
 
 // import-notes pulls in the shared Knex instance on require; close its pool so
 // Jest exits cleanly. (No queries run in these tests, so no connection opens.)
@@ -28,5 +31,28 @@ describe('usecToIso', () => {
   it('does not throw on a NaN-producing input (the original bug)', () => {
     // new Date(NaN).toISOString() throws RangeError; the guard must not.
     expect(() => usecToIso(NaN)).not.toThrow();
+  });
+});
+
+describe('resolveAttachmentPath', () => {
+  let dir;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keep-attach-'));
+    fs.writeFileSync(path.join(dir, 'photo.png'), 'x');
+    fs.writeFileSync(path.join(dir, '12345.jpeg'), 'y'); // recorded as .jpg below
+  });
+  afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('resolves a filePath that exists directly', () => {
+    expect(resolveAttachmentPath(dir, 'photo.png')).toBe(path.join(dir, 'photo.png'));
+  });
+
+  it('falls back to a sibling with the same basename when the extension differs', () => {
+    // Keep recorded "12345.jpg" but exported "12345.jpeg"
+    expect(resolveAttachmentPath(dir, '12345.jpg')).toBe(path.join(dir, '12345.jpeg'));
+  });
+
+  it('returns null when nothing matches', () => {
+    expect(resolveAttachmentPath(dir, 'nope.png')).toBeNull();
   });
 });
