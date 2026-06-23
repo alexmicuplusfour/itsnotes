@@ -76,13 +76,15 @@ const IconButton = styled.button`
   border: none;
   padding: 5px;
   border-radius: 4px;
-  color: var(--text-color);
+  color: ${props => props.$danger ? 'var(--error-color, #f44336)' : 'var(--text-color)'};
   cursor: pointer;
   opacity: 0.7;
 
   &:hover {
     opacity: 1;
-    background-color: rgba(128, 128, 128, 0.1);
+    background-color: ${props => props.$danger
+      ? 'rgba(244, 67, 54, 0.12)'
+      : 'rgba(128, 128, 128, 0.1)'};
   }
 `;
 
@@ -214,6 +216,11 @@ const DropdownItem = styled.button`
       height: 24px;
     }
   }
+`;
+
+const DesktopSubfolderForm = styled.div`
+  width: 240px;
+  max-width: 50vw;
 `;
 
 const SubfolderFormSection = styled.div`
@@ -440,6 +447,44 @@ const FolderHeader = ({ searchQuery }) => {
 
   const theme = isDarkTheme ? 'dark' : 'light';
 
+  const subfolderFormFields = (
+    <SubfolderInputWrapper>
+      <SubfolderInput
+        ref={subfolderInputRef}
+        value={newSubfolderName}
+        onChange={e => setNewSubfolderName(e.target.value.replace(/[\s#/]/g, '-'))}
+        onKeyDown={e => {
+          if (e.key === 'Enter') handleCreateSubfolder();
+          if (e.key === 'Escape') {
+            setIsCreatingSubfolder(false);
+            setNewSubfolderName('');
+          }
+        }}
+        placeholder="Subfolder name..."
+      />
+      <SubfolderActionButton
+        className="create-button"
+        style={{ visibility: newSubfolderName.trim() ? 'visible' : 'hidden' }}
+        disabled={!newSubfolderName.trim() || subfolders.some(
+          s => s.name.toLowerCase() === newSubfolderName.trim().toLowerCase()
+        )}
+        onClick={handleCreateSubfolder}
+        title="Create subfolder"
+      >
+        <Icon name="add" size={20} strokeWidth="2.5" />
+      </SubfolderActionButton>
+      <SubfolderActionButton
+        onClick={() => {
+          setIsCreatingSubfolder(false);
+          setNewSubfolderName('');
+        }}
+        title="Cancel"
+      >
+        <Icon name="close" size={20} strokeWidth="2.5" />
+      </SubfolderActionButton>
+    </SubfolderInputWrapper>
+  );
+
   const dropdownContent = (
     <MoreDropdown $isClosing={isDropdownClosing} $mobileTop={dropdownTop} onClick={e => e.stopPropagation()}>
       {!parentFolder && (
@@ -455,41 +500,7 @@ const FolderHeader = ({ searchQuery }) => {
           </DropdownItem>
           {isCreatingSubfolder && (
             <SubfolderFormSection>
-              <SubfolderInputWrapper>
-                <SubfolderInput
-                  ref={subfolderInputRef}
-                  value={newSubfolderName}
-                  onChange={e => setNewSubfolderName(e.target.value.replace(/[\s#/]/g, '-'))}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleCreateSubfolder();
-                    if (e.key === 'Escape') {
-                      setIsCreatingSubfolder(false);
-                      setNewSubfolderName('');
-                    }
-                  }}
-                  placeholder="Subfolder name..."
-                />
-                <SubfolderActionButton
-                  className="create-button"
-                  style={{ visibility: newSubfolderName.trim() ? 'visible' : 'hidden' }}
-                  disabled={!newSubfolderName.trim() || subfolders.some(
-                    s => s.name.toLowerCase() === newSubfolderName.trim().toLowerCase()
-                  )}
-                  onClick={handleCreateSubfolder}
-                  title="Create subfolder"
-                >
-                  <Icon name="add" size={20} strokeWidth="2.5" />
-                </SubfolderActionButton>
-                <SubfolderActionButton
-                  onClick={() => {
-                    setIsCreatingSubfolder(false);
-                    setNewSubfolderName('');
-                  }}
-                  title="Cancel"
-                >
-                  <Icon name="close" size={20} strokeWidth="2.5" />
-                </SubfolderActionButton>
-              </SubfolderInputWrapper>
+              {subfolderFormFields}
             </SubfolderFormSection>
           )}
         </>
@@ -538,24 +549,53 @@ const FolderHeader = ({ searchQuery }) => {
           <FolderNameText>{currentFolder.name}</FolderNameText>
         </FolderName>
         <RightSide>
-          <div style={{ position: 'relative' }} ref={dropdownRef}>
-            <IconButton
-              ref={moreButtonRef}
-              type="button"
-              title="Folder options"
-              onClick={() => {
-                if (!showDropdown && moreButtonRef.current) {
-                  const rect = moreButtonRef.current.getBoundingClientRect();
-                  setDropdownTop(rect.bottom + 8);
-                }
-                setShowDropdown(prev => !prev);
-              }}
-            >
-              <Icon name="more" size={18} />
-            </IconButton>
-
-            {shouldRenderDropdown && !isMobile && dropdownContent}
-          </div>
+          {isMobile ? (
+            <div style={{ position: 'relative' }} ref={dropdownRef}>
+              <IconButton
+                ref={moreButtonRef}
+                type="button"
+                title="Folder options"
+                onClick={() => {
+                  if (!showDropdown && moreButtonRef.current) {
+                    const rect = moreButtonRef.current.getBoundingClientRect();
+                    setDropdownTop(rect.bottom + 8);
+                  }
+                  setShowDropdown(prev => !prev);
+                }}
+              >
+                <Icon name="more" size={18} />
+              </IconButton>
+            </div>
+          ) : isCreatingSubfolder ? (
+            <DesktopSubfolderForm>{subfolderFormFields}</DesktopSubfolderForm>
+          ) : (
+            <>
+              {!parentFolder && (
+                <IconButton
+                  type="button"
+                  title="Create subfolder"
+                  onClick={() => setIsCreatingSubfolder(true)}
+                >
+                  <Icon name="folder" size={18} />
+                </IconButton>
+              )}
+              <IconButton
+                type="button"
+                title={isTagHidden(currentFolder.id) ? 'Show folder' : 'Hide folder'}
+                onClick={handleToggleVisibility}
+              >
+                <Icon name={isTagHidden(currentFolder.id) ? 'eye' : 'eye-slash'} size={18} />
+              </IconButton>
+              <IconButton
+                type="button"
+                $danger
+                title="Delete with notes"
+                onClick={handleDelete}
+              >
+                <Icon name="trash" size={18} />
+              </IconButton>
+            </>
+          )}
         </RightSide>
       </FolderBar>
 
