@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react'; // Added useRef, useEffect
+import React, { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react'; // Added useRef, useEffect
 import styled, { keyframes } from 'styled-components';
 import Icon from './Icons'; // Assuming Icon is in the same directory
 import ImageGallery from './ImageGallery'; // Assuming ImageGallery is in the same directory
@@ -178,10 +178,21 @@ const TagsContainer = styled.div`
   gap: 6px;
   margin-bottom: 8px;
   margin-top: 8px;
-  padding-right: 40px; /* Extra buffer space so tag hover expansion doesn't cause row reflow */
   padding-left: 1px;
   padding-top: 2px;
   padding-bottom: 2px;
+
+  /* Desktop: rows are packed in JS (see computeTagRowBreaks) which inserts zero-height
+     FlexBreak spacers to force line breaks while reserving room at each row's end for a
+     tag's hover expansion. Use margin-bottom (not row-gap) for vertical spacing so those
+     0-height spacer lines don't introduce extra gaps between rows. */
+  @media (min-width: 769px) {
+    row-gap: 0;
+    margin-bottom: 2px;
+    & > *:not([data-flex-break]) {
+      margin-bottom: 6px;
+    }
+  }
 
   @media (max-width: 768px) {
     flex-wrap: nowrap; /* Becomes scrollable on mobile */
@@ -209,6 +220,17 @@ const TagsContainer = styled.div`
       scroll-snap-align: start;
     }
   }
+`;
+
+// Zero-height, full-width flex item used to force a line break at a JS-computed point.
+// flex-basis: 100% makes it fill the line so the next chip wraps; height/margin 0 keep it
+// invisible and contribute no vertical space.
+const FlexBreak = styled.div`
+  flex-basis: 100%;
+  width: 100%;
+  height: 0;
+  margin: 0;
+  padding: 0;
 `;
 
 
@@ -685,6 +707,64 @@ export const NoteActionBar = ({
     }
   }, [suggestedTags, isMobile]);
 
+  // --- Desktop tag-row packing -------------------------------------------------------
+  // A tag grows ~20px on hover to reveal its X button, which pushes the chips after it on
+  // the same row. With native flex-wrap there's no per-row slack, so on a tightly packed
+  // row that push wraps the last chip to a new line. Flexbox can't reserve trailing space
+  // per row, so we pack the rows ourselves: measure each chip and break to a new line while
+  // leaving TAG_HOVER_RESERVE px free at each row's end. That reserve absorbs the hover
+  // push (no reflow on any row) and makes a chip drop a line early when it wouldn't fit
+  // together with that reserve. Breaks are applied via FlexBreak spacers. Desktop only --
+  // on mobile the row is a horizontal scroller and tags don't expand on hover.
+  const TAG_HOVER_RESERVE = 26; // >= the hover expansion (28px padding-right vs 8px base)
+  const TAG_GAP = 6; // matches column-gap
+  const [tagRowBreaks, setTagRowBreaks] = useState([]);
+
+  const computeTagRowBreaks = useCallback(() => {
+    const container = tagsContainerRef.current;
+    if (!container) return;
+    const chips = Array.from(container.children).filter(
+      c => !c.hasAttribute('data-flex-break')
+    );
+    if (chips.length === 0) {
+      setTagRowBreaks(prev => (prev.length ? [] : prev));
+      return;
+    }
+    const usable = container.clientWidth - TAG_HOVER_RESERVE;
+    const breaks = [];
+    let rowWidth = 0;
+    chips.forEach((chip, i) => {
+      const w = chip.offsetWidth;
+      if (i === 0) {
+        rowWidth = w;
+        return;
+      }
+      const withChip = rowWidth + TAG_GAP + w;
+      if (withChip > usable) {
+        breaks.push(i);
+        rowWidth = w;
+      } else {
+        rowWidth = withChip;
+      }
+    });
+    setTagRowBreaks(prev =>
+      prev.length === breaks.length && prev.every((v, i) => v === breaks[i]) ? prev : breaks
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (isMobile) {
+      setTagRowBreaks(prev => (prev.length ? [] : prev));
+      return;
+    }
+    const container = tagsContainerRef.current;
+    if (!container) return;
+    computeTagRowBreaks();
+    const observer = new ResizeObserver(() => computeTagRowBreaks());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [isMobile, computeTagRowBreaks, suggestedTags, noteTags, noteUrls, bookReferences]);
+
   // Debug logging for editor prop - REMOVED to reduce noise
   // console.log('[NoteActionBar] Editor prop received:', !!editor, typeof editor, editor);
 
@@ -745,113 +825,112 @@ export const NoteActionBar = ({
         {/* Display Tags, Refs, URLs */}
         {renderTagsInFooter && (
           <TagsContainer ref={tagsContainerRef} $isDarkTheme={isDarkTheme} className={isMobile ? 'scrollable-tags' : ''}>
-            {/* Suggested tags appear first with special styling */}
-            {suggestedTags.map(suggestedTag => {
-              const handleSuggestedTagLongPress = (e) => {
-                if (!onDismissSuggestedTag) return;
-                e.preventDefault();
-                e.stopPropagation();
+            {(() => {
+              // Build a single ordered list of footer chips (suggested tags, then book
+              // refs, then URLs, then tags) so JS-computed row breaks can be applied across
+              // all of them by index. See computeTagRowBreaks.
+              const suggestedEls = suggestedTags.map(suggestedTag => {
+                const handleSuggestedTagLongPress = (e) => {
+                  if (!onDismissSuggestedTag) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (navigator.vibrate) navigator.vibrate(50);
+                  onDismissSuggestedTag(suggestedTag);
+                };
+                return (
+                  <SuggestedTagComponent
+                    key={`suggested-${suggestedTag.id}`}
+                    $isDarkTheme={isDarkTheme}
+                    title={`Click to add "${suggestedTag.name}" tag. Right-click to dismiss.`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onAcceptSuggestedTag) onAcceptSuggestedTag(suggestedTag);
+                    }}
+                    onContextMenu={handleSuggestedTagLongPress}
+                  >
+                    <SuggestedTagIcon>
+                      <Icon name="plus" size={14} />
+                    </SuggestedTagIcon>
+                    <span>{suggestedTag.name.length > 12 ? `+ ${suggestedTag.name.substring(0, 16)}...` : `+ ${suggestedTag.name}`}</span>
+                  </SuggestedTagComponent>
+                );
+              });
 
-                // Trigger haptic feedback if available
-                if (navigator.vibrate) {
-                  navigator.vibrate(50);
-                }
-
-                onDismissSuggestedTag(suggestedTag);
-              };
-
-              return (
-                <SuggestedTagComponent
-                  key={`suggested-${suggestedTag.id}`}
+              const bookEls = bookReferences.map((title, index) => (
+                <BookReference
+                  key={`book-${index}`}
                   $isDarkTheme={isDarkTheme}
-                  title={`Click to add "${suggestedTag.name}" tag. Right-click to dismiss.`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onAcceptSuggestedTag) {
-                      onAcceptSuggestedTag(suggestedTag);
-                    }
-                  }}
-                  onContextMenu={handleSuggestedTagLongPress}
+                  title={`Search for {${title}}`}
+                  onClick={(e) => { e.stopPropagation(); onBookClick(e, title); }}
                 >
-                  <SuggestedTagIcon>
-                    <Icon name="plus" size={14} />
-                  </SuggestedTagIcon>
-                  <span>{suggestedTag.name.length > 12 ? `+ ${suggestedTag.name.substring(0, 16)}...` : `+ ${suggestedTag.name}`}</span>
-                </SuggestedTagComponent>
-              );
-            })}
-            {bookReferences.map((title, index) => (
-              <BookReference
-                key={`book-${index}`}
-                $isDarkTheme={isDarkTheme}
-                title={`Search for {${title}}`}
-                onClick={(e) => { e.stopPropagation(); onBookClick(e, title); }}
-              >
-                <Icon name="book" size={16} />
-                <span>{title.length > 18 ? `${title.substring(0, 18)}...` : title}</span>
-              </BookReference>
-            ))}
-            {noteUrls.map((urlItem, index) => (
-              <UrlLink
-                key={`url-${index}`}
-                href={urlItem.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                $isDarkTheme={isDarkTheme}
-                title={`Open ${urlItem.url}`}
-                onClick={(e) => e.stopPropagation()} // Prevent form closing
-              >
-                <Icon name="link" size={16} />
-                <span>{urlItem.domain}</span>
-              </UrlLink>
-            ))}            {noteTags.map(tag => {
-              const handleTagLongPress = (e) => {
-                if (!onRemoveTag) return;
-                e.preventDefault();
-                e.stopPropagation();
+                  <Icon name="book" size={16} />
+                  <span>{title.length > 18 ? `${title.substring(0, 18)}...` : title}</span>
+                </BookReference>
+              ));
 
-                // Trigger haptic feedback if available
-                if (navigator.vibrate) {
-                  navigator.vibrate(50);
-                }
-
-                onRemoveTag(tag);
-              };
-
-              const handleTagTextClick = (e) => {
-                onTagClick(e, tag);
-              };
-
-              return (
-                <Tag
-                  key={tag.id}
+              const urlEls = noteUrls.map((urlItem, index) => (
+                <UrlLink
+                  key={`url-${index}`}
+                  href={urlItem.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   $isDarkTheme={isDarkTheme}
-                  $isFolder={tag.is_folder}
-                  title={`Search for ${tag.name}`}
-                  onContextMenu={handleTagLongPress}
+                  title={`Open ${urlItem.url}`}
+                  onClick={(e) => e.stopPropagation()} // Prevent form closing
                 >
-                  {tag.visible === false && <Icon name="eye-slash" size={10} style={{ marginRight: 3, flexShrink: 0, opacity: 0.6 }} />}
-                  {tag.is_folder && <Icon name="folder" size={11} style={{ marginRight: 4, flexShrink: 0 }} />}
-                  <TagText onClick={handleTagTextClick}>
-                    {tag.name.length > 12 ? `${tag.name.substring(0, 12)}...` : tag.name}
-                  </TagText>
-                  {onRemoveTag && (
-                    <TagRemoveButton
-                      $isDarkTheme={isDarkTheme}
-                      $isFolder={tag.is_folder}
-                      onClick={(e) => {
-                        console.log('TagRemoveButton clicked!', tag); // DEBUG
-                        e.stopPropagation();
-                        onRemoveTag(tag);
-                      }}
-                      title={`Remove tag: ${tag.name}`}
-                    >
-                      <Icon name="close" size={14} strokeWidth="4" />
-                    </TagRemoveButton>
-                  )}
-                </Tag>
-              );
-            })}
+                  <Icon name="link" size={16} />
+                  <span>{urlItem.domain}</span>
+                </UrlLink>
+              ));
+
+              const tagEls = noteTags.map(tag => {
+                const handleTagLongPress = (e) => {
+                  if (!onRemoveTag) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (navigator.vibrate) navigator.vibrate(50);
+                  onRemoveTag(tag);
+                };
+                const handleTagTextClick = (e) => { onTagClick(e, tag); };
+                return (
+                  <Tag
+                    key={tag.id}
+                    $isDarkTheme={isDarkTheme}
+                    $isFolder={tag.is_folder}
+                    title={`Search for ${tag.name}`}
+                    onContextMenu={handleTagLongPress}
+                  >
+                    {tag.visible === false && <Icon name="eye-slash" size={10} style={{ marginRight: 3, flexShrink: 0, opacity: 0.6 }} />}
+                    {tag.is_folder && <Icon name="folder" size={11} style={{ marginRight: 4, flexShrink: 0 }} />}
+                    <TagText onClick={handleTagTextClick}>
+                      {tag.name.length > 12 ? `${tag.name.substring(0, 12)}...` : tag.name}
+                    </TagText>
+                    {onRemoveTag && (
+                      <TagRemoveButton
+                        $isDarkTheme={isDarkTheme}
+                        $isFolder={tag.is_folder}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveTag(tag);
+                        }}
+                        title={`Remove tag: ${tag.name}`}
+                      >
+                        <Icon name="close" size={14} strokeWidth="4" />
+                      </TagRemoveButton>
+                    )}
+                  </Tag>
+                );
+              });
+
+              const footerItems = [...suggestedEls, ...bookEls, ...urlEls, ...tagEls];
+              const breakSet = new Set(tagRowBreaks);
+              return footerItems.map((el, i) => (
+                <React.Fragment key={el.key}>
+                  {breakSet.has(i) && <FlexBreak data-flex-break="true" aria-hidden="true" />}
+                  {el}
+                </React.Fragment>
+              ));
+            })()}
           </TagsContainer>
         )}
 
