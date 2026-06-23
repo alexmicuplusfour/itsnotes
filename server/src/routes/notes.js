@@ -259,7 +259,7 @@ router.post('/', async (req, res) => {
 });
 
 // Duplicate a note (server-side deep copy: row + images + tags + object links)
-router.post('/:id/duplicate', blockInDemo, async (req, res) => {
+router.post('/:id/duplicate', async (req, res) => {
   try {
     const copy = await Note.duplicate(req.params.id);
     if (!copy) {
