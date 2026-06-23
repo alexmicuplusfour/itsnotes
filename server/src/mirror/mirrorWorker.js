@@ -571,6 +571,34 @@ async function runOnce() {
   });
 }
 
+// Tear the mirror down and rebuild it from the current DB. For the demo reset: the
+// seed restores the DB (incl. the note_files tracking rows) but leaves the persistent
+// mirror folder untouched, so files written by older converter code linger and the
+// restored hashes diff against the current render — surfacing as phantom import
+// "conflicts". Clearing the tracking + wiping the folder, then running a full export,
+// makes the folder match the running converter exactly, no matter how old the seed is.
+async function rebuild() {
+  const { enabled, root } = getConfig();
+  if (!enabled || !root) return { skipped: true, reason: 'disabled' };
+  // Wipe tracking + folder contents as one queued step so no concurrent reconcile
+  // sees the half-cleared state; the export then runs as its own queued step.
+  await serialize(async () => {
+    running = true;
+    try {
+      await repo.clearTracked();
+      diskScanCache = new Map();
+      await fs.mkdir(root, { recursive: true });
+      const entries = await fs.readdir(root).catch(() => []);
+      await Promise.all(
+        entries.map((e) => fs.rm(path.join(root, e), { recursive: true, force: true }))
+      );
+    } finally {
+      running = false;
+    }
+  });
+  return runOnce();
+}
+
 // --- Live single-note reconcile (LISTEN/NOTIFY fast path) ---------------------
 
 // Reconcile just one note's file, triggered by a DB NOTIFY. Reuses the same
@@ -750,4 +778,4 @@ function init(options = {}) {
   }
 }
 
-module.exports = { init, runOnce, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult };
+module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult };

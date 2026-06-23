@@ -22,6 +22,7 @@ jest.mock('./mirrorRepo', () => {
     loadTracked: jest.fn(async () => new Map(tracked)),
     upsertTracked: jest.fn(async (id, rel, hash) => { tracked.set(id, { relPath: rel, hash }); }),
     deleteTracked: jest.fn(async (id) => { tracked.delete(id); }),
+    clearTracked: jest.fn(async () => { tracked.clear(); }),
     // Import writes mutate the in-memory note list so a follow-up preview/sweep
     // sees the imported state, mirroring what the real Note/Tag models would do.
     importUpdateNote: jest.fn(async (id, fields) => {
@@ -53,7 +54,7 @@ jest.mock('./mirrorRepo', () => {
 });
 
 const repo = require('./mirrorRepo');
-const { runOnce, reconcileOne, gatherDiskFiles, previewImport, applyImport, autoImportTick } = require('./mirrorWorker');
+const { runOnce, rebuild, reconcileOne, gatherDiskFiles, previewImport, applyImport, autoImportTick } = require('./mirrorWorker');
 
 const baseNote = (over = {}) => ({
   id: '4f3c8a2b-1c7d-4e2a-9b11-7f0a2c3d4e5f',
@@ -540,6 +541,49 @@ describe('applyImport (folder → DB writes against a temp folder)', () => {
   test('skips cleanly when the feature is disabled', async () => {
     delete process.env.MD_MIRROR_ENABLED;
     expect(await applyImport()).toEqual({ skipped: true, reason: 'disabled' });
+  });
+});
+
+// Reproduces the demo-reset symptom: the seed restores stale tracking hashes while
+// the persistent folder holds files from older converter code, so notes show as
+// phantom conflicts. rebuild() must wipe both and re-export cleanly from the DB.
+describe('rebuild (demo-reset clean slate)', () => {
+  const FILE = 'hello-world-4f3c8a2b.md';
+  const ID = '4f3c8a2b-1c7d-4e2a-9b11-7f0a2c3d4e5f';
+  let dir;
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mirror-rebuild-'));
+    process.env.MD_MIRROR_ENABLED = 'true';
+    process.env.MD_MIRROR_PATH = dir;
+    repo.__tracked.clear();
+    repo.__setNotes([baseNote()]);
+    await runOnce();
+  });
+  afterEach(async () => {
+    delete process.env.MD_MIRROR_ENABLED;
+    delete process.env.MD_MIRROR_PATH;
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  test('clears stale tracking + folder and re-exports, killing phantom conflicts', async () => {
+    // Stale file (old converter output) + stale tracking hash + a leftover orphan,
+    // exactly the desynced state a seed restore leaves behind.
+    await fs.writeFile(path.join(dir, FILE), 'old converter output\n', 'utf8');
+    await fs.writeFile(path.join(dir, 'orphan.md'), 'junk\n', 'utf8');
+    repo.__tracked.set(ID, { relPath: FILE, hash: 'STALEHASH' });
+
+    const before = await previewImport();
+    expect(before.conflict).toHaveLength(1); // the symptom
+
+    await rebuild();
+
+    // Folder rebuilt from the DB: orphan gone, note file present and current.
+    const mdFiles = (await fs.readdir(dir)).filter((f) => f.endsWith('.md'));
+    expect(mdFiles).toEqual([FILE]);
+
+    const after = await previewImport();
+    expect(after.conflict).toEqual([]);
+    expect(after.unchanged).toHaveLength(1);
   });
 });
 

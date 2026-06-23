@@ -173,6 +173,12 @@ async function deleteTracked(noteId) {
   await db.query(`DELETE FROM note_files WHERE note_id = $1`, [noteId]);
 }
 
+// Drop every tracking row — used by the mirror rebuild (demo reset) so the folder
+// is re-exported from scratch instead of diffed against stale hashes.
+async function clearTracked() {
+  await db.query(`DELETE FROM note_files`);
+}
+
 // Import writes (folder → DB) ------------------------------------------------
 //
 // These are the only places the mirror mutates note content, routed through the
@@ -229,6 +235,7 @@ module.exports = {
   loadTracked,
   upsertTracked,
   deleteTracked,
+  clearTracked,
   importUpdateNote,
   importCreateNote,
   syncNoteTags,

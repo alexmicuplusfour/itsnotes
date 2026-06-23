@@ -4,6 +4,7 @@ const fsPromises = require('fs').promises;
 const os = require('os');
 const unzipper = require('unzipper');
 const settingsService = require('./settings');
+const mirrorWorker = require('../mirror/mirrorWorker');
 const { runMigrations } = require('../migrate');
 const { execFileAsync } = require('../utils/childProcess');
 
@@ -107,6 +108,17 @@ async function restoreFromZip(zipFilePath) {
       console.log('[DEMO RESET] Uploads restored');
     } catch {
       // No uploads folder in seed — fine
+    }
+
+    // Rebuild the markdown mirror from the freshly seeded DB. The seed restores the
+    // note_files tracking rows but not the (persistent) mirror folder, so files from
+    // older converter code would diff against the current render as phantom conflicts.
+    // A clean re-export makes the folder match the running code regardless of seed age.
+    try {
+      await mirrorWorker.rebuild();
+      console.log('[DEMO RESET] Mirror rebuilt');
+    } catch (err) {
+      console.warn('[DEMO RESET] Mirror rebuild failed:', err.message);
     }
   } finally {
     await fsPromises.rm(extractDir, { recursive: true, force: true }).catch(() => {});
