@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import env from '../../env.js';
 import socketService from '../services/socket.js';
+import keepWarmService from '../services/keepWarm.js';
 
 const AuthContext = createContext();
 
@@ -78,6 +79,15 @@ export const AuthProvider = ({ children }) => {
       socketService.clearConnectionStatusCallback();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+  }, [isAuthenticated]);
+
+  // Keep the REST connection warm while signed in, so the first action after a
+  // pause doesn't pay a cold TCP+TLS handshake (see keepWarm.js). Runs only
+  // while authenticated; the service itself pauses when the window is hidden.
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+    keepWarmService.start();
+    return () => keepWarmService.stop();
   }, [isAuthenticated]);
 
   // Update API headers when token changes
