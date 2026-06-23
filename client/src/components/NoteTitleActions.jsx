@@ -233,6 +233,9 @@ const NoteTitleActions = ({
   const [referencedNotesCount, setReferencedNotesCount] = useState(0); // Count of notes referenced by this note
   const [justStarred, setJustStarred] = useState(false); // Track if note was just starred for animation
   const dropdownRef = useRef(null); // Use useRef
+  const moreButtonRef = useRef(null); // The "More options" trigger, for positioning the desktop menu
+  const desktopMenuRef = useRef(null); // The portaled desktop menu, for outside-click detection
+  const [desktopMenuCoords, setDesktopMenuCoords] = useState({ top: 0, right: 0 });
   const location = useLocation(); // Use useLocation hook
   const navigate = useNavigate(); // Use useNavigate hook
   
@@ -350,9 +353,32 @@ const NoteTitleActions = ({
     
                             
                                 
+  // Anchor the portaled desktop menu to the trigger button. The menu is
+  // portaled to document.body (so the note form's overflow:hidden can't clip
+  // it), so it needs fixed coords measured from the button's viewport rect.
+  useEffect(() => {
+    if (!showMoreDropdown || isMobile) return;
+    const measure = () => {
+      const rect = moreButtonRef.current?.getBoundingClientRect();
+      if (rect) {
+        setDesktopMenuCoords({
+          top: rect.bottom + 4,
+          right: window.innerWidth - rect.right,
+        });
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [showMoreDropdown, isMobile]);
+
   // Close dropdown if clicked outside
   useEffect(() => {
       const handleClickOutside = (event) => {
+          // The desktop menu is portaled outside dropdownRef, so check it too.
+          if (desktopMenuRef.current && desktopMenuRef.current.contains(event.target)) {
+              return;
+          }
           if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
               const moreButton = event.target.closest('button[title="More options"]');
               if (!moreButton) { // Only close if click is not on the More button itself
@@ -734,20 +760,38 @@ const NoteTitleActions = ({
         {/* More options button with dropdown */}
         <div style={{ position: 'relative' }} ref={dropdownRef}>
           <ActionButton
+            ref={moreButtonRef}
             type="button"
             title="More options"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              // Measure before opening so the portaled desktop menu paints in
+              // the right place (no top-right flash on first frame).
+              if (!showMoreDropdown && !isMobile) {
+                const rect = moreButtonRef.current?.getBoundingClientRect();
+                if (rect) {
+                  setDesktopMenuCoords({
+                    top: rect.bottom + 4,
+                    right: window.innerWidth - rect.right,
+                  });
+                }
+              }
               setShowMoreDropdown(prev => !prev); // Toggle previous state
             }}
             theme={isDarkTheme ? 'dark' : 'light'}
           >
             <Icon name="more" size={20} />
           </ActionButton>
-          {/* Desktop dropdown - rendered in place */}
-          {shouldRenderDropdown && !isMobile && (
-              <MoreDropdown $isClosing={isDropdownClosing}>
+          {/* Desktop dropdown - portaled to body so the note form's
+              overflow:hidden can't clip it on short notes */}
+          {shouldRenderDropdown && !isMobile && createPortal(
+              <MoreDropdown
+                ref={desktopMenuRef}
+                $isClosing={isDropdownClosing}
+                data-more-options-dropdown="menu"
+                style={{ position: 'fixed', top: desktopMenuCoords.top, right: desktopMenuCoords.right }}
+              >
                 <DropdownItem
                   type="button"
                   theme={isDarkTheme ? 'dark' : 'light'}
@@ -824,7 +868,8 @@ const NoteTitleActions = ({
                   <Icon name="trash" size={18} />
                   Move to Trash
                 </DropdownItem>)}
-              </MoreDropdown>
+              </MoreDropdown>,
+              document.body
           )}
         </div>
 
