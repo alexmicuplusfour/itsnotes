@@ -46,6 +46,8 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
   // Internal refs
   const processedUrlsRef = useRef(new Set());
   const pasteDetectedRef = useRef(false);
+  // Holds the AbortController for the in-flight extraction so it can be cancelled.
+  const abortControllerRef = useRef(null);
 
 
   // Use external pasteDetectedRef if provided, otherwise use internal one
@@ -81,9 +83,13 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
     setIsExtracting(true);
     setExtractionError(null);
 
+    // Fresh AbortController for this extraction so the user can cancel it.
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     try {
       // Call the API to get the extracted content, title, and optionally images
-      const result = await apiService(urlToExtract, extractionType, noteId, includeImages);
+      const result = await apiService(urlToExtract, extractionType, noteId, includeImages, abortController.signal);
 
       // --- Content Manipulation ---
       // Get a plain text representation of the current Tiptap HTML content
@@ -234,6 +240,13 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
       _hidePrompt();
 
     } catch (error) {
+      // User cancelled — not a real failure. Allow retry and stay quiet.
+      if (error?.name === 'CanceledError' || error?.name === 'AbortError' || error?.code === 'ERR_CANCELED') {
+        processedUrlsRef.current.delete(urlToExtract);
+        console.log(`[useUrlExtraction] Extraction cancelled for: ${urlToExtract}`);
+        return;
+      }
+
       console.error('Error extracting URL content:', error);
       const errorMessage = error.message || "An unknown error occurred during extraction.";
       setExtractionError(`Failed to extract content: ${errorMessage}`);
@@ -248,10 +261,23 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
       }
 
     } finally {
+      abortControllerRef.current = null;
       setIsExtracting(false);
       console.log(`[useUrlExtraction] Extraction process finished for: ${urlToExtract}`);
     }
   }, [currentContent, setContent, setTitle, setIsModified, setLastSaveTime, apiService, onExtractionStart, onExtractionSuccess, onExtractionError, _hidePrompt]);
+
+  // Abort the in-flight extraction (if any). The server may still finish the
+  // work, but the client stops waiting and discards the result.
+  const cancelExtraction = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsExtracting(false);
+    // Hide the confirm prompt too, so it doesn't reappear after cancelling.
+    _hidePrompt();
+  }, [_hidePrompt]);
   // URL detection on content change is handled by the imperative `detectUrls`
   // path (called from NoteForm.handleContentChange when a paste is flagged).
   // The previous reactive useEffect here parsed the full note HTML and ran
@@ -340,6 +366,7 @@ export const useUrlExtraction = (currentContent = '', options = {}) => {
     extractionError,
     extractNow,
     extractSpecificUrl, // New method to extract a specific URL
+    cancelExtraction,   // Abort the in-flight URL extraction
     dismissPrompt,
     resetProcessedUrls,
 

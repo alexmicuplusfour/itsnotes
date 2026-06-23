@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import api, { objectsApi, tagsApi } from '../services/api';
 import { useAutoTagging, AUTO_TAG_FEATURES } from '../contexts/AutoTaggingContext';
@@ -20,6 +20,22 @@ export const useNoteContentActions = ({
     const [clipboardUrl, setClipboardUrl] = useState(null);
     const [isGoodreadsExtracting, setIsGoodreadsExtracting] = useState(false);
     const [isImdbExtracting, setIsImdbExtracting] = useState(false);
+    // AbortController for the in-flight external extraction (Goodreads/IMDb/TMDB)
+    // so the user can cancel it from the loading toast.
+    const externalExtractionAbortRef = useRef(null);
+
+    const isAbortError = (error) =>
+        error?.name === 'CanceledError' || error?.name === 'AbortError' || error?.code === 'ERR_CANCELED';
+
+    // Abort the in-flight Goodreads/IMDb/TMDB extraction (if any).
+    const cancelExternalExtraction = useCallback(() => {
+        if (externalExtractionAbortRef.current) {
+            externalExtractionAbortRef.current.abort();
+            externalExtractionAbortRef.current = null;
+        }
+        setIsGoodreadsExtracting(false);
+        setIsImdbExtracting(false);
+    }, []);
 
     // Helper function to truncate URL for preview
     const getTruncatedUrl = useCallback((url) => {
@@ -290,12 +306,18 @@ export const useNoteContentActions = ({
         if (clipboardUrl) {
             console.log('[useNoteContentActions] Extracting content from clipboard URL:', clipboardUrl);
 
+            // One AbortController for whichever external extraction runs below, so
+            // the loading toast's Cancel can abort the in-flight request.
+            const abortController = new AbortController();
+            externalExtractionAbortRef.current = abortController;
+            const reqConfig = { signal: abortController.signal };
+
             // --- Goodreads Check ---
             if (clipboardUrl.includes('goodreads.com') && setIsGoodreadsExtracting) {
                 setIsGoodreadsExtracting(true);
                 try {
                     // First, extract book data from Goodreads
-                    const response = await api.post('/notes/extract-goodreads', { url: clipboardUrl });
+                    const response = await api.post('/notes/extract-goodreads', { url: clipboardUrl }, reqConfig);
                     const bookData = response.data;
 
                     // Create or find existing object in centralized storage
@@ -346,6 +368,10 @@ export const useNoteContentActions = ({
                     }
                     return; // Stop here if Goodreads
                 } catch (error) {
+                    if (isAbortError(error)) {
+                        console.log('[useNoteContentActions] Goodreads extraction cancelled');
+                        return; // User cancelled — don't fall back
+                    }
                     console.error('[useNoteContentActions] Goodreads extraction failed, falling back to standard extraction', error);
                     // Fallback to standard extraction continue...
                 } finally {
@@ -358,7 +384,7 @@ export const useNoteContentActions = ({
                 // Use unified extraction endpoint that auto-detects movie vs show
                 setIsImdbExtracting(true);
                 try {
-                    const response = await api.post('/notes/extract-imdb', { url: clipboardUrl });
+                    const response = await api.post('/notes/extract-imdb', { url: clipboardUrl }, reqConfig);
                     const data = response.data;
                     const contentType = data.type; // 'movie' or 'show'
 
@@ -433,6 +459,10 @@ export const useNoteContentActions = ({
 
                     return; // Stop here if IMDb extraction succeeded
                 } catch (error) {
+                    if (isAbortError(error)) {
+                        console.log('[useNoteContentActions] IMDb extraction cancelled');
+                        return; // User cancelled — don't fall back
+                    }
                     console.error('[useNoteContentActions] IMDb extraction failed, falling back to standard extraction', error);
                 } finally {
                     setIsImdbExtracting(false);
@@ -443,7 +473,7 @@ export const useNoteContentActions = ({
             if (clipboardUrl.includes('themoviedb.org')) {
                 setIsImdbExtracting(true);
                 try {
-                    const response = await api.post('/notes/extract-tmdb', { url: clipboardUrl });
+                    const response = await api.post('/notes/extract-tmdb', { url: clipboardUrl }, reqConfig);
                     const data = response.data;
                     const contentType = data.type; // 'movie' or 'show'
 
@@ -514,11 +544,19 @@ export const useNoteContentActions = ({
 
                     return;
                 } catch (error) {
+                    if (isAbortError(error)) {
+                        console.log('[useNoteContentActions] TMDB extraction cancelled');
+                        return; // User cancelled — don't fall back
+                    }
                     console.error('[useNoteContentActions] TMDB extraction failed, falling back to standard extraction', error);
                 } finally {
                     setIsImdbExtracting(false);
                 }
             }
+
+            // No external provider matched (or one fell back): clear the controller
+            // since the standard URL extraction below manages its own abort.
+            externalExtractionAbortRef.current = null;
 
             // Standard URL Extraction
             try {
@@ -548,6 +586,7 @@ export const useNoteContentActions = ({
         handleCloseAddContentDropdown,
         isGoodreadsExtracting,
         isImdbExtracting,
+        cancelExternalExtraction,
         clipboardActionLabel
     };
 };

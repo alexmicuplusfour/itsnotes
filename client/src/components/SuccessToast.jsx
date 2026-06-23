@@ -69,7 +69,8 @@ const ToastMessage = styled.span`
   text-align: left;
 `;
 
-const UndoButton = styled.button`
+// Action button (Undo, Cancel, …) — a small pill on the right edge.
+const ActionButton = styled.button`
   flex-shrink: 0;
   background: rgba(128, 128, 128, 0.25);
   border: none;
@@ -84,6 +85,21 @@ const UndoButton = styled.button`
 
   &:hover {
     background: rgba(128, 128, 128, 0.5);
+  }
+`;
+
+// Loading spinner shown on `loading` toasts (e.g. content extraction in flight).
+const Spinner = styled.span`
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(128, 128, 128, 0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: toastSpin 0.8s linear infinite;
+
+  @keyframes toastSpin {
+    to { transform: rotate(360deg); }
   }
 `;
 
@@ -113,7 +129,7 @@ const ProgressBar = styled.div`
  * this is what lets toasts safely stack when triggered by clicks.
  */
 const ToastItem = ({ toast, onHide }) => {
-  const { id, message, duration, onUndo, variant, bgColor, sticky } = toast;
+  const { id, message, duration, action, loading, variant, bgColor, sticky } = toast;
   const resolvedBg = bgColor || (variant ? VARIANT_BG[variant] : null);
 
   useEffect(() => {
@@ -129,16 +145,17 @@ const ToastItem = ({ toast, onHide }) => {
     };
   }, [id, duration, sticky, onHide]);
 
-  const handleUndoClick = (e) => {
+  const handleActionClick = (e) => {
     e.stopPropagation();
-    onUndo();
+    action.onClick();
     onHide(id);
   };
 
   return (
     <ToastContainer $bgColor={resolvedBg}>
+      {loading && <Spinner />}
       <ToastMessage>{message}</ToastMessage>
-      {onUndo && <UndoButton onClick={handleUndoClick}>Undo</UndoButton>}
+      {action && <ActionButton onClick={handleActionClick}>{action.label}</ActionButton>}
       {!sticky && <ProgressBar $duration={duration} />}
     </ToastContainer>
   );

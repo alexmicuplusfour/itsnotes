@@ -264,7 +264,7 @@ export const notesApi = {
   },
 
   // Extract content from URL
-  extractUrlContent: async (url, extractType, noteId = null, includeImages = false) => {
+  extractUrlContent: async (url, extractType, noteId = null, includeImages = false, signal = undefined) => {
     const payload = { url, extractType };
     if (noteId) {
       payload.noteId = noteId;
@@ -272,7 +272,8 @@ export const notesApi = {
     if (includeImages) {
       payload.includeImages = includeImages;
     }
-    const response = await api.post('/notes/extract-url', payload);
+    // `signal` (AbortSignal) lets the caller cancel the in-flight request.
+    const response = await api.post('/notes/extract-url', payload, { signal });
     return response.data; // Should return { title, content, images? }
   },
 

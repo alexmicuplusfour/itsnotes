@@ -150,7 +150,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const { shouldAutoApply, shouldSuggestTag, getFeatureTags } = useAutoTagging();
 
   // Toast notifications
-  const { showToast } = useToast();
+  const { showToast, hideToast } = useToast();
 
   // Get tags list for looking up actual tag names
   const { tags } = useTags();
@@ -1005,6 +1005,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     extractionError,
     extractNow,
     extractSpecificUrl, // New method to extract specific URLs
+    cancelExtraction,   // Abort the in-flight URL extraction
     dismissPrompt,
     resetProcessedUrls,
     // Legacy interface for compatibility
@@ -1119,6 +1120,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     handleCloseAddContentDropdown,
     isGoodreadsExtracting,
     isImdbExtracting,
+    cancelExternalExtraction,
     clipboardActionLabel
   } = useNoteContentActions({
     getEditor,
@@ -1138,6 +1140,29 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const isAddContentBusy =
     isUploadingImage || isSummarizing || isExtractingOCR || isCreatingReminder ||
     isExtracting || isGoodreadsExtracting || isImdbExtracting;
+
+  // Sticky loading toast for content extraction, with a Cancel that aborts the
+  // in-flight request. Covers URL, Goodreads, and IMDb/TMDB extraction.
+  useEffect(() => {
+    const extractingExternal = isGoodreadsExtracting || isImdbExtracting;
+    if (isExtracting || extractingExternal) {
+      const message = isGoodreadsExtracting
+        ? 'Extracting book details…'
+        : isImdbExtracting
+          ? 'Extracting title details…'
+          : 'Extracting content…';
+      showToast(message, {
+        id: 'content-extract',
+        loading: true,
+        action: {
+          label: 'Cancel',
+          onClick: extractingExternal ? cancelExternalExtraction : cancelExtraction,
+        },
+      });
+    } else {
+      hideToast('content-extract');
+    }
+  }, [isExtracting, isGoodreadsExtracting, isImdbExtracting, showToast, hideToast, cancelExtraction, cancelExternalExtraction]);
 
   const titleInputRef = useRef();
   const autoSaveTimerRef = useRef(null);
@@ -2303,9 +2328,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           </ExternalActionsPill>
         )}
         <FormContainer ref={formRef} style={colorStyle} className="form-container" $fullscreen={effectiveFullscreen} $isListView={isListView}>
-          {/* Extraction Prompt - Placed inside FormContainer, before Form */}
+          {/* Extraction confirm prompt ("Extract content?"). The loading state and
+              cancel now live in the global sticky toast (see effect above), so this
+              only renders the confirmation, not the in-progress indicator. */}
           <ExtractionPrompt
-            show={extractionPrompt.show || isGoodreadsExtracting || isImdbExtracting}
+            show={extractionPrompt.show && !isExtracting}
             isExtracting={isExtracting}
             isGoodreadsExtracting={isGoodreadsExtracting}
             isImdbExtracting={isImdbExtracting}

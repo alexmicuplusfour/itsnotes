@@ -55,18 +55,28 @@ export const ToastProvider = ({ children }) => {
    * Show a toast.
    * @param {string} message
    * @param {object|number} [opts] - options object, or a raw number treated as duration.
-   *   opts: { duration ('short'|'medium'|'long'|number), onUndo, variant ('success'|'error'|'warning'), bgColor, sticky, id }
+   *   opts: {
+   *     duration ('short'|'medium'|'long'|number), variant ('success'|'error'|'warning'),
+   *     bgColor, sticky, id,
+   *     onUndo,                       // shorthand: renders an "Undo" action button
+   *     action: { label, onClick },   // generic action button (e.g. Cancel)
+   *     loading,                      // show a spinner; implies sticky + no progress bar
+   *   }
    * @returns {string} the toast id (use with hideToast for sticky toasts)
    */
   const showToast = useCallback((message, opts = {}) => {
     // Tolerate a bare number as the 2nd arg (legacy `showToast(msg, 3000)`)
     const o = typeof opts === 'number' ? { duration: opts } : (opts || {});
-    const sticky = !!o.sticky;
+    const loading = !!o.loading;
+    const sticky = !!o.sticky || loading; // a loading toast never auto-dismisses
+    // onUndo is shorthand for an action button labelled "Undo".
+    const action = o.onUndo ? { label: 'Undo', onClick: o.onUndo } : (o.action || null);
     const toast = {
       id: o.id || `toast-${++idRef.current}`,
       message,
       duration: sticky ? 0 : resolveDuration(o.duration),
-      onUndo: o.onUndo || null,
+      action,
+      loading,
       variant: o.variant || null,
       bgColor: o.bgColor || null,
       sticky,
