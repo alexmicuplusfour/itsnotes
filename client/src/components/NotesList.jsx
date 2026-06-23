@@ -149,6 +149,7 @@ const CountPill = styled.span`
   justify-content: center;
   box-sizing: border-box;
   height: 20px;
+  min-width: 28px;
   vertical-align: middle;
   position: relative;
   top: -1px;
