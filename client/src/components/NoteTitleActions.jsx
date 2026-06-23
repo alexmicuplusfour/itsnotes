@@ -7,7 +7,7 @@ import { useNotes } from '../contexts/NotesContext';
 import { useStarredNotes } from '../contexts/StarredNotesContext';
 import Icon from './Icons';
 import { ActionButton, CircleIconWrapper as SharedCircleIconWrapper, HighlightedButton as SharedHighlightedButton } from './NoteForm/NoteForm.styles';
-import SuccessToast from './SuccessToast'; // Import centralized SuccessToast component
+import { useToast } from '../contexts/ToastContext'; // Global toast notifications
 import { UUID_REGEX_GLOBAL } from './TiptapNoteReferenceMark'; // Import UUID regex
 import { invalidateNoteCache } from './TiptapNoteReferenceCard'; // Import cache invalidation
 
@@ -224,11 +224,8 @@ const NoteTitleActions = ({
   color,
   setIsBeingTrashed
 }) => {
+  const { showToast } = useToast();
   const [showMoreDropdown, setShowMoreDropdown] = useState(false);
-  const [showCopySuccess, setShowCopySuccess] = useState(false);
-  const [showCopyTextSuccess, setShowCopyTextSuccess] = useState(false);
-  const [showDeleteToast, setShowDeleteToast] = useState(false);
-  const [deleteToastMessage, setDeleteToastMessage] = useState('');
   const [referenceCount, setReferenceCount] = useState(null); // New state for reference count
   const [referencedNotesCount, setReferencedNotesCount] = useState(0); // Count of notes referenced by this note
   const [justStarred, setJustStarred] = useState(false); // Track if note was just starred for animation
@@ -413,13 +410,13 @@ const NoteTitleActions = ({
         navigator.clipboard.writeText(text)
           .then(() => {
             setShowMoreDropdown(false);
-            setShowCopySuccess(true);
+            showToast('Note reference copied to clipboard', { duration: 'short' });
           })
           .catch(err => {
             console.error('Failed to copy with Clipboard API:', err);
             if (copyTextWithFallback(text)) {
               setShowMoreDropdown(false);
-              setShowCopySuccess(true);
+              showToast('Note reference copied to clipboard', { duration: 'short' });
             } else {
               console.error('All clipboard methods failed');
               alert('Could not copy reference to clipboard.');
@@ -428,7 +425,7 @@ const NoteTitleActions = ({
       } else {
         if (copyTextWithFallback(text)) {
           setShowMoreDropdown(false);
-          setShowCopySuccess(true);
+          showToast('Note reference copied to clipboard', { duration: 'short' });
         } else {
           console.error('All clipboard methods failed');
           alert('Could not copy reference to clipboard.');
@@ -495,13 +492,13 @@ const NoteTitleActions = ({
         navigator.clipboard.writeText(text)
           .then(() => {
             setShowMoreDropdown(false);
-            setShowCopyTextSuccess(true);
+            showToast('Note text copied to clipboard', { duration: 'short' });
           })
           .catch(err => {
             console.error('Failed to copy with Clipboard API:', err);
             if (copyTextWithFallback(text)) {
               setShowMoreDropdown(false);
-              setShowCopyTextSuccess(true);
+              showToast('Note text copied to clipboard', { duration: 'short' });
             } else {
               console.error('All clipboard methods failed');
               alert('Could not copy note text to clipboard.');
@@ -510,7 +507,7 @@ const NoteTitleActions = ({
       } else {
         if (copyTextWithFallback(text)) {
           setShowMoreDropdown(false);
-          setShowCopyTextSuccess(true);
+          showToast('Note text copied to clipboard', { duration: 'short' });
         } else {
           console.error('All clipboard methods failed');
           alert('Could not copy note text to clipboard.');
@@ -678,13 +675,11 @@ const NoteTitleActions = ({
     
     // Show summary toast
     const notesWord = successCount === 1 ? 'note' : 'notes';
-    if (failCount === 0) {
-      setDeleteToastMessage(`Moved ${successCount} ${notesWord} to trash`);
-    } else {
-      setDeleteToastMessage(`Moved ${successCount} ${notesWord} to trash. Failed: ${failCount}`);
-    }
-    setShowDeleteToast(true);
-  }, [note?.id, referencedNoteIds, trashNote]);
+    const summary = failCount === 0
+      ? `Moved ${successCount} ${notesWord} to trash`
+      : `Moved ${successCount} ${notesWord} to trash. Failed: ${failCount}`;
+    showToast(summary, { duration: 'long' });
+  }, [note?.id, referencedNoteIds, trashNote, showToast]);
 
   const handleToggleStar = useCallback((e) => {
     e.preventDefault();
@@ -699,26 +694,6 @@ const NoteTitleActions = ({
   }
   return (
     <>
-      {createPortal(
-        <>
-          <SuccessToast
-            message="Note reference copied to clipboard"
-            isVisible={showCopySuccess}
-            onHide={() => setShowCopySuccess(false)}
-          />
-          <SuccessToast
-            message="Note text copied to clipboard"
-            isVisible={showCopyTextSuccess}
-            onHide={() => setShowCopyTextSuccess(false)}
-          />
-          <SuccessToast
-            message={deleteToastMessage}
-            isVisible={showDeleteToast}
-            onHide={() => setShowDeleteToast(false)}
-          />
-        </>,
-        document.body
-      )}
       <TitleActionsContainer $color={color}>
         {/* Pin button */}
         {!isNoteDeleted && !isNoteArchived && (

@@ -1090,16 +1090,10 @@ export const TagPicker = ({
     try {
       await tagsApi.deleteTag(folderId);
       // Refresh will happen automatically via socket.io
-      if (showToast) {
-        showToast('Folder deleted', 'success');
-      }
+      showToast('Folder deleted');
     } catch (error) {
       console.error('Error deleting folder:', error);
-      if (showToast) {
-        showToast('Failed to delete folder', 'error');
-      } else {
-        alert('Failed to delete folder');
-      }
+      showToast('Failed to delete folder', { variant: 'error' });
     }
   };
 

@@ -21,12 +21,11 @@ import { NoteSelectionProvider } from './contexts/NoteSelectionContext'; // Impo
 import { NoteActionsProvider } from './contexts/NoteActionsContext'; // Import NoteActionsProvider for stable action references
 import { AutoTaggingProvider } from './contexts/AutoTaggingContext'; // Import AutoTaggingProvider for auto-tagging settings
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import { ToastProvider } from './contexts/ToastContext'; // Import ToastProvider for global toast notifications
+import { ToastProvider, useToast } from './contexts/ToastContext'; // Import ToastProvider for global toast notifications
 import { COLORS } from './components/ColorPicker'; // Import COLORS for label translation
 import { NavigationProvider, useNavigation } from './navigation'; // Import new navigation system
 import noteFormSaveRegistry from './services/noteFormSaveRegistry'; // Global save function registry
 import socketService from './services/socket';
-import SuccessToast from './components/SuccessToast';
 import DemoBanner from './components/DemoBanner';
 import ColorPreloader from './components/ColorPreloader'; // Import color preloader for performance
 
@@ -198,7 +197,7 @@ const AppContent = () => {
   }, [serverSettings, setAllColorLabels]);
 
   // --- Reminder Notifications ---
-  const [reminderToast, setReminderToast] = React.useState({ visible: false, message: '' });
+  const { showToast } = useToast();
 
   useEffect(() => {
     // Request notification permission on load
@@ -208,7 +207,7 @@ const AppContent = () => {
 
     const handleReminder = (data) => {
       console.log("App: Reminder triggered", data);
-      setReminderToast({ visible: true, message: data.message || `Reminder: ${data.title}` });
+      showToast(data.message || `Reminder: ${data.title}`, { duration: 'long' });
 
       // Browser Notification
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -364,13 +363,6 @@ const AppContent = () => {
 
           {/* Fixed Starred Notes Tabs - With key to force re-render when showNoteTabs changes */}
           {showNoteTabs && <FixedStarredNotesTabs key={`tabs-${showNoteTabs}`} />}
-
-          <SuccessToast
-            isVisible={reminderToast.visible}
-            message={reminderToast.message}
-            onHide={() => setReminderToast(prev => ({ ...prev, visible: false }))}
-            duration={5000}
-          />
 
           {/* Preload all note color styles to prevent first-render lag */}
           <ColorPreloader />

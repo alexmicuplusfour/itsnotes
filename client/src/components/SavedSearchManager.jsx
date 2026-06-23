@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import ReactDOM from 'react-dom';
 import styled from 'styled-components';
 import Icon from './Icons';
-import SuccessToast from './SuccessToast';
+import { useToast } from '../contexts/ToastContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 
 const SaveSearchButton = styled.button`
@@ -27,8 +26,8 @@ const SavedSearchManager = ({
   className 
 }) => {
   const [isSavingSearch, setIsSavingSearch] = useState(false);
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
   const { saveSearch, savedSearches } = useUIPreferences();
+  const { showToast } = useToast();
 
   const handleSaveSearch = async (e) => {
     e.preventDefault();
@@ -47,7 +46,7 @@ const SavedSearchManager = ({
       saveSearch(trimmedInput);
       
       // Show success toast
-      setShowSaveSuccess(true);
+      showToast('Saved Search created', { duration: 'short' });
 
       // Reset the saving state after animation completes
       setTimeout(() => {
@@ -64,33 +63,20 @@ const SavedSearchManager = ({
                    isSearchActive && 
                    !savedSearches.includes(searchInput?.trim());
   return (
-    <>
-      <SaveSearchButton
-        type="button"
-        className={className}
-        $visible={isVisible}
-        $saving={isSavingSearch}
-        onClick={handleSaveSearch}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-        title="Save this search"
-      >
-        <Icon name="star-outline" size={22} />
-      </SaveSearchButton>
-
-      {/* Render toast in a portal to avoid z-index issues */}
-      {showSaveSuccess && ReactDOM.createPortal(
-        <SuccessToast
-          message="Saved Search created"
-          isVisible={showSaveSuccess}
-          onHide={() => setShowSaveSuccess(false)}
-          duration={2000}
-        />,
-        document.body
-      )}
-    </>
+    <SaveSearchButton
+      type="button"
+      className={className}
+      $visible={isVisible}
+      $saving={isSavingSearch}
+      onClick={handleSaveSearch}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+      title="Save this search"
+    >
+      <Icon name="star-outline" size={22} />
+    </SaveSearchButton>
   );
 };
 

@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import ReactDOM from 'react-dom';
+import React from 'react';
 import styled from 'styled-components';
 import Icon from './Icons';
-import SuccessToast from './SuccessToast';
+import { useToast } from '../contexts/ToastContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 
 const SaveSearchIcon = styled(Icon)`
@@ -21,13 +20,13 @@ const SaveSearchIcon = styled(Icon)`
 
 const MonthSearchStar = ({ year, monthShort, monthLabel, size = 16, className }) => {
   const { saveSearch, savedSearches } = useUIPreferences();
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const { showToast } = useToast();
 
   const handleSaveMonthSearch = (e) => {
     e.stopPropagation();
     const searchQuery = `yr:${year}:${monthShort}`;
     saveSearch(searchQuery);
-    setShowSaveSuccess(true);
+    showToast('Saved Search created', { duration: 'short' });
     console.log(`Saved search for ${monthLabel}: ${searchQuery}`);
   };
 
@@ -35,30 +34,17 @@ const MonthSearchStar = ({ year, monthShort, monthLabel, size = 16, className })
   const searchQuery = `yr:${year}:${monthShort}`;
   const isAlreadySaved = savedSearches.includes(searchQuery);
 
-  return (
-    <>
-      {/* Only show the star if this search hasn't been saved yet */}
-      {!isAlreadySaved && (
-        <SaveSearchIcon 
-          name="star-outline" 
-          size={size}
-          onClick={handleSaveMonthSearch}
-          title={`Save search for ${monthLabel}`}
-          className={className}
-        />
-      )}
+  // Only show the star if this search hasn't been saved yet
+  if (isAlreadySaved) return null;
 
-      {/* Render toast in a portal to avoid z-index issues */}
-      {showSaveSuccess && ReactDOM.createPortal(
-        <SuccessToast
-          message="Saved Search created"
-          isVisible={showSaveSuccess}
-          onHide={() => setShowSaveSuccess(false)}
-          duration={2000}
-        />,
-        document.body
-      )}
-    </>
+  return (
+    <SaveSearchIcon
+      name="star-outline"
+      size={size}
+      onClick={handleSaveMonthSearch}
+      title={`Save search for ${monthLabel}`}
+      className={className}
+    />
   );
 };
 

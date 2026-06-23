@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { tagsApi } from '../services/api';
 import socketService from '../services/socket';
-import SuccessToast from '../components/SuccessToast';
+import { useToast } from './ToastContext';
 
 const TagsContext = createContext();
 
@@ -24,11 +24,7 @@ export const TagsProvider = ({ children }) => {
     _setPickerOpenForNoteId(noteId);
   }, []);
 
-  // Toast state
-  const [showCreateTagSuccess, setShowCreateTagSuccess] = useState(false);
-  const [showDeleteTagSuccess, setShowDeleteTagSuccess] = useState(false);
-  const [createdTagName, setCreatedTagName] = useState('');
-  const [deletedTagName, setDeletedTagName] = useState('');
+  const { showToast } = useToast();
 
   // Load all tags
   const loadTags = useCallback(async ({ silent = false } = {}) => {
@@ -91,9 +87,8 @@ export const TagsProvider = ({ children }) => {
       });
       
       // Show success toast
-      setCreatedTagName(response.tag.name);
-      setShowCreateTagSuccess(true);
-      
+      showToast(`Tag #${response.tag.name} created`);
+
       // Log successful creation
       console.log('Tag created successfully:', response.tag);
       return response.tag;
@@ -171,8 +166,7 @@ export const TagsProvider = ({ children }) => {
       
       // Show success toast
       if (tagName) {
-        setDeletedTagName(tagName);
-        setShowDeleteTagSuccess(true);
+        showToast(`Tag #${tagName} deleted`);
       }
       
       return true;
@@ -361,21 +355,9 @@ export const TagsProvider = ({ children }) => {
   };
 
   return (
-    <>
-      <SuccessToast
-        message={`Tag #${createdTagName} created`}
-        isVisible={showCreateTagSuccess}
-        onHide={() => setShowCreateTagSuccess(false)}
-      />
-      <SuccessToast
-        message={`Tag #${deletedTagName} deleted`}
-        isVisible={showDeleteTagSuccess}
-        onHide={() => setShowDeleteTagSuccess(false)}
-      />
-      <TagsContext.Provider value={value}>
-        {children}
-      </TagsContext.Provider>
-    </>
+    <TagsContext.Provider value={value}>
+      {children}
+    </TagsContext.Provider>
   );
 };
 

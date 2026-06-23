@@ -16,7 +16,7 @@ import QuickSearch from './QuickSearch';
 import SavedSearchManager from './SavedSearchManager';
 import SettingsModal from './SettingsModal';
 import { CircleIconWrapper as SharedCircleIconWrapper, HighlightedButton as SharedHighlightedButton} from './NoteForm/NoteForm.styles';
-import SuccessToast from './SuccessToast'; // Import SuccessToast
+import { useToast } from '../contexts/ToastContext'; // Global toast notifications
 import ThemeManager from '../utils/ThemeManager';
 import MainNavigationMenu from './MainNavigationMenu';
 import { formatPlainTextPasteToHtml, markdownToHtml } from '../utils/textToHtml.js';
@@ -765,8 +765,7 @@ const Header = () => {
   const [showBulkColorPicker, setShowBulkColorPicker] = useState(false); // State for bulk color picker
   const [showBulkTagPicker, setShowBulkTagPicker] = useState(false); // State for bulk tag picker
   const [isDragOver, setIsDragOver] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState('');
+  const { showToast, hideToast } = useToast();
 
   // Add state and functions from contexts
   const {
@@ -809,6 +808,16 @@ const Header = () => {
   
   const { tags, toggleTagsModal, createTag } = useTags();
   const { logout, isSocketConnected, isDemoMode } = useAuth();
+
+  // Sticky "Reconnecting…" toast: shown (without a countdown) while the socket
+  // is down, cleared once it reconnects. Stable id keeps it idempotent.
+  useEffect(() => {
+    if (isSocketConnected === false) {
+      showToast('Reconnecting to server...', { sticky: true, id: 'socket-reconnect', variant: 'warning' });
+    } else {
+      hideToast('socket-reconnect');
+    }
+  }, [isSocketConnected, showToast, hideToast]);
 
   // In demo mode the destructive bulk actions (archive / trash / delete forever)
   // are disabled so visitors can't wipe the shared demo notes.
@@ -1712,9 +1721,7 @@ const Header = () => {
     setIsProcessing(false);
 
     if (successCount > 0) {
-      setToastMessage(`${successCount} note${successCount > 1 ? 's' : ''} created from files`);
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
+      showToast(`${successCount} note${successCount > 1 ? 's' : ''} created from files`);
     }
   };
 
@@ -1722,14 +1729,10 @@ const Header = () => {
     try {
       const textToCopy = Array.from(selectedNoteIds).join('\n\n');
       await navigator.clipboard.writeText(textToCopy);
-      setToastMessage('References copied to clipboard');
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
+      showToast('References copied to clipboard');
     } catch (err) {
       console.error('Failed to copy references:', err);
-      setToastMessage('Failed to copy references');
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 3000);
+      showToast('Failed to copy references', { variant: 'error' });
     }
     setIsActionMenuOpen(false);
   };
@@ -2090,18 +2093,6 @@ const Header = () => {
       {isSettingsModalOpen && (
         <SettingsModal onClose={() => setIsSettingsModalOpen(false)} />
       )}
-
-      <SuccessToast
-        message={toastMessage}
-        isVisible={showToast}
-        onClose={() => setShowToast(false)}
-      />
-
-      <SuccessToast
-        message="Reconnecting to server..."
-        isVisible={isSocketConnected === false}
-        bgColor="var(--warning-toast-bg)"
-      />
     </>
   );
 };

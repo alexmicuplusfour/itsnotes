@@ -106,8 +106,7 @@ export const NoteSelectionProvider = ({ children }) => {
       const hiddenCount = missingSelectedNotes.filter(id => hiddenNoteIds.has(id)).length;
       
       if (hiddenCount > 0) {
-         notesContextRef.current.setOperationCount(hiddenCount);
-         notesContextRef.current.setShowHiddenSuccess(true);
+         notesContextRef.current.notifyHidden(hiddenCount);
       }
     }
   }, [selectedNoteIds, notesContext.searchMode, notesContext.searchResults, notesContext.notes, hiddenTagIds, notesContext.view]);
@@ -222,11 +221,8 @@ export const NoteSelectionProvider = ({ children }) => {
       }
     };
     _executeBulkAction('archive', notesApi.bulkArchiveNotes, updateFn).then(() => {
-      // Show success toast after successful operation
-      notesContextRef.current.setOperationCount(ids.length);
-      notesContextRef.current.setLastArchivedNoteIds(ids);
-      notesContextRef.current.captureArchivedNotesForUndo(archivedEntries);
-      notesContextRef.current.setShowArchiveSuccess(true);
+      // Show success toast after successful operation (with Undo)
+      notesContextRef.current.notifyArchived(ids, archivedEntries);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
         notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);
@@ -240,8 +236,7 @@ export const NoteSelectionProvider = ({ children }) => {
     };
     _executeBulkAction('unarchive', notesApi.bulkUnarchiveNotes, updateFn).then(() => {
       // Show success toast after successful operation
-      notesContextRef.current.setOperationCount(ids.length);
-      notesContextRef.current.setShowUnarchiveSuccess(true);
+      notesContextRef.current.notifyUnarchived(ids.length);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
         notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);
@@ -305,11 +300,8 @@ export const NoteSelectionProvider = ({ children }) => {
         })
         .filter(Boolean);
 
-      // Show success toast after successful operation
-      notesContextRef.current.setOperationCount(ids.length);
-      notesContextRef.current.setLastTrashedNoteIds(ids);
-      notesContextRef.current.captureTrashedNotesForUndo(trashedEntries);
-      notesContextRef.current.setShowTrashSuccess(true);
+      // Show success toast after successful operation (with Undo)
+      notesContextRef.current.notifyTrashed(ids, trashedEntries);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
         notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);
@@ -333,8 +325,7 @@ export const NoteSelectionProvider = ({ children }) => {
     };
     _executeBulkAction('restore', notesApi.bulkRestoreNotes, updateFn).then(() => {
       // Show success toast after successful operation
-      notesContextRef.current.setOperationCount(ids.length);
-      notesContextRef.current.setShowRestoreSuccess(true);
+      notesContextRef.current.notifyRestored(ids.length);
       // Refresh search count if in search mode
       if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
         notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);
@@ -402,11 +393,8 @@ export const NoteSelectionProvider = ({ children }) => {
         await notesApi.bulkTrashNotes(archivedIds);
         console.log(`Successfully moved ${archivedIds.length} archived notes to trash`);
         
-        // Show success toast for trashed archived notes
-        notesContextRef.current.setOperationCount(archivedIds.length);
-        notesContextRef.current.setLastTrashedNoteIds(archivedIds);
-        notesContextRef.current.captureTrashedNotesForUndo([]);
-        notesContextRef.current.setShowTrashSuccess(true);
+        // Show success toast for trashed archived notes (with Undo)
+        notesContextRef.current.notifyTrashed(archivedIds, []);
         // Refresh search count if in search mode
         if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
           notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);
@@ -436,8 +424,7 @@ export const NoteSelectionProvider = ({ children }) => {
         await _executeBulkAction('delete permanently', notesApi.bulkDeletePermanently, updateFn);
         
         // Show success toast for permanently deleted notes
-        notesContextRef.current.setOperationCount(deleteIds.length);
-        notesContextRef.current.setShowDeleteSuccess(true);
+        notesContextRef.current.notifyDeleted(deleteIds.length);
         // Refresh search count if in search mode
         if (notesContextRef.current.searchMode && notesContextRef.current.searchQuery) {
           notesContextRef.current.refreshSearchCount(notesContextRef.current.searchQuery);

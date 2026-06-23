@@ -16,7 +16,7 @@ import socketService from '../services/socket';
 import { useTags } from './TagsContext'; // Import useTags
 import { useUIPreferences } from './UIPreferencesContext'; // Import useUIPreferences
 import { useSorting, SORT_OPTIONS } from './SortingContext'; // Import unified sorting
-import SuccessToast from '../components/SuccessToast'; // Import centralized SuccessToast component
+import { useToast } from './ToastContext'; // Global toast notifications
 import { updateNoteInCache } from '../components/TiptapNoteReferenceCard'; // Import cache update function 
 import { useAutoTagging, AUTO_TAG_FEATURES } from './AutoTaggingContext'; // Import auto-tagging context
 import { useSettings } from './SettingsContext';
@@ -223,26 +223,10 @@ export const NotesProvider = ({ children }) => {
   const [searchBarActive, setSearchBarActive] = useState(false); // Visual state for the search bar
   const [resolvedTagIds, setResolvedTagIds] = useState({}); // State mirror of resolvedTagIdsRef for reactive components
 
-  // Toast State
-  const [showAutoTagSuccess, setShowAutoTagSuccess] = useState(false); // Show success toast for auto-tag
-  const [autoTaggedTagName, setAutoTaggedTagName] = useState(''); // Store the tag name for the toast message
-  const [showCopyNoteSuccess, setShowCopyNoteSuccess] = useState(false); // Show success toast for "Make a copy"
-  
-  // --- NEW: Success toast state for archive/delete operations ---
-  const [showArchiveSuccess, setShowArchiveSuccess] = useState(false);
-  const [showUnarchiveSuccess, setShowUnarchiveSuccess] = useState(false);
-  const [showTrashSuccess, setShowTrashSuccess] = useState(false);
-  const [showRestoreSuccess, setShowRestoreSuccess] = useState(false);
-  const [showDeleteSuccess, setShowDeleteSuccess] = useState(false);
-  const [showHiddenSuccess, setShowHiddenSuccess] = useState(false); // New toast for hidden notes
-  const [operationCount, setOperationCount] = useState(1); // Track how many notes were affected
-  const [lastArchivedNoteIds, setLastArchivedNoteIds] = useState([]);
-  const [lastTrashedNoteIds, setLastTrashedNoteIds] = useState([]);
-  // Captures full note objects (+ their list index) for the most recent trash op
-  // so undo can re-insert them in place instead of refetching/refreshing the list.
-  const lastTrashedNotesRef = useRef([]);
-  // Same, for the most recent archive op.
-  const lastArchivedNotesRef = useRef([]);
+  // Toast notifications (queue-based, rendered by ToastProvider). The message +
+  // Undo wiring for note operations lives in the notify* helpers below; each undo
+  // toast captures its own ids + saved entries, so no shared "last op" state is kept.
+  const { showToast } = useToast();
 
   // Note Interaction State
   const [openedNote, setOpenedNote] = useState(null); // The note currently open in the editor/modal
@@ -1853,9 +1837,8 @@ export const NotesProvider = ({ children }) => {
               await Promise.all(tagsToAutoApply.map(tag => tagsApi.addTagToNote(newNote.id, tag.id)));
 
               const tagNamesForToast = tagsToAutoApply.map(t => t.name);
-              setAutoTaggedTagName(tagNamesForToast.length > 1 ? tagNamesForToast.join(', #') : tagNamesForToast[0]);
-              setShowAutoTagSuccess(true);
-              setTimeout(() => setShowAutoTagSuccess(false), 2000);
+              const tagLabel = tagNamesForToast.length > 1 ? tagNamesForToast.join(', #') : tagNamesForToast[0];
+              showToast(`Tag #${tagLabel} added to note`, { duration: 'short' });
             } catch (tagError) {
               console.error("Error auto-adding tags to new note:", tagError);
             }
@@ -1916,7 +1899,7 @@ export const NotesProvider = ({ children }) => {
   const duplicateNote = useCallback(async (noteId) => {
     try {
       const response = await notesApi.duplicateNote(noteId);
-      setShowCopyNoteSuccess(true);
+      showToast('Copy created');
       return response.note;
     } catch (err) {
       console.error('Failed to duplicate note:', err);
@@ -2045,13 +2028,11 @@ export const NotesProvider = ({ children }) => {
         }, 100);
       }
       
-      // Show success toast
-      setOperationCount(1);
-      setLastArchivedNoteIds([id]);
-      lastArchivedNotesRef.current = noteFromState
+      // Show success toast (with Undo)
+      const archivedEntries = noteFromState
         ? [{ note: { ...noteFromState, is_archived: false }, index: archivedIndex }]
         : [];
-      setShowArchiveSuccess(true);
+      notifyArchived([id], archivedEntries);
 
       // Keep the socket block active for a little longer after operation completes
       setTimeout(() => {
@@ -2083,9 +2064,8 @@ export const NotesProvider = ({ children }) => {
       // multiple pages of loaded notes with just page 1.
       
       // Show success toast
-      setOperationCount(1);
-      setShowUnarchiveSuccess(true);
-      
+      notifyUnarchived(1);
+
       // Keep the socket block active for a little longer after operation completes
       setTimeout(() => {
         manualRefreshInProgressRef.current = false;
@@ -2142,13 +2122,11 @@ export const NotesProvider = ({ children }) => {
         }, 100);
       }
 
-      // Show success toast
-      setOperationCount(1);
-      setLastTrashedNoteIds([id]);
-      lastTrashedNotesRef.current = noteFromState
+      // Show success toast (with Undo)
+      const trashedEntries = noteFromState
         ? [{ note: noteFromState, index: trashedIndex }]
         : [];
-      setShowTrashSuccess(true);
+      notifyTrashed([id], trashedEntries);
 
       // Keep the socket block active for a little longer after operation completes
       setTimeout(() => {
@@ -2180,8 +2158,7 @@ export const NotesProvider = ({ children }) => {
       // multiple pages of loaded notes with just page 1.
       
       // Show success toast
-      setOperationCount(1);
-      setShowRestoreSuccess(true);
+      notifyRestored(1);
       
       // Keep the socket block active for a little longer after operation completes
       setTimeout(() => {
@@ -2197,15 +2174,16 @@ export const NotesProvider = ({ children }) => {
     }
   }, [_updateOrRemoveNoteInState, loadNotes]);
 
-  const handleUndoArchive = useCallback(async () => {
-    if (!lastArchivedNoteIds.length) return;
-    const ids = lastArchivedNoteIds;
-    setShowArchiveSuccess(false);
+  // Undo handlers take the operation's ids + saved entries directly (captured in
+  // the toast's onUndo closure), so each toast undoes exactly its own op — works
+  // regardless of later operations and supports multiple stacked undo toasts.
+  const handleUndoArchive = useCallback(async (ids, savedEntries) => {
+    if (!ids || !ids.length) return;
     try {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkUnarchiveNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
-      const saved = lastArchivedNotesRef.current;
+      const saved = Array.isArray(savedEntries) ? savedEntries : [];
       const canRestoreLocally = saved.length > 0 &&
         saved.length === ids.length &&
         saved.every(entry => entry.note && ids.includes(entry.note.id));
@@ -2221,34 +2199,20 @@ export const NotesProvider = ({ children }) => {
       } else {
         loadNotes(true);
       }
-      lastArchivedNotesRef.current = [];
     } catch (err) {
       console.error('Failed to undo archive:', err);
       setError('Failed to undo archive');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastArchivedNoteIds, loadNotes, handleSearch, refreshSearchCount]);
+  }, [loadNotes, refreshSearchCount]);
 
-  // Lets external callers (e.g. bulk trash in NoteSelectionContext) supply the
-  // full note objects + their search-result indices so undo can restore in place.
-  const captureTrashedNotesForUndo = useCallback((entries) => {
-    lastTrashedNotesRef.current = Array.isArray(entries) ? entries : [];
-  }, []);
-
-  // Same, for bulk archive in NoteSelectionContext.
-  const captureArchivedNotesForUndo = useCallback((entries) => {
-    lastArchivedNotesRef.current = Array.isArray(entries) ? entries : [];
-  }, []);
-
-  const handleUndoTrash = useCallback(async () => {
-    if (!lastTrashedNoteIds.length) return;
-    const ids = lastTrashedNoteIds;
-    setShowTrashSuccess(false);
+  const handleUndoTrash = useCallback(async (ids, savedEntries) => {
+    if (!ids || !ids.length) return;
     try {
       manualRefreshInProgressRef.current = true;
       await notesApi.bulkRestoreNotes(ids);
       setTimeout(() => { manualRefreshInProgressRef.current = false; }, 500);
-      const saved = lastTrashedNotesRef.current;
+      const saved = Array.isArray(savedEntries) ? savedEntries : [];
       const canRestoreLocally = saved.length > 0 &&
         saved.length === ids.length &&
         saved.every(entry => entry.note && ids.includes(entry.note.id));
@@ -2268,13 +2232,47 @@ export const NotesProvider = ({ children }) => {
       } else {
         loadNotes(true);
       }
-      lastTrashedNotesRef.current = [];
     } catch (err) {
       console.error('Failed to undo trash:', err);
       setError('Failed to undo trash');
       manualRefreshInProgressRef.current = false;
     }
-  }, [lastTrashedNoteIds, loadNotes, handleSearch, refreshSearchCount]);
+  }, [loadNotes, handleSearch, refreshSearchCount]);
+
+  // --- Toast notify helpers ---
+  // Single source of truth for note-operation toast messages + Undo wiring, used
+  // by both the single-note actions above and the bulk path (NoteSelectionContext).
+  const notifyArchived = useCallback((ids, entries) => {
+    const savedEntries = Array.isArray(entries) ? entries : [];
+    showToast(ids.length === 1 ? 'Note archived' : `${ids.length} notes archived`, {
+      onUndo: () => handleUndoArchive(ids, savedEntries),
+      duration: 'long',
+    });
+  }, [showToast, handleUndoArchive]);
+
+  const notifyUnarchived = useCallback((count) => {
+    showToast(count === 1 ? 'Note unarchived' : `${count} notes unarchived`);
+  }, [showToast]);
+
+  const notifyTrashed = useCallback((ids, entries) => {
+    const savedEntries = Array.isArray(entries) ? entries : [];
+    showToast(ids.length === 1 ? 'Note moved to trash' : `${ids.length} notes moved to trash`, {
+      onUndo: () => handleUndoTrash(ids, savedEntries),
+      duration: 'long',
+    });
+  }, [showToast, handleUndoTrash]);
+
+  const notifyRestored = useCallback((count) => {
+    showToast(count === 1 ? 'Note restored' : `${count} notes restored`);
+  }, [showToast]);
+
+  const notifyDeleted = useCallback((count) => {
+    showToast(count === 1 ? 'Note deleted permanently' : `${count} notes deleted permanently`);
+  }, [showToast]);
+
+  const notifyHidden = useCallback((count) => {
+    showToast(count === 1 ? 'Note hidden from view' : `${count} notes hidden from view`);
+  }, [showToast]);
 
   const deleteNote = useCallback(async (id, suppressToast = false) => {
     // First, get the note to check if it's archived
@@ -2330,8 +2328,7 @@ export const NotesProvider = ({ children }) => {
       
       // Show success toast (unless suppressed)
       if (!suppressToast) {
-        setOperationCount(1);
-        setShowDeleteSuccess(true);
+        notifyDeleted(1);
       }
       
       // Keep the socket block active for a little longer after operation completes
@@ -2807,22 +2804,14 @@ export const NotesProvider = ({ children }) => {
     view,
     noteTags,
 
-    // Toast setters (stable refs; toast *values* are read by the provider's own
-    // SuccessToast JSX, not by consumers — keeping them out of the value avoids
-    // re-rendering every useNotes() consumer on each toast toggle).
-    setShowAutoTagSuccess,
-    setAutoTaggedTagName,
-    setShowArchiveSuccess,
-    setShowUnarchiveSuccess,
-    setShowTrashSuccess,
-    setShowRestoreSuccess,
-    setShowDeleteSuccess,
-    setShowHiddenSuccess,
-    setOperationCount,
-    setLastArchivedNoteIds,
-    setLastTrashedNoteIds,
-    captureTrashedNotesForUndo,
-    captureArchivedNotesForUndo,
+    // Toast notify helpers (stable refs). Bulk actions in NoteSelectionContext
+    // call these to show operation toasts + wire Undo through one code path.
+    notifyArchived,
+    notifyUnarchived,
+    notifyTrashed,
+    notifyRestored,
+    notifyDeleted,
+    notifyHidden,
 
     // Pagination & Loading
     hasMore,
@@ -2930,7 +2919,8 @@ export const NotesProvider = ({ children }) => {
     getSortForView, getAvailableSortsForView, SORT_LABELS,
     openedNote,
     layoutView, showQuickAccess, showMonthMarkers, showNoteTabs, hiddenTagIds,
-    // Toast values intentionally excluded — only the provider's own JSX reads them.
+    // notify* helpers are stable but listed for completeness.
+    notifyArchived, notifyUnarchived, notifyTrashed, notifyRestored, notifyDeleted, notifyHidden,
     // Include all functions
     loadNotes, handleSearch, loadMoreSearchResults, searchByTag, searchByColor, searchByBook, searchById, getReferenceCount, refreshSearchCount, saveSearch, removeSavedSearch,
     changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, duplicateNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
@@ -2945,55 +2935,13 @@ export const NotesProvider = ({ children }) => {
   const loadingValue = useMemo(() => ({ listLoading }), [listLoading]);
 
   // --- Render Provider ---
+  // Toasts are rendered globally by ToastProvider; this provider just fires them
+  // via the notify* helpers (and showToast for one-off messages).
   return (
-    <>
-      <SuccessToast
-        message={`Tag #${autoTaggedTagName} added to note`}
-        isVisible={showAutoTagSuccess}
-        onHide={() => setShowAutoTagSuccess(false)}
-      />
-      <SuccessToast
-        message="Copy created"
-        isVisible={showCopyNoteSuccess}
-        onHide={() => setShowCopyNoteSuccess(false)}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note archived" : `${operationCount} notes archived`}
-        isVisible={showArchiveSuccess}
-        onHide={() => setShowArchiveSuccess(false)}
-        onUndo={handleUndoArchive}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note unarchived" : `${operationCount} notes unarchived`}
-        isVisible={showUnarchiveSuccess}
-        onHide={() => setShowUnarchiveSuccess(false)}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note moved to trash" : `${operationCount} notes moved to trash`}
-        isVisible={showTrashSuccess}
-        onHide={() => setShowTrashSuccess(false)}
-        onUndo={handleUndoTrash}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note restored" : `${operationCount} notes restored`}
-        isVisible={showRestoreSuccess}
-        onHide={() => setShowRestoreSuccess(false)}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note deleted permanently" : `${operationCount} notes deleted permanently`}
-        isVisible={showDeleteSuccess}
-        onHide={() => setShowDeleteSuccess(false)}
-      />
-      <SuccessToast
-        message={operationCount === 1 ? "Note hidden from view" : `${operationCount} notes hidden from view`}
-        isVisible={showHiddenSuccess}
-        onHide={() => setShowHiddenSuccess(false)}
-      />
-      <NotesContext.Provider value={contextValue}>
-        <NotesLoadingContext.Provider value={loadingValue}>
-          {children}
-        </NotesLoadingContext.Provider>
-      </NotesContext.Provider>
-    </>
+    <NotesContext.Provider value={contextValue}>
+      <NotesLoadingContext.Provider value={loadingValue}>
+        {children}
+      </NotesLoadingContext.Provider>
+    </NotesContext.Provider>
   );
 };
