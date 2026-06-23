@@ -59,6 +59,16 @@ async function findOrCreateTag(trx, labelName) {
   return winner ? winner.id : null;
 }
 
+// Keep timestamps are microseconds since the epoch. Guard against missing or
+// non-numeric values: `new Date(NaN).toISOString()` throws, which would
+// otherwise fail the whole note over one absent field. Falls back to the
+// provided ISO string, or to "now".
+function usecToIso(usec, fallbackIso) {
+  const ms = Number(usec) / 1000;
+  if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  return fallbackIso || new Date().toISOString();
+}
+
 // Process a single Google Keep note file in its own transaction.
 async function processNoteFile(filePath) {
   try {
@@ -70,17 +80,32 @@ async function processNoteFile(filePath) {
     // `listContent` checklist; keepNoteToContent handles both and returns the
     // HTML the app stores in `content` plus the raw text used for search.
     const { html, plainText } = keepNoteToContent(note);
+
+    // Convert timestamps from microseconds to ISO; if a note's edited time is
+    // missing, fall back to its created time, then to "now".
+    const createdAt = usecToIso(note.createdTimestampUsec);
+    const updatedAt = usecToIso(note.userEditedTimestampUsec, createdAt);
+
+    const isPinned = note.isPinned || false;
+    const isArchived = note.isArchived || false;
+    const isDeleted = note.isTrashed || false;
+
     const mappedNote = {
       title: note.title || '',
       content: html,
       plain_content: plainText,
-      is_pinned: note.isPinned || false,
-      is_archived: note.isArchived || false,
-      is_deleted: note.isTrashed || false,
+      is_pinned: isPinned,
+      is_archived: isArchived,
+      is_deleted: isDeleted,
       color: COLOR_MAP[note.color] || 'default',
-      // Convert timestamp from microseconds to ISO format for PostgreSQL
-      created_at: new Date(note.createdTimestampUsec / 1000).toISOString(),
-      updated_at: new Date(note.userEditedTimestampUsec / 1000).toISOString(),
+      created_at: createdAt,
+      updated_at: updatedAt,
+      // Stamp the state-timestamp columns the app uses for trash/archive
+      // ordering and trash auto-purge; left NULL when the state isn't active,
+      // matching how the app stamps them on pin/archive/trash.
+      pinned_at: isPinned ? updatedAt : null,
+      archived_at: isArchived ? updatedAt : null,
+      trashed_at: isDeleted ? updatedAt : null,
       labels: note.labels || []
     };
 
@@ -97,7 +122,10 @@ async function processNoteFile(filePath) {
           is_deleted: mappedNote.is_deleted,
           color: mappedNote.color,
           created_at: mappedNote.created_at,
-          updated_at: mappedNote.updated_at
+          updated_at: mappedNote.updated_at,
+          pinned_at: mappedNote.pinned_at,
+          archived_at: mappedNote.archived_at,
+          trashed_at: mappedNote.trashed_at
         })
         .returning('id');
 
@@ -230,5 +258,6 @@ if (require.main === module) {
 
 // Export functions for use in the API
 module.exports = {
-  processGoogleKeepImport
+  processGoogleKeepImport,
+  usecToIso
 };
