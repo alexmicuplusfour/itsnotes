@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useState,
   useCallback,
   useMemo,
@@ -2690,14 +2691,23 @@ export const NotesProvider = ({ children }) => {
     loadNotes(true);
   }, [view, mainViewSortOption]); // Use mainViewSortOption instead of currentSortOption
 
-  // --- Scroll To Top On View Change ---
-  // When the view changes (main/archive/trash), reset scroll to the top. The state reset
-  // and reload are handled by the Initial Load Effect above; search exit is handled by the
-  // NavigationContext search watcher reacting to the URL losing its ?q param.
-  const prevViewForScrollRef = useRef(view);
-  useEffect(() => {
-    if (prevViewForScrollRef.current !== view) {
-      prevViewForScrollRef.current = view;
+  // --- Reset List On View Change (pre-paint) ---
+  // The instant the view changes (main/archive/trash), clear the previous view's notes
+  // and scroll to top — synchronously, BEFORE the browser paints. `view` is derived from
+  // the URL, so without this the old list would render for one frame under the new view's
+  // chrome and grouping (e.g. pinned notes flattening into the list) before the Initial
+  // Load Effect clears it post-paint. useLayoutEffect runs before paint, so that stale
+  // frame never reaches the screen. The actual reload is still handled by the Initial Load
+  // Effect above; search exit is handled by the NavigationContext search watcher.
+  const prevViewForResetRef = useRef(view);
+  useLayoutEffect(() => {
+    if (prevViewForResetRef.current !== view) {
+      prevViewForResetRef.current = view;
+      setNotes([]);
+      setPage(1);
+      setHasMore(true);
+      setListLoading(true);
+      setError(null);
       window.scrollTo(0, 0);
     }
   }, [view]);
