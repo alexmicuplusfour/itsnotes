@@ -33,12 +33,11 @@ const AdvancedTab = ({ settings, onChange, onCacheSettingChange }) => (
         <Input
           type="number"
           min="1"
-          max="1000"
-          value={settings.CACHE_MAX_SIZE || '200'}
+          value={settings.CACHE_MAX_SIZE || '1000'}
           onChange={(e) => onCacheSettingChange('CACHE_MAX_SIZE', e.target.value)}
         />
         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-          Maximum number of full notes to keep in cache. Default: 200
+          Maximum number of full notes to keep in cache. Default: 1000
         </p>
       </FormGroup>
 
@@ -63,11 +62,11 @@ const AdvancedTab = ({ settings, onChange, onCacheSettingChange }) => (
           min="0"
           max="5000"
           step="50"
-          value={settings.BATCH_DELAY_MS || '500'}
+          value={settings.BATCH_DELAY_MS || '300'}
           onChange={(e) => onCacheSettingChange('BATCH_DELAY_MS', e.target.value)}
         />
         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-          How long a note card must stay visible before its prefetch fires. Higher values skip cards you scroll past quickly. Default: 500ms
+          How long a note card must stay visible before its prefetch fires. Higher values skip cards you scroll past quickly. Default: 300ms
         </p>
       </FormGroup>
 
@@ -78,14 +77,14 @@ const AdvancedTab = ({ settings, onChange, onCacheSettingChange }) => (
           min="1"
           max="1440"
           step="1"
-          value={Math.max(1, Math.round((parseInt(settings.CACHE_TTL_MS, 10) || 300000) / 60000))}
+          value={Math.max(1, Math.round((parseInt(settings.CACHE_TTL_MS, 10) || 7200000) / 60000))}
           onChange={(e) => {
             const minutes = Math.max(1, parseInt(e.target.value, 10) || 0);
             onCacheSettingChange('CACHE_TTL_MS', String(minutes * 60000));
           }}
         />
         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-          How long a cached note stays valid before it's re-fetched on open. Default: 5 minutes
+          How long a cached note stays valid before it's re-fetched on open. Default: 120 minutes
         </p>
       </FormGroup>
 
@@ -96,11 +95,11 @@ const AdvancedTab = ({ settings, onChange, onCacheSettingChange }) => (
           min="10"
           max="500"
           step="10"
-          value={settings.PAGE_SIZE || '80'}
+          value={settings.PAGE_SIZE || '64'}
           onChange={(e) => onCacheSettingChange('PAGE_SIZE', e.target.value)}
         />
         <p style={{ marginTop: '4px', fontSize: '13px', color: 'var(--text-secondary-color)' }}>
-          How many notes are loaded per page (initial load and each infinite-scroll page). Smaller = faster initial load, more frequent scroll fetches. Default: 80
+          How many notes are loaded per page (initial load and each infinite-scroll page). Smaller = faster initial load, more frequent scroll fetches. Default: 64
         </p>
       </FormGroup>
     </SectionContainer>

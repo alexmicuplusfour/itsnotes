@@ -87,11 +87,11 @@ const useStableArrayResult = (factory, deps, areEqual = notesArrayEqual) => {
 
 // --- Constants ---
 // Default Cache and Prefetch Configuration (fallback values)
-const DEFAULT_CACHE_MAX_SIZE = 200;
+const DEFAULT_CACHE_MAX_SIZE = 1000;
 const DEFAULT_PREFETCH_BATCH_SIZE = 10;
-const DEFAULT_BATCH_DELAY_MS = 500;
-const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_PAGE_SIZE = 80;
+const DEFAULT_BATCH_DELAY_MS = 300;
+const DEFAULT_CACHE_TTL_MS = 120 * 60 * 1000;
+const DEFAULT_PAGE_SIZE = 64;
 
 // Re-inserts previously removed notes back into a list at their captured indices.
 // Used by undo so the loaded/scrolled list is restored in place rather than refetched.
