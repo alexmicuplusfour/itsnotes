@@ -140,6 +140,12 @@ export const notesApi = {
     return response.data;
   },
 
+  // Duplicate a note (server-side deep copy)
+  duplicateNote: async (id) => {
+    const response = await api.post(`/notes/${id}/duplicate`);
+    return response.data;
+  },
+
   // Update a note
   updateNote: async (id, note) => {
     const response = await api.put(`/notes/${id}`, note);

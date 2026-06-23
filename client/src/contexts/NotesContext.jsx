@@ -226,6 +226,7 @@ export const NotesProvider = ({ children }) => {
   // Toast State
   const [showAutoTagSuccess, setShowAutoTagSuccess] = useState(false); // Show success toast for auto-tag
   const [autoTaggedTagName, setAutoTaggedTagName] = useState(''); // Store the tag name for the toast message
+  const [showCopyNoteSuccess, setShowCopyNoteSuccess] = useState(false); // Show success toast for "Make a copy"
   
   // --- NEW: Success toast state for archive/delete operations ---
   const [showArchiveSuccess, setShowArchiveSuccess] = useState(false);
@@ -1909,6 +1910,21 @@ export const NotesProvider = ({ children }) => {
     }
   }, [view, searchMode, searchQuery, allTagsFromContext, refreshSearchCount, getFeatureSettings]);
 
+  // Duplicate a note. The server emits 'note_created', which the socket handler
+  // inserts into the grid — same path as a normal create — so no optimistic
+  // insert is needed here.
+  const duplicateNote = useCallback(async (noteId) => {
+    try {
+      const response = await notesApi.duplicateNote(noteId);
+      setShowCopyNoteSuccess(true);
+      return response.note;
+    } catch (err) {
+      console.error('Failed to duplicate note:', err);
+      setError('Failed to duplicate note');
+      return null;
+    }
+  }, []);
+
   const updateNote = useCallback(async (id, noteData) => {
     console.log(`Updating note ${id}`, noteData);
     setSavingNotes(prev => ({ ...prev, [id]: true }));
@@ -2844,6 +2860,7 @@ export const NotesProvider = ({ children }) => {
 
     // Note Actions
     createNote,
+    duplicateNote,
     updateNote,
     togglePin,
     archiveNote,
@@ -2916,7 +2933,7 @@ export const NotesProvider = ({ children }) => {
     // Toast values intentionally excluded — only the provider's own JSX reads them.
     // Include all functions
     loadNotes, handleSearch, loadMoreSearchResults, searchByTag, searchByColor, searchByBook, searchById, getReferenceCount, refreshSearchCount, saveSearch, removeSavedSearch,
-    changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
+    changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, duplicateNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
     getNoteTags, addTagToNote, removeTagFromNote, updateNotesFromServer, openNoteById, closeNoteWithoutUrlUpdate,
     toggleLayoutView, enhancedChangeLayoutView, toggleQuickAccess, toggleMonthMarkers, toggleNoteTabs, setSearchBarActive, setError, _updateOrRemoveNoteInState,
     reloadSettings,
@@ -2934,6 +2951,11 @@ export const NotesProvider = ({ children }) => {
         message={`Tag #${autoTaggedTagName} added to note`}
         isVisible={showAutoTagSuccess}
         onHide={() => setShowAutoTagSuccess(false)}
+      />
+      <SuccessToast
+        message="Copy created"
+        isVisible={showCopyNoteSuccess}
+        onHide={() => setShowCopyNoteSuccess(false)}
       />
       <SuccessToast
         message={operationCount === 1 ? "Note archived" : `${operationCount} notes archived`}

@@ -1390,6 +1390,74 @@ class Note {
     const result = await db('notes').insert(noteToInsert).returning('*');
     return result[0];
   }
+
+  // Deep-copy a note: new row + duplicated image rows (with rewritten
+  // data-image-id refs) + copied tag links, all in one transaction. The copy
+  // lands as a normal note (never pinned/archived/trashed) with empty version
+  // history. Object-card links are re-synced by the route from the copied HTML,
+  // same as a fresh create. Returns the new note, or null if source is missing.
+  static async duplicate(sourceId) {
+    return db.transaction(async (trx) => {
+      const source = await trx('notes').where('id', sourceId).first();
+      if (!source) return null;
+
+      const baseTitle = source.title && source.title.trim() ? source.title : 'Untitled';
+      const now = new Date();
+
+      const [copy] = await trx('notes').insert({
+        title: `Copy of ${baseTitle}`,
+        content: source.content || '',
+        plain_content: source.plain_content || '',
+        color: source.color || 'default',
+        is_pinned: false,
+        is_archived: false,
+        is_deleted: false,
+        created_at: now,
+        updated_at: now,
+        version: 1
+      }).returning('*');
+
+      // Duplicate inline images, mapping old row id -> new row id.
+      const images = await trx('note_images').where('note_id', sourceId);
+      const idMap = {};
+      for (const img of images) {
+        const [newImg] = await trx('note_images').insert({
+          note_id: copy.id,
+          data: img.data,
+          thumbnail: img.thumbnail,
+          name: img.name,
+          type: img.type,
+          size: img.size,
+          created_at: now
+        }).returning('id');
+        idMap[img.id] = newImg.id;
+      }
+
+      // Rewrite data-image-id references in the copied HTML to the new rows,
+      // so the copy never points at the source's images.
+      if (Object.keys(idMap).length > 0 && copy.content) {
+        const newContent = copy.content.replace(
+          /data-image-id="([^"]+)"/g,
+          (match, oldId) => (idMap[oldId] != null ? `data-image-id="${idMap[oldId]}"` : match)
+        );
+        if (newContent !== copy.content) {
+          await trx('notes').where('id', copy.id).update({ content: newContent });
+          copy.content = newContent;
+        }
+      }
+
+      // Copy tag links.
+      const tagLinks = await trx('note_tags').where('note_id', sourceId);
+      if (tagLinks.length > 0) {
+        await trx('note_tags').insert(
+          tagLinks.map(t => ({ note_id: copy.id, tag_id: t.tag_id }))
+        );
+      }
+
+      return copy;
+    });
+  }
+
   static async update(id, noteData) {
     const updateData = { ...noteData };
 

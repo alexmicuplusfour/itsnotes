@@ -258,6 +258,56 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Duplicate a note (server-side deep copy: row + images + tags + object links)
+router.post('/:id/duplicate', blockInDemo, async (req, res) => {
+  try {
+    const copy = await Note.duplicate(req.params.id);
+    if (!copy) {
+      return res.status(404).json({ message: 'Note not found' });
+    }
+
+    // Relink object cards from the copied HTML, same as the create path.
+    if (copy.content) {
+      try {
+        const UserObject = require('../models/UserObject');
+        const { JSDOM } = require('jsdom');
+
+        const dom = new JSDOM(copy.content);
+        const objectCards = dom.window.document.querySelectorAll('div[data-type="object-card"]');
+
+        const objectIds = [];
+        objectCards.forEach(card => {
+          const objectId = card.getAttribute('objectid');
+          if (objectId && !objectIds.includes(objectId)) {
+            objectIds.push(objectId);
+          }
+        });
+
+        if (objectIds.length > 0) {
+          await UserObject.syncNoteLinks(copy.id, objectIds);
+          console.log(`[Object Links] Synced ${objectIds.length} object links for copy ${copy.id}`);
+        }
+      } catch (error) {
+        console.error(`[Object Links] Error syncing object links for copy ${copy.id}:`, error);
+        // Don't fail the duplication if object syncing fails
+      }
+    }
+
+    // Enrich with tags/images/objects so the card renders fully on arrival
+    // (the socket payload is otherwise just the raw note row).
+    await Note.addTagsAndImages([copy]);
+    await Note.addObjects([copy]);
+
+    console.log('[SERVER] Broadcasting duplicated note created:', copy.id);
+    req.app.get('io').emit('note_created', copy);
+
+    res.status(201).json({ note: copy });
+  } catch (error) {
+    console.error('Error duplicating note:', error);
+    res.status(500).json({ message: 'Error duplicating note', error: error.message });
+  }
+});
+
 // Update a note
 router.put('/:id', async (req, res) => {
   const noteId = req.params.id;

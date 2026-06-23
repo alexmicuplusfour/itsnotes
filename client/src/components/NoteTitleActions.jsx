@@ -270,6 +270,7 @@ const NoteTitleActions = ({
     unarchiveNote,
     searchById,
     getReferenceCount,
+    duplicateNote,
   } = useNotes();
   const { isStarred, toggleStar } = useStarredNotes(); // Get starred notes functions    
 
@@ -504,6 +505,18 @@ const NoteTitleActions = ({
       searchById(note.id);
     });
   }, [note?.id, searchById, onCloseAndExecute]);
+
+  const handleMakeCopy = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!note?.id) return;
+    setShowMoreDropdown(false);
+    // The "Copy created" toast is fired from NotesContext.duplicateNote, since
+    // this component unmounts when onCloseAndExecute closes the form.
+    onCloseAndExecute(() => {
+      duplicateNote(note.id);
+    });
+  }, [note?.id, duplicateNote, onCloseAndExecute]);
 
   // --- Updated handleTrash ---
   const handleTrash = useCallback((e) => {
@@ -772,7 +785,16 @@ const NoteTitleActions = ({
                   <Icon name="history" size={18} />
                   Version History
                 </DropdownItem>
-                
+
+                {!isNoteDeleted && (<DropdownItem
+                  type="button"
+                  theme={isDarkTheme ? 'dark' : 'light'}
+                  onClick={handleMakeCopy}
+                >
+                  <Icon name="copy" size={18} />
+                  Make a copy
+                </DropdownItem>)}
+
                 {/* {referencedNotesCount > 0 && (
                   <DropdownItem
                     type="button"
@@ -861,7 +883,18 @@ const NoteTitleActions = ({
                 <Icon name="history" size={18} />
                 Version History
               </DropdownItem>
-              
+
+              {!isNoteDeleted && (
+                <DropdownItem
+                  type="button"
+                  theme={isDarkTheme ? 'dark' : 'light'}
+                  onClick={handleMakeCopy}
+                >
+                  <Icon name="copy" size={18} />
+                  Make a copy
+                </DropdownItem>
+              )}
+
               {/* {referencedNotesCount > 0 && (
                 <DropdownItem
                   type="button"
