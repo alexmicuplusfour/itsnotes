@@ -181,6 +181,24 @@ router.post('/mcp-token', authenticateToken, async (req, res) => {
   }
 });
 
+// Mint a long-lived token for the browser extension ("itsnotes clipper").
+// Same mechanism as the MCP token above — a separate endpoint only so the UI
+// can label it distinctly. Like the MCP token, it can't be revoked individually
+// without rotating JWT_SECRET (which invalidates all tokens). Treat like a password.
+router.post('/extension-token', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByUsername(req.user.username);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const token = generateToken(user, '3650d'); // ~10 years
+    res.json({ token });
+  } catch (error) {
+    console.error('Error minting extension token:', error);
+    res.status(500).json({ message: 'Failed to mint extension token' });
+  }
+});
+
 // Get current user info
 router.get('/me', authenticateToken, async (req, res) => {
   try {

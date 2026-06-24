@@ -7,8 +7,11 @@ const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
 const ogs = require('open-graph-scraper');
 const UserObject = require('../models/UserObject');
+const Note = require('../models/Note');
+const Tag = require('../models/Tag');
 const { extractExternalId } = require('../utils/extractExternalId');
 const { extractImageUrls, processAndUploadImages } = require('../utils/imageProcessing');
+const { buildClippedNoteHtml, applyRehostedImages } = require('../utils/clipHtml');
 require('dotenv').config();
 
 // playwright-extra is patched with the puppeteer stealth plugin (it accepts both).
@@ -286,6 +289,186 @@ async function extractViaArchiveToday(url) {
     }
 }
 
+// Run the full extraction tier chain for a URL and return { title, content }.
+//
+// When `html` is supplied (e.g. captured by the browser extension from a page
+// the user is already viewing), it's tried FIRST via Readability — this clears
+// logins/paywalls the server itself can't reach. If that capture is blocked or
+// too thin, or no html was given, we fall through to the server-side tiers:
+//   Playwright → axios → archive.org → Jina → archive.today
+// Throws an Error if every tier fails (message may contain 'paywall'/'challenge'
+// so callers can surface a friendlier message).
+async function extractArticle({ url, html } = {}) {
+    let extractedContent = null;
+    let extractedTitle = null;
+    let finalError = null;
+
+    // --- Tier 0: caller-supplied rendered HTML (browser extension capture) ---
+    if (html) {
+        try {
+            const article = parseHtmlToArticle(html, url);
+            const blocker = detectBlocker(article.title, article.content);
+            if (blocker) {
+                console.warn(`Captured HTML for ${url} looks like a ${blocker} — falling through to server fetch.`);
+                finalError = new Error(`${blocker} detected (captured HTML).`);
+            } else if (article.content) {
+                extractedContent = article.content;
+                extractedTitle = article.title;
+                console.log(`Extraction successful via captured HTML for ${url}.`);
+            }
+        } catch (e) {
+            console.error(`Captured-HTML extraction failed for ${url}:`, e.message);
+            finalError = e;
+        }
+    }
+
+    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+    // --- Tier 1: Playwright (rendered headless Chromium) ---
+    if (extractedContent === null && chromiumPath) {
+        console.log(`Using Chromium path for Playwright: ${chromiumPath}`);
+        let browser = null;
+        try {
+            console.log(`Attempting extraction via Playwright for ${url}...`);
+            browser = await chromium.launch({
+                headless: true,
+                executablePath: chromiumPath,
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+            });
+            const page = await browser.newPage({
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            });
+            console.log(`Navigating (Playwright) to ${url}...`);
+            await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+            let article = parseHtmlToArticle(await page.content(), url);
+
+            // Vercel/Cloudflare JS checkpoints often clear themselves a few
+            // seconds after the initial load. If the first grab looks like a
+            // challenge, wait and re-read once before giving up on this tier.
+            if (detectBlocker(article.title, article.content) === 'challenge') {
+                console.warn(`Playwright got a challenge for ${url}; waiting for it to clear...`);
+                try {
+                    await page.waitForTimeout(6000);
+                    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+                    article = parseHtmlToArticle(await page.content(), url);
+                } catch (retryErr) {
+                    console.warn(`Playwright challenge re-read failed for ${url}: ${retryErr.message}`);
+                }
+            }
+            await page.close();
+
+            const blockerPw = detectBlocker(article.title, article.content);
+            if (blockerPw) {
+                console.warn(`Playwright result for ${url} looks like a ${blockerPw} — discarding and falling through.`);
+                finalError = new Error(`${blockerPw} detected (Playwright tier).`);
+            } else {
+                extractedContent = article.content;
+                extractedTitle = article.title;
+                console.log(`Extraction successful via Playwright for ${url}.`);
+            }
+        } catch (playwrightError) {
+            console.error(`Playwright extraction failed for ${url}:`, playwrightError.message);
+            finalError = playwrightError;
+        } finally {
+            if (browser) {
+                try { await browser.close(); } catch (e) { console.error('Error closing Playwright browser:', e); }
+            }
+        }
+    } else if (extractedContent === null && !chromiumPath) {
+        console.warn('PUPPETEER_EXECUTABLE_PATH not set. Skipping Playwright attempt...');
+    }
+
+    // --- Tier 2: Axios fallback ---
+    if (extractedContent === null) {
+        console.log(`Attempting Axios fallback extraction for ${url}...`);
+        try {
+            const response = await axios.get(url, {
+                headers: BROWSER_HEADERS,
+                timeout: 15000,
+                maxRedirects: 5,
+            });
+            const article = parseHtmlToArticle(response.data, url);
+            const blockerAx = detectBlocker(article.title, article.content);
+            if (blockerAx) {
+                console.warn(`Axios result for ${url} looks like a ${blockerAx} — discarding and falling through.`);
+                finalError = new Error(`${blockerAx} detected (Axios tier).`);
+            } else {
+                extractedContent = article.content;
+                extractedTitle = article.title;
+                finalError = null;
+                console.log(`Extraction successful via Axios fallback for ${url}.`);
+            }
+        } catch (axiosError) {
+            console.error(`Axios fallback extraction also failed for ${url}:`, axiosError.message);
+            if (!finalError) finalError = axiosError;
+        }
+    }
+
+    // --- Tier 3: Wayback Machine snapshot ---
+    if (extractedContent === null) {
+        console.log(`Attempting archive.org fallback for ${url}...`);
+        try {
+            const arch = await extractViaArchive(url);
+            const blockerArch = detectBlocker(arch.title, arch.content);
+            if (blockerArch) {
+                throw new Error(`archive.org snapshot looks like a ${blockerArch}.`);
+            }
+            extractedContent = arch.content;
+            extractedTitle = arch.title;
+            finalError = null;
+            console.log(`Extraction successful via archive.org for ${url}.`);
+        } catch (archiveError) {
+            console.error(`archive.org fallback failed for ${url}:`, archiveError.message);
+            if (!finalError) finalError = archiveError;
+        }
+    }
+
+    // --- Tier 4: Jina Reader (server-side renderer) ---
+    if (extractedContent === null) {
+        console.log(`Attempting Jina Reader fallback for ${url}...`);
+        try {
+            const jina = await extractViaJina(url);
+            const blockerJina = detectBlocker(jina.title, jina.content);
+            if (blockerJina) {
+                const textLen = String(jina.content || '').replace(/<[^>]+>/g, '').trim().length;
+                console.warn(`[Jina blocker] kind=${blockerJina} title="${jina.title}" textLen=${textLen} preview="${String(jina.content || '').replace(/<[^>]+>/g, '').trim().slice(0, 300)}"`);
+                throw new Error(`Jina Reader also returned a ${blockerJina} page.`);
+            }
+            extractedContent = jina.content;
+            extractedTitle = jina.title;
+            finalError = null;
+            console.log(`Extraction successful via Jina Reader for ${url}.`);
+        } catch (jinaError) {
+            console.error(`Jina Reader fallback failed for ${url}:`, jinaError.message);
+            if (!finalError) finalError = jinaError;
+        }
+    }
+
+    // --- Tier 5: archive.today snapshot (last resort) ---
+    if (extractedContent === null) {
+        console.log(`Attempting archive.today fallback for ${url}...`);
+        try {
+            const at = await extractViaArchiveToday(url);
+            const blockerAt = detectBlocker(at.title, at.content);
+            if (blockerAt) {
+                throw new Error(`archive.today snapshot looks like a ${blockerAt}.`);
+            }
+            extractedContent = at.content;
+            extractedTitle = at.title;
+            finalError = null;
+            console.log(`Extraction successful via archive.today for ${url}.`);
+        } catch (archiveTodayError) {
+            console.error(`archive.today fallback failed for ${url}:`, archiveTodayError.message);
+            if (!finalError) finalError = archiveTodayError;
+        }
+    }
+
+    if (extractedContent !== null) {
+        return { title: extractedTitle || '', content: extractedContent };
+    }
+    throw finalError || new Error('Unknown extraction failure.');
+}
+
 // Report the remaining token balance for the configured Jina key. Backs the
 // "Refresh tokens" button in Settings → Integrations. Hits the same dashboard
 // backend the Jina API Key & Billing page uses (undocumented but stable):
@@ -362,179 +545,17 @@ router.post('/extract-url', async (req, res) => {
 
     let extractedContent = null;
     let extractedTitle = null;
-    let browser = null; // Playwright browser instance
     let finalError = null;
 
-    // --- Get executable path from environment variable ---
-    const chromiumPath = process.env.PUPPETEER_EXECUTABLE_PATH; // Using same env var name
-
-    // --- Attempt 1: Playwright Method (only if path is configured) ---
-    if (chromiumPath) {
-        console.log(`Using Chromium path for Playwright: ${chromiumPath}`);
-        try {
-            console.log(`Attempting extraction via Playwright for ${url}...`);
-            browser = await chromium.launch({
-                headless: true,
-                executablePath: chromiumPath,
-                args: [ '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage' ]
-            });
-
-            // *** FIX IS HERE: Set userAgent during page creation ***
-            const page = await browser.newPage({
-                 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36' // Your UA String
-            });
-            // *******************************************************
-
-            console.log(`Navigating (Playwright) to ${url}...`);
-            await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-            console.log(`Getting rendered content (Playwright) for ${url}...`);
-            let article = parseHtmlToArticle(await page.content(), url);
-
-            // Vercel/Cloudflare JS checkpoints often clear themselves a few
-            // seconds after the initial load (the page runs a proof-of-work
-            // then swaps in the real content). If the first grab looks like a
-            // challenge, wait and re-read once before giving up on this tier.
-            if (detectBlocker(article.title, article.content) === 'challenge') {
-                console.warn(`Playwright got a challenge for ${url}; waiting for it to clear...`);
-                try {
-                    await page.waitForTimeout(6000);
-                    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-                    article = parseHtmlToArticle(await page.content(), url);
-                } catch (retryErr) {
-                    console.warn(`Playwright challenge re-read failed for ${url}: ${retryErr.message}`);
-                }
-            }
-
-            await page.close();
-            console.log(`Page closed for ${url}.`);
-
-            extractedContent = article.content;
-            extractedTitle = article.title;
-
-            // Reject anti-bot interstitials and paywalls so we proceed to the
-            // next tier instead of writing junk into the note.
-            const blockerPw = detectBlocker(extractedTitle, extractedContent);
-            if (blockerPw) {
-                console.warn(`Playwright result for ${url} looks like a ${blockerPw} — discarding and falling through.`);
-                extractedContent = null;
-                extractedTitle = null;
-                finalError = new Error(`${blockerPw} detected (Playwright tier).`);
-            } else {
-                console.log(`Extraction successful via Playwright for ${url}.`);
-            }
-            // --- End JSDOM part ---
-
-        } catch (playwrightError) {
-            console.error(`Playwright extraction failed for ${url} (even with path set):`, playwrightError.message);
-            finalError = playwrightError;
-            if (browser) { try { await browser.close(); browser = null; } catch (e) { console.error("Error closing browser post-Playwright error:", e); } }
-        } finally {
-            if (browser) {
-                try {
-                    console.log(`Closing Playwright browser instance for ${url}...`);
-                    await browser.close();
-                    browser = null;
-                    console.log(`Playwright browser closed for ${url}.`);
-                } catch (e) { console.error("Error closing Playwright browser in finally:", e); }
-            }
-        }
-    } else {
-        console.warn("PUPPETEER_EXECUTABLE_PATH not set. Skipping Playwright attempt...");
-    }
-
-    // --- Attempt 2: Axios Fallback Method (remains the same) ---
-    if (extractedContent === null) {
-        console.log(`Attempting Axios fallback extraction for ${url}...`);
-        try {
-            const response = await axios.get(url, {
-                headers: BROWSER_HEADERS,
-                timeout: 15000,
-                maxRedirects: 5,
-            });
-            const article = parseHtmlToArticle(response.data, url);
-            extractedContent = article.content;
-            extractedTitle = article.title;
-            finalError = null;
-            console.log(`Extraction successful via Axios fallback for ${url}.`);
-
-            const blockerAx = detectBlocker(extractedTitle, extractedContent);
-            if (blockerAx) {
-                console.warn(`Axios result for ${url} looks like a ${blockerAx} — discarding and falling through.`);
-                extractedContent = null;
-                extractedTitle = null;
-                finalError = new Error(`${blockerAx} detected (Axios tier).`);
-            }
-        } catch (axiosError) {
-            console.error(`Axios fallback extraction also failed for ${url}:`, axiosError.message);
-            if (!finalError) finalError = axiosError;
-        }
-    }
-
-    // --- Attempt 3: Wayback Machine snapshot ---
-    // Cheaper than Jina and often works for popular sites. Tracking params
-    // are stripped before lookup since the availability API matches the
-    // full URL string.
-    if (extractedContent === null) {
-        console.log(`Attempting archive.org fallback for ${url}...`);
-        try {
-            const arch = await extractViaArchive(url);
-            const blockerArch = detectBlocker(arch.title, arch.content);
-            if (blockerArch) {
-                throw new Error(`archive.org snapshot looks like a ${blockerArch}.`);
-            }
-            extractedContent = arch.content;
-            extractedTitle = arch.title;
-            finalError = null;
-            console.log(`Extraction successful via archive.org for ${url}.`);
-        } catch (archiveError) {
-            console.error(`archive.org fallback failed for ${url}:`, archiveError.message);
-            if (!finalError) finalError = archiveError;
-        }
-    }
-
-    // --- Attempt 4: Jina Reader (server-side renderer) ---
-    // Reaches here only if every earlier tier failed. Jina renders the page
-    // from its own infra, so challenges aimed at our droplet's IP don't apply.
-    if (extractedContent === null) {
-        console.log(`Attempting Jina Reader fallback for ${url}...`);
-        try {
-            const jina = await extractViaJina(url);
-            const blockerJina = detectBlocker(jina.title, jina.content);
-            if (blockerJina) {
-                const textLen = String(jina.content || '').replace(/<[^>]+>/g, '').trim().length;
-                console.warn(`[Jina blocker] kind=${blockerJina} title="${jina.title}" textLen=${textLen} preview="${String(jina.content || '').replace(/<[^>]+>/g, '').trim().slice(0, 300)}"`);
-                throw new Error(`Jina Reader also returned a ${blockerJina} page.`);
-            }
-            extractedContent = jina.content;
-            extractedTitle = jina.title;
-            finalError = null;
-            console.log(`Extraction successful via Jina Reader for ${url}.`);
-        } catch (jinaError) {
-            console.error(`Jina Reader fallback failed for ${url}:`, jinaError.message);
-            if (!finalError) finalError = jinaError;
-        }
-    }
-
-    // --- Attempt 5: archive.today snapshot (last resort) ---
-    // A different archive from the Wayback Machine, with different (and often
-    // pre-paywall) captures. Rendered through Playwright to clear its own
-    // Cloudflare wall, so it only runs when chromium is configured.
-    if (extractedContent === null) {
-        console.log(`Attempting archive.today fallback for ${url}...`);
-        try {
-            const at = await extractViaArchiveToday(url);
-            const blockerAt = detectBlocker(at.title, at.content);
-            if (blockerAt) {
-                throw new Error(`archive.today snapshot looks like a ${blockerAt}.`);
-            }
-            extractedContent = at.content;
-            extractedTitle = at.title;
-            finalError = null;
-            console.log(`Extraction successful via archive.today for ${url}.`);
-        } catch (archiveTodayError) {
-            console.error(`archive.today fallback failed for ${url}:`, archiveTodayError.message);
-            if (!finalError) finalError = archiveTodayError;
-        }
+    // Run the shared extraction tier chain. `html` is normally absent here
+    // (the in-app paste path only sends a URL); the browser extension's clip
+    // endpoint is what supplies captured HTML.
+    try {
+        const article = await extractArticle({ url, html: req.body.html });
+        extractedContent = article.content;
+        extractedTitle = article.title;
+    } catch (err) {
+        finalError = err;
     }
 
     // --- Final Response with Image Processing ---
@@ -580,6 +601,97 @@ router.post('/extract-url', async (req, res) => {
             errorMessage = "Couldn't extract content from this URL.";
         }
         res.status((paywallHit || challengeHit) ? 502 : 500).json({ message: errorMessage, error: detailedErrorMsg });
+    }
+});
+
+// Clip an article into a note in one shot — backs the "itsnotes clipper" browser
+// extension. Optional `html` is the page already rendered in the user's browser;
+// it's tried first (clears logins/paywalls the server can't reach) before the
+// server-side fetch tiers. Auth is the same JWT as the rest of /api/notes; the
+// extension presents a long-lived token from POST /api/auth/extension-token.
+router.post('/clip', async (req, res) => {
+    const { url, html, title: providedTitle, tags, includeImages = true } = req.body;
+
+    if (!url) { return res.status(400).json({ message: 'URL is required' }); }
+    try { new URL(url); } catch (_) { return res.status(400).json({ message: 'Invalid URL format provided.' }); }
+
+    // --- Extract the article (shared tier chain, html-first when supplied) ---
+    let article;
+    try {
+        article = await extractArticle({ url, html });
+    } catch (err) {
+        const msg = err?.message || 'Unknown extraction failure.';
+        const paywallHit = /paywall/i.test(msg);
+        const challengeHit = !paywallHit && /challenge/i.test(msg);
+        let errorMessage;
+        if (paywallHit) {
+            errorMessage = "This article appears to be behind a paywall — no free version found.";
+        } else if (challengeHit) {
+            errorMessage = "Couldn't read this page — the site is blocked behind an anti-bot wall.";
+        } else {
+            errorMessage = "Couldn't extract content from this URL.";
+        }
+        return res.status((paywallHit || challengeHit) ? 502 : 500).json({ message: errorMessage, error: msg });
+    }
+
+    // --- Create the note and attach tags ---
+    try {
+        const note = await Note.create({
+            title: (providedTitle || article.title || 'Clipped article').trim(),
+            content: buildClippedNoteHtml({ articleHtml: article.content, url }),
+            is_pinned: false,
+            color: 'default',
+        });
+
+        // Re-host images: download them, store them as note images, and rewrite
+        // the body to reference-only <img data-image-id> nodes (so base64 stays
+        // out of the body and images survive even if the source goes away). Needs
+        // the note id, so it runs after creation as a content update. Best-effort:
+        // on failure the note keeps its original remote <img src> tags.
+        if (includeImages !== false) {
+            try {
+                const imageUrls = extractImageUrls(article.content, url);
+                if (imageUrls.length > 0) {
+                    const uploaded = await processAndUploadImages(imageUrls, note.id);
+                    if (uploaded.length > 0) {
+                        const articleWithImages = applyRehostedImages({
+                            html: article.content,
+                            baseUrl: url,
+                            uploaded,
+                        });
+                        await Note.update(note.id, {
+                            content: buildClippedNoteHtml({ articleHtml: articleWithImages, url }),
+                        });
+                    }
+                }
+            } catch (imgErr) {
+                console.error(`[clip] Image re-hosting failed for ${url}:`, imgErr.message);
+            }
+        }
+
+        // Resolve tag names → ids (creating any that don't exist yet), then link.
+        if (Array.isArray(tags) && tags.length > 0) {
+            for (const raw of tags) {
+                const name = String(raw || '').trim();
+                if (!name) continue;
+                try {
+                    const tag = (await Tag.findByName(name)) || (await Tag.create(name));
+                    await Tag.addTagToNote(note.id, tag.id);
+                } catch (tagErr) {
+                    console.error(`[clip] Failed to attach tag "${name}":`, tagErr.message);
+                }
+            }
+        }
+
+        // Re-fetch with tags/images so the socket broadcast and response carry a
+        // fully-rendered card, then emit note_created like the standard path.
+        const fullNote = await Note.findById(note.id, true);
+        req.app.get('io').emit('note_created', fullNote);
+
+        return res.status(201).json({ note: fullNote });
+    } catch (err) {
+        console.error(`[clip] Failed to create note for ${url}:`, err.message);
+        return res.status(500).json({ message: 'Failed to create note', error: err.message });
     }
 });
 

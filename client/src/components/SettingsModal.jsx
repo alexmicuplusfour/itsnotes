@@ -337,7 +337,7 @@ const SettingsModal = ({ onClose }) => {
       case 'maintenance':
         return <MaintenanceTab settings={settings} onChange={handleChange} commit={commit} />;
       case 'integrations':
-        return <IntegrationsTab settings={settings} onChange={handleChange} commit={commit} />;
+        return <IntegrationsTab settings={settings} onChange={handleChange} commit={commit} isDarkTheme={isDarkTheme} />;
       case 'help':
         return <HelpTab />;
       default:

@@ -8,12 +8,55 @@ import {
   Label,
   Input,
 } from './styles';
+import CopyableField from './CopyableField';
 
-const IntegrationsTab = ({ settings, onChange, commit }) => {
+const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const foxitEnabled = settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true';
 
   const [jinaLoading, setJinaLoading] = useState(false);
   const [jinaStatus, setJinaStatus] = useState(null);
+  const [foxitTokenCopied, setFoxitTokenCopied] = useState(false);
+
+  // Fill the Foxit snooper token with a fresh random secret and copy it, since
+  // the same value has to be pasted into the snooper on the other machine.
+  const generateFoxitToken = useCallback(() => {
+    const bytes = new Uint8Array(24);
+    window.crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    commit({ ...settings, FOXIT_SNOOPER_TOKEN: token });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(token).then(
+        () => { setFoxitTokenCopied(true); setTimeout(() => setFoxitTokenCopied(false), 2500); },
+        () => { /* clipboard blocked; the value is still shown in the field */ }
+      );
+    }
+  }, [settings, commit]);
+
+  // Remove the token so the snooper endpoints go back to being open.
+  const clearFoxitToken = useCallback(() => {
+    setFoxitTokenCopied(false);
+    commit({ ...settings, FOXIT_SNOOPER_TOKEN: '' });
+  }, [settings, commit]);
+
+  // --- Browser extension ("itsnotes clipper") token ---
+  const [extLoading, setExtLoading] = useState(false);
+  const [extToken, setExtToken] = useState(null);
+  const [extError, setExtError] = useState(null);
+  // The address the extension should point at — this app's own origin.
+  const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const generateExtensionToken = useCallback(async () => {
+    setExtLoading(true);
+    setExtError(null);
+    try {
+      const data = await notesApi.generateExtensionToken();
+      setExtToken(data.token);
+    } catch (e) {
+      setExtError('Could not generate a token. Make sure you are logged in.');
+    } finally {
+      setExtLoading(false);
+    }
+  }, []);
 
   const refreshJinaTokens = useCallback(async () => {
     setJinaLoading(true);
@@ -41,6 +84,67 @@ const IntegrationsTab = ({ settings, onChange, commit }) => {
 
   return (
     <>
+      <SectionContainer>
+        <SectionTitle>Browser Extension (itsnotes clipper)</SectionTitle>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+          Clip any web article straight into a note from your browser toolbar. Install the
+          &ldquo;itsnotes clipper&rdquo; extension, then paste this server&rsquo;s address and a token below into
+          its options. Because the page is captured from your own browser, it even works on articles
+          behind a login or paywall that you&rsquo;re already viewing.
+        </p>
+        <FormGroup>
+          <CopyableField
+            label="Server address"
+            value={serverOrigin}
+            isDark={isDarkTheme}
+            copyTitle="Copy server address"
+          />
+          <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+            Enter this in the extension&rsquo;s options page.
+          </p>
+        </FormGroup>
+        <FormGroup>
+          {extToken ? (
+            <>
+              <CopyableField
+                label="Access token"
+                value={extToken}
+                isDark={isDarkTheme}
+                copyTitle="Copy token"
+              />
+              <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                Treat this like a password. It&rsquo;s shown once here &mdash; copy it now. Generating a new one
+                does not revoke the old one (tokens can only be invalidated by resetting the account).
+              </p>
+            </>
+          ) : (
+            <>
+              <Label>Access token</Label>
+            <button
+              onClick={generateExtensionToken}
+              disabled={extLoading}
+              style={{
+                background: 'none',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                padding: '8px 14px',
+                fontSize: '13px',
+                cursor: extLoading ? 'not-allowed' : 'pointer',
+                color: 'var(--text-secondary-color)',
+                opacity: extLoading ? 0.6 : 1,
+              }}
+            >
+              {extLoading ? 'Generating…' : 'Generate token'}
+            </button>
+            </>
+          )}
+          {extError && (
+            <p style={{ marginTop: '6px', fontSize: '13px', color: 'var(--danger-color, #d9534f)' }}>
+              {extError}
+            </p>
+          )}
+        </FormGroup>
+      </SectionContainer>
       <SectionContainer>
         <SectionTitle>The Movie Database (TMDB)</SectionTitle>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
@@ -132,18 +236,56 @@ const IntegrationsTab = ({ settings, onChange, commit }) => {
               </p>
             </FormGroup>
             <FormGroup>
-              <Label>Snooper Token</Label>
-              <Input
-                type="password"
-                name="FOXIT_SNOOPER_TOKEN"
-                value={settings.FOXIT_SNOOPER_TOKEN || ''}
-                onChange={onChange}
-                placeholder="Optional shared token"
-                autoComplete="off"
-              />
-              <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
-                When set, the snooper must send the same value as <code>X-Snooper-Token</code> on its requests. Leave empty to keep the endpoints open.
-              </p>
+              {settings.FOXIT_SNOOPER_TOKEN ? (
+                <>
+                  <CopyableField
+                    label="Snooper Token"
+                    value={settings.FOXIT_SNOOPER_TOKEN}
+                    isDark={isDarkTheme}
+                    copyTitle="Copy token"
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                    <button
+                      onClick={generateFoxitToken}
+                      style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary-color)', cursor: 'pointer' }}
+                    >
+                      Regenerate
+                    </button>
+                    <button
+                      onClick={clearFoxitToken}
+                      style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary-color)', cursor: 'pointer' }}
+                    >
+                      Clear
+                    </button>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                      {foxitTokenCopied
+                        ? 'Copied — paste it into the snooper.'
+                        : <>The snooper must send this as <code>X-Snooper-Token</code>.</>}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Label>Snooper Token</Label>
+                  <button
+                    onClick={generateFoxitToken}
+                    style={{
+                      background: 'none',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary-color)',
+                    }}
+                  >
+                    Generate token
+                  </button>
+                  <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                    Optional. Generate a token to require the snooper to authenticate with <code>X-Snooper-Token</code>; leave unset to keep the endpoints open.
+                  </p>
+                </>
+              )}
             </FormGroup>
           </>
         )}

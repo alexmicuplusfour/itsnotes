@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import api, { aiApi, getServerUrl } from '../../services/api';
 import Icon from '../Icons';
 import Switch from '../Switch';
+import CopyableField from './CopyableField';
 import {
   SectionContainer,
   SectionTitle,
@@ -69,24 +70,6 @@ const McpCommandBox = styled.div`
   color: var(--text-color);
   white-space: pre-wrap;
   word-break: break-all;
-`;
-
-const CopyButton = styled.button`
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary-color);
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 0;
-  &:hover { background-color: var(--hover-color, rgba(0,0,0,0.06)); }
 `;
 
 const McpActionButton = styled.button`
@@ -158,8 +141,6 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
   const [mcpToken, setMcpToken] = useState(null);
   const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
   const [mcpTokenError, setMcpTokenError] = useState(null);
-  const [mcpCopied, setMcpCopied] = useState(false);
-  const [mcpUrlCopied, setMcpUrlCopied] = useState(false);
 
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
@@ -233,13 +214,6 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
   // token as a query param (the server accepts it for /mcp).
   const mcpConnectorUrl = mcpToken ? `${mcpUrl}?token=${mcpToken}` : '';
 
-  const copyText = (text, setCopied) => {
-    if (!text) return;
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   return (
     <>
       <SectionContainer>
@@ -277,26 +251,24 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
             ) : (
               <>
                 <FormGroup>
-                  <Label>Claude Desktop / web (custom connector)</Label>
-                  <McpCommandBox $isDark={isDarkTheme}>
-                    {mcpConnectorUrl}
-                    <CopyButton onClick={() => copyText(mcpConnectorUrl, setMcpUrlCopied)} title="Copy URL">
-                      <Icon name={mcpUrlCopied ? 'check' : 'copy'} size={16} />
-                    </CopyButton>
-                  </McpCommandBox>
+                  <CopyableField
+                    label="Claude Desktop / web (custom connector)"
+                    value={mcpConnectorUrl}
+                    isDark={isDarkTheme}
+                    copyTitle="Copy URL"
+                  />
                   <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '8px 0 0' }}>
                     In Claude, add a custom connector and paste this URL — no files
                     to edit. The token is in the URL, so treat it as a secret.
                   </p>
                 </FormGroup>
                 <FormGroup>
-                  <Label>Claude Code (CLI)</Label>
-                  <McpCommandBox $isDark={isDarkTheme}>
-                    {mcpCommand}
-                    <CopyButton onClick={() => copyText(mcpCommand, setMcpCopied)} title="Copy command">
-                      <Icon name={mcpCopied ? 'check' : 'copy'} size={16} />
-                    </CopyButton>
-                  </McpCommandBox>
+                  <CopyableField
+                    label="Claude Code (CLI)"
+                    value={mcpCommand}
+                    isDark={isDarkTheme}
+                    copyTitle="Copy command"
+                  />
                 </FormGroup>
               </>
             )}

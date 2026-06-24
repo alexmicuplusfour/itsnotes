@@ -283,6 +283,12 @@ export const notesApi = {
     return response.data; // { configured, valid?, balance?, error? }
   },
 
+  // Mint a long-lived token for the "itsnotes clipper" browser extension.
+  generateExtensionToken: async () => {
+    const response = await api.post('/auth/extension-token');
+    return response.data; // { token }
+  },
+
   // --- Version History ---
   getNoteVersions: async (noteId) => {
     const response = await api.get(`/notes/${noteId}/versions`);
