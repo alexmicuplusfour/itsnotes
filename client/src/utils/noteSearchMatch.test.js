@@ -76,6 +76,27 @@ describe('doesNoteMatchSearchQuery - phrases, OR, exclusion, wildcard', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// STRUCTURAL PARITY with the server tokenizer: parentheses are stripped and the
+// spaced wildcard "a * b" is treated as adjacency (not a match-everything '*').
+// Mirror of server/src/models/searchParse.test.js / searchSql.test.js — if the
+// two tokenizers drift, one of these suites goes red.
+// ---------------------------------------------------------------------------
+describe('doesNoteMatchSearchQuery - structural parity with server', () => {
+  test('parentheses around a single term are stripped', () => {
+    expect(matches(note({ content: '<p>meeting notes</p>' }), '(meeting)')).toBe(true);
+  });
+  test('"(zoom OR teams) notes" matches a note with both', () => {
+    expect(matches(note({ content: '<p>zoom call notes</p>' }), '(zoom OR teams) notes')).toBe(true);
+    // Has the OR side but not "notes" -> no match.
+    expect(matches(note({ content: '<p>teams sync</p>' }), '(zoom OR teams) notes')).toBe(false);
+  });
+  test('spaced wildcard "a * b" needs a word between (no match when adjacent)', () => {
+    expect(matches(note({ content: '<p>marketing growth strategy</p>' }), 'marketing * strategy')).toBe(true);
+    expect(matches(note({ content: '<p>marketing strategy</p>' }), 'marketing * strategy')).toBe(false);
+  });
+});
+
 describe('doesNoteMatchSearchQuery - id search', () => {
   test('!<id> matches the exact note id', () => {
     expect(matches(note({ id: 'abc-123' }), '!abc-123')).toBe(true);
@@ -116,19 +137,5 @@ describe('doesNoteMatchSearchQuery - known divergences from server (documented)'
     // does a literal substring search for "-cancelled".
     expect(matches(note({ content: '<p>-cancelled</p>' }), '-cancelled')).toBe(true);
     expect(matches(note({ content: '<p>cancelled</p>' }), '-cancelled')).toBe(false);
-  });
-  test('parentheses are NOT stripped (server now strips them)', () => {
-    // Server: "(zoom OR teams) notes" -> group [zoom, teams] AND "notes".
-    // Client: OR-splits into "(zoom" / "teams) notes" and matches the literal
-    // "(zoom", so a normal note is NOT added to live results until a refresh.
-    const n = note({ content: '<p>zoom call notes</p>' });
-    expect(matches(n, '(zoom OR teams) notes')).toBe(false);
-  });
-  test('spaced wildcard "a * b" is not adjacency here (server treats it as one word between)', () => {
-    // Client tokenizes to ['marketing','*','strategy']; the lone '*' becomes a
-    // ".*" wildcard that matches any note, so the AND can match things the
-    // server's strict one-word-between adjacency would reject.
-    const n = note({ content: '<p>marketing strategy</p>' });
-    expect(matches(n, 'marketing * strategy')).toBe(true);
   });
 });

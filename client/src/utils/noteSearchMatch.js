@@ -45,6 +45,15 @@ const wildcardMatch = (note, term) => {
   );
 };
 
+// Parentheses are decorative grouping ("(zoom OR teams) z"); grouping itself is
+// driven by OR adjacency, so strip wrapping parens from non-quoted tokens.
+// Mirrors the server tokenizer in server/src/models/Note.js (keep in sync; both
+// behaviours are pinned by tests — searchParse.test.js / noteSearchMatch.test.js).
+const stripWrappingParens = (token) => {
+  if (token.startsWith('"') || token.startsWith("'")) return token;
+  return token.replace(/^\(+/, '').replace(/\)+$/, '');
+};
+
 // Tokenize a query while keeping quoted phrases (and their quotes) intact.
 const tokenizeQuery = (str) => {
   const tokens = [];
@@ -68,8 +77,36 @@ const tokenizeQuery = (str) => {
     }
   }
 
-  return tokens.filter((t) => t.length > 0);
+  return tokens.map(stripWrappingParens).filter((t) => t.length > 0);
 };
+
+// Rejoin a spaced adjacency wildcard "a * b" (tokenized as ['a','*','b']) into a
+// single "a * b" token, so the lone '*' doesn't become a match-everything regex.
+// Mirrors mergeSpacedWildcards in server/src/models/Note.js.
+const isPlainWord = (t) =>
+  !!t &&
+  t.toUpperCase() !== 'OR' &&
+  !t.startsWith('#') && !t.startsWith('$') && !t.startsWith('-') &&
+  !t.startsWith('"') && !t.startsWith("'") &&
+  !t.startsWith('yr:') && !t.includes('*');
+
+const mergeSpacedWildcards = (tokens) => {
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const left = out[out.length - 1];
+    const right = tokens[i + 1];
+    if (tokens[i] === '*' && isPlainWord(left) && isPlainWord(right)) {
+      out[out.length - 1] = `${left} * ${right}`;
+      i++; // consume the right-hand neighbour
+      continue;
+    }
+    out.push(tokens[i]);
+  }
+  return out;
+};
+
+// Tokenize with the same structural normalisation the server applies.
+const normalizedTerms = (str) => mergeSpacedWildcards(tokenizeQuery(str));
 
 // Match a single token within a term group: exclusion, quoted phrase, wildcard,
 // or plain text.
@@ -112,22 +149,23 @@ export function doesNoteMatchSearchQuery(note, query) {
     return note.id === actualUuid || searchInAllFields(note, actualUuid);
   }
 
-  // Single term (no spaces): wildcard or plain text.
+  // Single term (no spaces): wildcard or plain text (parens stripped for parity).
   if (!trimmedQuery.includes(' ')) {
-    if (trimmedQuery.includes('*')) {
-      return wildcardMatch(note, trimmedQuery);
+    const single = stripWrappingParens(trimmedQuery);
+    if (single.includes('*')) {
+      return wildcardMatch(note, single);
     }
-    return searchInAllFields(note, trimmedQuery);
+    return searchInAllFields(note, single);
   }
 
-  const terms = tokenizeQuery(trimmedQuery);
+  const terms = normalizedTerms(trimmedQuery);
   const hasOrOperator = terms.some((term) => term.toUpperCase() === 'OR');
 
   if (hasOrOperator) {
     // At least one OR group must match; all terms within a group must match.
     const orGroups = trimmedQuery.split(/\s+OR\s+/i);
     return orGroups.some((group) => {
-      const groupTerms = tokenizeQuery(group.trim());
+      const groupTerms = normalizedTerms(group.trim());
       return groupTerms.every((term) => matchSingleTerm(note, term));
     });
   }
