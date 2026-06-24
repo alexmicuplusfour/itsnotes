@@ -6,136 +6,181 @@ import Icon from '../Icons';
 import {
   SectionContainer,
   SectionTitle,
-  FormGroup,
-  Label,
-  Input,
+  Button,
 } from './styles';
 
-const StatusBox = styled.div`
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
-`;
+// Status accents. Kept theme-agnostic (fixed rgb) so the green/blue/amber dots and
+// the "enabled" banner read the same in light and dark.
+const GREEN = 'rgb(34, 197, 94)';
+const GREEN_BG = 'rgba(34, 197, 94, 0.10)';
+const GREEN_BORDER = 'rgba(34, 197, 94, 0.35)';
+const BLUE = 'rgb(96, 165, 250)';
+const AMBER = 'rgb(234, 179, 8)';
 
-const StatusRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--text-secondary-color);
-
-  span:last-child {
-    color: var(--text-color);
-    text-align: right;
-    word-break: break-all;
-  }
-`;
-
-const Hint = styled.p`
+const Tagline = styled.p`
   margin: 0;
-  font-size: 12px;
-  color: var(--text-secondary-color);
-`;
-
-// Round, borderless action on a direction's title line (sync / import).
-const IconButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  border: 1px solid var(--foreground-color);
-  background: transparent;
-  color: var(--text-color);
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover:not(:disabled) {
-    background-color: var(--menu-item-hover);
-    border-color: var(--border-hover-color);
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-`;
-
-// Title + badge grouped on the left of a direction head.
-const HeadLeft = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-`;
-
-// The auto-import toggle row inside the folder → notes section.
-const ToggleRow = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-`;
-
-const Description = styled.p`
   font-size: 14px;
+  line-height: 1.5;
   color: var(--text-secondary-color);
-  margin: 0;
 `;
 
-// A labelled direction block (notes → folder, or folder → notes), separated from
-// the one above it so the two flows read as distinct halves of the mirror.
-const Direction = styled.div`
+// Top banner: the master on/off plus where we're mirroring to. Greens up when on.
+const EnableBanner = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid ${(p) => (p.$on ? GREEN_BORDER : 'var(--border-color)')};
+  background: ${(p) => (p.$on ? GREEN_BG : 'transparent')};
+`;
+
+const BannerTitle = styled.div`
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-color);
+`;
+
+const BannerSub = styled.div`
+  font-size: 12.5px;
+  margin-top: 2px;
+  color: var(--text-secondary-color);
+  word-break: break-all;
+`;
+
+// The two direction panels. auto-fit + minmax means they sit side by side when
+// there's room and stack to full width once the settings pane gets narrow (mobile),
+// without a viewport media query — it responds to the actual container width.
+const Panels = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+`;
+
+const Panel = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border-color);
+  gap: 7px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
 `;
 
-const DirectionHead = styled.div`
+const PanelHead = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 24px;
 `;
 
-const DirectionTitle = styled.h4`
+const PanelTitle = styled.div`
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-color);
+`;
+
+const PanelDesc = styled.div`
+  font-size: 12.5px;
+  color: var(--text-secondary-color);
+`;
+
+const StatusLine = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-color);
+  margin-top: 3px;
+`;
+
+const Dot = styled.span`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: ${(p) => p.$color || 'var(--text-secondary-color)'};
+`;
+
+const SubLine = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary-color);
+`;
+
+const PanelDivider = styled.div`
+  border-top: 1px solid var(--border-color);
+  margin: 5px 0 1px;
+`;
+
+const PanelFoot = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+`;
+
+const FootNote = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary-color);
+`;
+
+const Caption = styled.p`
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-color);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary-color);
 `;
 
-const Badge = styled.span`
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  padding: 3px 9px;
-  border-radius: 999px;
+// "How your notes stay safe" explainer.
+const SafePanel = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--border-color);
-  color: ${(p) => (p.$on ? 'var(--text-color)' : 'var(--text-secondary-color)')};
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.04);
 `;
 
-const Ok = styled.span`
+const SafeHead = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-color);
 `;
-const Warn = styled.span`
-  color: rgb(244, 67, 54);
+
+const SafeIntro = styled.p`
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary-color);
 `;
 
-const fmtTime = (iso) => {
-  if (!iso) return 'never';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? 'never' : d.toLocaleString();
-};
+const SafeGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 22px;
+`;
+
+const SafeItem = styled.div`
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-secondary-color);
+
+  svg { flex-shrink: 0; margin-top: 1px; }
+  b { color: var(--text-color); font-weight: 600; }
+`;
+
+const FooterLine = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary-color);
+`;
 
 const fmtCountdown = (ms) => {
   if (ms <= 0) return 'due now';
@@ -145,11 +190,26 @@ const fmtCountdown = (ms) => {
   return `${m}:${String(s).padStart(2, '0')}`;
 };
 
+// Coarse "x ago" for last export/import lines.
+const fmtRelative = (iso) => {
+  if (!iso) return 'never';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'never';
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 10) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  return `${Math.floor(h / 24)}d ago`;
+};
+
 // How often the import side re-checks the folder against the DB while this tab is
-// open, so the "folder → notes" status box stays live without a Preview click.
+// open, so the "folder → notes" status stays live without a manual press.
 const POLL_MS = 5000;
 
-const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
+const MirrorTab = ({ settings, commit, commitImmediate }) => {
   const enabled = settings.MD_MIRROR_ENABLED === true || settings.MD_MIRROR_ENABLED === 'true';
   const hasPath = !!settings.MD_MIRROR_PATH;
   const autoImport = settings.MD_MIRROR_AUTO_IMPORT === true || settings.MD_MIRROR_AUTO_IMPORT === 'true';
@@ -159,12 +219,8 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
   const [now, setNow] = useState(Date.now());
   const sweepArmed = useRef(false);
 
-  // Import side: the preview is now a live, auto-refreshed status rather than a
-  // button-triggered dry run. `checking` covers the gap before the first result.
   const [preview, setPreview] = useState(null);
-  const [checking, setChecking] = useState(true);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState(null);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -175,7 +231,7 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
     }
   }, []);
 
-  // Silent dry run powering the live "folder → notes" box. Reads persisted
+  // Silent dry run powering the live "folder → notes" panel. Reads persisted
   // settings (the path is debounce-saved on edit), so no commit here.
   const refreshPreview = useCallback(async () => {
     if (!enabled || !hasPath) { setPreview(null); return; }
@@ -184,8 +240,6 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
       setPreview(data);
     } catch (err) {
       console.error('Error checking import status:', err);
-    } finally {
-      setChecking(false);
     }
   }, [enabled, hasPath]);
 
@@ -193,8 +247,7 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
   // the window is hidden so we don't render the whole library to /dev/null in the
   // background. Unmounts (leaving the tab) stop it entirely.
   useEffect(() => {
-    if (!enabled || !hasPath) { setChecking(false); return undefined; }
-    setChecking(true);
+    if (!enabled || !hasPath) return undefined;
     refreshStatus();
     refreshPreview();
     const t = setInterval(() => {
@@ -225,7 +278,6 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
   const handleSyncNow = useCallback(async () => {
     setSyncing(true);
     try {
-      // Persist the latest toggle/path before the server reads them for the sweep.
       await commitImmediate(settings);
       const { data } = await api.post('/mirror/sync');
       if (data && data.status) setStatus(data.status);
@@ -243,7 +295,6 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
     try {
       await commitImmediate(settings);
       const { data } = await api.post('/mirror/import/apply');
-      setImportResult(data && data.result ? data.result : null);
       if (data && data.status) setStatus(data.status);
       refreshPreview();
     } catch (err) {
@@ -253,184 +304,162 @@ const MirrorTab = ({ settings, onChange, commit, commitImmediate }) => {
     }
   }, [settings, commitImmediate, refreshPreview]);
 
-  const summary = status && status.lastSummary;
   const counts = preview && !preview.skipped ? preview.counts : null;
   const importableCount = counts
     ? counts.edited + counts.created + counts.renamed + counts.conflict
     : 0;
-  const folderMissing = preview && preview.skipped && preview.reason === 'no-path';
-  const liveBadge = status && status.liveConnected
-    ? { on: true, text: 'Live' }
-    : { on: false, text: status && status.enabled ? 'Connecting…' : 'Inactive' };
+
+  const live = status && status.liveConnected;
+  const fileCount = status ? status.fileCount : null;
+  const writable = status && status.writable;
+
+  // Export panel status: live vs still connecting.
+  const exportStatus = live
+    ? { color: GREEN, text: 'Live — up to date' }
+    : { color: AMBER, text: 'Connecting…' };
+
+  // Import panel status: pending changes take priority, then the auto/manual mode.
+  const importStatus = importableCount > 0
+    ? { color: AMBER, text: `${importableCount} change${importableCount === 1 ? '' : 's'} to import` }
+    : autoImport
+      ? { color: BLUE, text: 'Auto-import on — watching for changes' }
+      : { color: GREEN, text: 'Up to date' };
+
+  const lastImportAt = status && status.lastImportAt;
+  const lastImportChanged = status && status.lastImportChanged;
+  const importSub = lastImportAt
+    ? `Last import ${fmtRelative(lastImportAt)}${lastImportChanged != null ? ` · ${lastImportChanged} file${lastImportChanged === 1 ? '' : 's'} updated` : ''}`
+    : autoImport
+      ? 'Watching for file changes'
+      : 'Press Import now to pull in file edits';
 
   return (
     <SectionContainer>
-      <SectionTitle>Markdown Mirror</SectionTitle>
-      <Description>
-        Keeps a folder of <code>.md</code> files in sync with your notes. Your notes
-        database stays the source of truth: every note is continuously written out as a
-        Markdown file with a metadata header (tags, color, reminders, pin/archive/trash
-        state), and images/attachments go in <code>_resources/</code>. You can also edit
-        the files directly and pull those changes back into your notes.
-      </Description>
+      <div>
+        <SectionTitle>Markdown Mirror</SectionTitle>
+        <Tagline>
+          Keep a folder of <code>.md</code> files in sync with your notes — so you can edit
+          them in any editor and still see them as notes here. Your notes database is always
+          the source of truth.
+        </Tagline>
+      </div>
 
-      <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Label style={{ marginBottom: 0 }}>Enable Markdown Mirror</Label>
+      <EnableBanner $on={enabled}>
+        <div>
+          <BannerTitle>{enabled ? 'Mirror enabled' : 'Mirror disabled'}</BannerTitle>
+          <BannerSub>
+            {enabled
+              ? (hasPath
+                ? <>Mirroring to <code>{settings.MD_MIRROR_PATH}</code>{fileCount != null ? ` · ${fileCount} notes mirrored` : ''}</>
+                : 'No mirror folder configured — set MD_MIRROR_PATH in your environment')
+              : 'Turn on to keep a folder of .md files in sync with your notes'}
+          </BannerSub>
+        </div>
         <Switch
           id="md-mirror-enabled-toggle"
           checked={enabled}
           onChange={() => commit({ ...settings, MD_MIRROR_ENABLED: !enabled })}
         />
-      </FormGroup>
+      </EnableBanner>
 
       {enabled && (
         <>
-          <FormGroup>
-            <Label>Mirror folder</Label>
-            <Input
-              type="text"
-              name="MD_MIRROR_PATH"
-              value={settings.MD_MIRROR_PATH || ''}
-              onChange={onChange}
-              placeholder="/data/notes-mirror"
-              autoComplete="off"
-            />
-            <Hint style={{ marginTop: '6px' }}>
-              Absolute path the server can write to (inside the container if self-hosted).
-              The folder is created if it doesn’t exist.
-            </Hint>
-          </FormGroup>
+          <Panels>
+            {/* Export: notes → folder (always on while the mirror is enabled) */}
+            <Panel>
+              <PanelHead>
+                <PanelTitle>Notes → Folder</PanelTitle>
+              </PanelHead>
+              <PanelDesc>Export · writes your notes out as files</PanelDesc>
+              <StatusLine><Dot $color={exportStatus.color} />{exportStatus.text}</StatusLine>
+              <SubLine>
+                Last export {fmtRelative(status && status.lastSweepAt)}
+                {nextAt ? ` · next sweep in ${fmtCountdown(nextAt - now)}` : ''}
+              </SubLine>
+              <PanelDivider />
+              <PanelFoot>
+                <FootNote>Always on while mirror is enabled</FootNote>
+                <Button
+                  type="button"
+                  $size="small"
+                  onClick={handleSyncNow}
+                  disabled={syncing || !hasPath}
+                >
+                  <Icon name="refresh" size={14} spin={syncing} />
+                  Export now
+                </Button>
+              </PanelFoot>
+            </Panel>
 
-          {/* ── Export: notes → folder (always on) ───────────────────────── */}
-          <Direction>
-            <DirectionHead>
-              <HeadLeft>
-                <DirectionTitle>Notes → folder</DirectionTitle>
-                <Badge $on={liveBadge.on}>{liveBadge.text}</Badge>
-              </HeadLeft>
-              <IconButton
-                type="button"
-                onClick={handleSyncNow}
-                disabled={syncing || !hasPath}
-                title={syncing ? 'Syncing…' : 'Sync now'}
-                aria-label="Sync now"
-              >
-                <Icon name="refresh" size={18} spin={syncing} />
-              </IconButton>
-            </DirectionHead>
-            <Hint>
-              Every note is written out and kept current within seconds; a periodic sweep
-              reconciles as a backstop. Use “Sync now” to export everything immediately.
-            </Hint>
+            {/* Import: folder → notes (auto-import toggle lives in the header) */}
+            <Panel>
+              <PanelHead>
+                <PanelTitle>Folder → Notes</PanelTitle>
+                <Switch
+                  id="md-mirror-auto-import-toggle"
+                  checked={autoImport}
+                  onChange={() => commit({ ...settings, MD_MIRROR_AUTO_IMPORT: !autoImport })}
+                />
+              </PanelHead>
+              <PanelDesc>Import · pulls file edits back into notes</PanelDesc>
+              <StatusLine><Dot $color={importStatus.color} />{importStatus.text}</StatusLine>
+              <SubLine>{importSub}</SubLine>
+              <PanelDivider />
+              <PanelFoot>
+                <FootNote>{autoImport ? 'Auto-import file edits' : 'Manual import'}</FootNote>
+                <Button
+                  type="button"
+                  $size="small"
+                  onClick={handleApplyImport}
+                  disabled={importing || importableCount === 0}
+                >
+                  <Icon name={importing ? 'spinner' : 'refresh'} size={14} spin={importing} />
+                  Import now
+                </Button>
+              </PanelFoot>
+            </Panel>
+          </Panels>
 
-            <StatusBox>
-              <StatusRow>
-                <span>Folder</span>
-                {status && status.path
-                  ? (status.pathExists ? <Ok>{status.path}</Ok> : <Warn>{status.path} (not found)</Warn>)
-                  : <Warn>not set</Warn>}
-              </StatusRow>
-              <StatusRow>
-                <span>Files mirrored</span>
-                <span>{status ? status.fileCount : '…'}</span>
-              </StatusRow>
-              <StatusRow>
-                <span>Last sync</span>
-                <span>{status ? fmtTime(status.lastSweepAt) : '…'}</span>
-              </StatusRow>
-              <StatusRow>
-                <span>Next sync</span>
-                <span>{nextAt ? fmtCountdown(nextAt - now) : '…'}</span>
-              </StatusRow>
-              {summary && (
-                <StatusRow>
-                  <span>Last sync changes</span>
-                  <span>
-                    +{summary.created} created, {summary.updated} updated,
-                    {' '}{summary.renamed} renamed, {summary.deleted} deleted
-                  </span>
-                </StatusRow>
-              )}
-            </StatusBox>
-          </Direction>
+          <Caption>
+            Each direction syncs continuously. Use the buttons to force a sync right now,
+            one direction at a time. Turn off import if you only want a one-way backup to files.
+          </Caption>
 
-          {/* ── Import: folder → notes (auto-detected, manual apply) ──────── */}
-          <Direction>
-            <DirectionHead>
-              <HeadLeft>
-                <DirectionTitle>Folder → notes</DirectionTitle>
-                <Badge $on={importableCount > 0}>
-                  {importableCount > 0 ? `${importableCount} to import` : 'Up to date'}
-                </Badge>
-              </HeadLeft>
-              <IconButton
-                type="button"
-                onClick={handleApplyImport}
-                disabled={importing || importableCount === 0}
-                title={importing ? 'Importing…' : `Import ${importableCount || 'changes'}`}
-                aria-label="Import changes"
-              >
-                <Icon name={importing ? 'spinner' : 'import'} size={18} spin={importing} />
-              </IconButton>
-            </DirectionHead>
-            <Hint>
-              Edits you make to the <code>.md</code> files are detected automatically below.
-              Import pulls them into your notes. If a note was changed both in the app and in
-              its file, the app version wins and your file edit is saved to a{' '}
-              <code>conflicts/</code> folder so nothing is lost.
-            </Hint>
+          <SafePanel>
+            <SafeHead>
+              <Icon name="shield" size={16} />
+              How your notes stay safe
+            </SafeHead>
+            <SafeIntro>
+              The app database is the source of truth — the files are a copy of it, and the
+              mirror never deletes a note. Here’s exactly how the tricky cases are handled:
+            </SafeIntro>
+            <SafeGrid>
+              <SafeItem>
+                <Icon name="check" size={15} color={GREEN} />
+                <span><b>Deleted a file?</b> Ignored — the note stays put.</span>
+              </SafeItem>
+              <SafeItem>
+                <Icon name="check" size={15} color={GREEN} />
+                <span><b>Edited both sides?</b> The app wins; your file edit is saved to <code>conflicts/</code>.</span>
+              </SafeItem>
+              <SafeItem>
+                <Icon name="check" size={15} color={GREEN} />
+                <span><b>Renamed a file?</b> Tracked by note ID — no duplicate note.</span>
+              </SafeItem>
+              <SafeItem>
+                <Icon name="check" size={15} color={GREEN} />
+                <span>Trash / archive / pin ride along in each file’s header.</span>
+              </SafeItem>
+            </SafeGrid>
+          </SafePanel>
 
-            <StatusBox>
-              {counts ? (
-                <>
-                  <StatusRow><span>Edited (file changed)</span><span>{counts.edited}</span></StatusRow>
-                  <StatusRow><span>New files → new notes</span><span>{counts.created}</span></StatusRow>
-                  <StatusRow><span>Renamed files</span><span>{counts.renamed}</span></StatusRow>
-                  <StatusRow>
-                    <span>Conflicts (app wins, edit saved)</span>
-                    {counts.conflict > 0 ? <Warn>{counts.conflict}</Warn> : <span>0</span>}
-                  </StatusRow>
-                  <StatusRow><span>Deleted files (ignored)</span><span>{counts.missing}</span></StatusRow>
-                  <StatusRow><span>Unchanged</span><span>{counts.unchanged}</span></StatusRow>
-                </>
-              ) : folderMissing ? (
-                <StatusRow><span>Status</span><Warn>folder not found</Warn></StatusRow>
-              ) : (
-                <StatusRow><span>Status</span><span>{checking ? 'Checking…' : '…'}</span></StatusRow>
-              )}
-            </StatusBox>
-
-            {counts && importableCount === 0 && (
-              <Hint><Ok>Nothing to import — your notes already match the folder.</Ok></Hint>
-            )}
-
-            {importResult && (
-              <Hint>
-                <Ok>
-                  Imported: {importResult.edited} edited, {importResult.created} new,
-                  {' '}{importResult.renamed} renamed, {importResult.conflict} conflict
-                  {importResult.conflict === 1 ? '' : 's'}.
-                </Ok>
-              </Hint>
-            )}
-
-            <ToggleRow>
-              <div>
-                <Label as="span" style={{ marginBottom: 0, display: 'block' }}>
-                  Auto-import changes
-                </Label>
-                <Hint style={{ marginTop: '2px' }}>
-                  Pull file edits into your notes automatically as they’re detected,
-                  without pressing import.
-                </Hint>
-              </div>
-              <Switch
-                id="md-mirror-auto-import-toggle"
-                checked={autoImport}
-                onChange={() => commit({ ...settings, MD_MIRROR_AUTO_IMPORT: !autoImport })}
-              />
-            </ToggleRow>
-          </Direction>
+          <FooterLine>
+            Source of truth: app database{fileCount != null ? ` · ${fileCount} notes` : ''}
+            {status && status.pathExists
+              ? (writable ? ' · folder verified writable ✓' : ' · folder not writable ✕')
+              : ''}
+          </FooterLine>
         </>
       )}
     </SectionContainer>

@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs/promises');
+const { constants: fsConstants } = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const cron = require('node-cron');
@@ -42,6 +43,12 @@ let io = null;
 // LISTEN/NOTIFY equivalent, so this side polls; a cheap hash scan gates the heavy
 // render so an idle library doesn't re-render every tick.
 const AUTO_IMPORT_POLL_MS = Number(process.env.MD_MIRROR_IMPORT_POLL_MS) || 15000;
+
+// How often to reconcile the live listener with the current config. Kept short (not
+// tied to the 15-min sweep cron) so enabling the mirror at runtime connects the
+// listener — and fires its recovery sweep — within seconds, rather than showing
+// "Connecting…" until the next scheduled sweep.
+const LISTENER_CHECK_MS = 5000;
 
 const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
 
@@ -415,6 +422,8 @@ async function applyImport() {
         await repo.upsertTracked(c.noteId, c.relPath, fingerprint(rendered.get(c.noteId)));
       }
 
+      const changed = createdIds.length + updatedIds.length;
+      if (changed) lastImport = { at: new Date().toISOString(), changed };
       return { ...summarizePlan(plan).counts, createdIds, updatedIds };
     } finally {
       running = false;
@@ -506,6 +515,7 @@ async function applyAction(root, action, rendered) {
 
 let running = false;
 let lastSweep = null; // { at, summary } of the most recent real sweep
+let lastImport = null; // { at, changed } of the most recent import that pulled anything in
 
 // Every mirror mutation — the periodic sweep and each live single-note reconcile
 // — runs through this one-at-a-time queue. They all compute a plan from a snapshot
@@ -743,17 +753,25 @@ async function getStatus() {
     enabled: cfg.enabled,
     path: cfg.root || '',
     cron: cfg.cron,
+    autoImport: cfg.autoImport,
     running,
     lastSweepAt: lastSweep ? lastSweep.at : null,
     lastSummary: lastSweep ? lastSweep.summary : null,
+    lastImportAt: lastImport ? lastImport.at : null,
+    lastImportChanged: lastImport ? lastImport.changed : null,
     nextSweepAt: cfg.enabled && cfg.root ? nextRunAt(cfg.cron) : null,
     liveConnected: mirrorListener.isConnected(),
     pathExists: false,
+    writable: false,
     fileCount: 0,
   };
   if (cfg.root) {
     status.pathExists = await exists(cfg.root);
-    if (status.pathExists) status.fileCount = (await scanOnDisk(cfg.root)).size;
+    if (status.pathExists) {
+      status.fileCount = (await scanOnDisk(cfg.root)).size;
+      // Permission probe only (no write), so it's cheap enough for the status poll.
+      try { await fs.access(cfg.root, fsConstants.W_OK); status.writable = true; } catch { /* not writable */ }
+    }
   }
   return status;
 }
@@ -767,6 +785,10 @@ function init(options = {}) {
   // current config so it connects/disconnects on a runtime toggle too.
   cron.schedule(cfg.cron, () => { ensureListener(); runOnce(); });
   ensureListener();
+  // Keep the live listener in step with the config on a short interval, so toggling
+  // the mirror on at runtime connects within seconds (its connect kicks a recovery
+  // sweep too) instead of waiting for the next 15-min sweep tick.
+  setInterval(ensureListener, LISTENER_CHECK_MS);
   // Auto-import poll. Always running but self-gates on enabled+autoImport every
   // tick, so the Settings toggle takes effect without a restart.
   setInterval(autoImportTick, AUTO_IMPORT_POLL_MS);

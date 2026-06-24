@@ -81,7 +81,7 @@ export const SectionContainer = styled.div`
 export const SectionTitle = styled.h3`
   font-size: 18px;
 
-  padding-left: 2px;
+  padding-left: 0px;
 `;
 
 export const FormGroup = styled.div`
