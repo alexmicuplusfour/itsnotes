@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import styled, { keyframes } from 'styled-components';
 import { useTags } from '../contexts/TagsContext';
 import { useNotes } from '../contexts/NotesContext';
+import { useToast } from '../contexts/ToastContext';
 import Icon from './Icons';
 
 const slideDown = keyframes`
@@ -301,6 +302,7 @@ const SubfolderActionButton = styled.button`
 const FolderHeader = ({ searchQuery }) => {
   const { tags, createTag, deleteTag, toggleTagVisibility, toggleTagHidden, isTagHidden } = useTags();
   const { searchByTag, handleSearch, resolvedTagIds } = useNotes();
+  const { showToast } = useToast();
 
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     !document.documentElement.classList.contains('light-theme')
@@ -405,11 +407,12 @@ const FolderHeader = ({ searchQuery }) => {
     const trimmed = newSubfolderName.trim();
     if (!trimmed || !currentFolder) return;
     if (subfolders.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) return;
-    await createTag(trimmed, true, true, currentFolder.id);
+    const created = await createTag(trimmed, true, true, currentFolder.id, { silent: true });
+    if (created) showToast('Subfolder created');
     setNewSubfolderName('');
     setIsCreatingSubfolder(false);
     closeDropdown();
-  }, [newSubfolderName, currentFolder, createTag, closeDropdown]);
+  }, [newSubfolderName, currentFolder, subfolders, createTag, showToast, closeDropdown]);
 
   const handleToggleVisibility = useCallback(async () => {
     if (!currentFolder) return;
@@ -418,10 +421,12 @@ const FolderHeader = ({ searchQuery }) => {
     closeDropdown();
     try {
       await toggleTagVisibility(currentFolder.id, currentlyHidden);
+      // currentlyHidden reflects the state *before* the toggle.
+      showToast(currentlyHidden ? 'Folder shown' : 'Folder hidden');
     } catch {
       toggleTagHidden(currentFolder.id); // revert on failure
     }
-  }, [currentFolder, isTagHidden, toggleTagHidden, toggleTagVisibility, closeDropdown]);
+  }, [currentFolder, isTagHidden, toggleTagHidden, toggleTagVisibility, showToast, closeDropdown]);
 
   const handleDelete = useCallback(async () => {
     if (!currentFolder) return;
@@ -434,14 +439,22 @@ const FolderHeader = ({ searchQuery }) => {
 
     if (!window.confirm(msg)) return;
 
-    await deleteTag(currentFolder.id, { withNotes: true });
+    const { success, deletedNotesCount } = await deleteTag(currentFolder.id, { withNotes: true, silent: true });
+
+    if (success) {
+      showToast(
+        deletedNotesCount > 0
+          ? `Folder and ${deletedNotesCount} note${deletedNotesCount !== 1 ? 's' : ''} deleted`
+          : 'Folder deleted'
+      );
+    }
 
     if (parentFolder) {
       searchByTag(parentFolder.id, parentFolder.name);
     } else {
       handleSearch('');
     }
-  }, [currentFolder, subfolders, parentFolder, deleteTag, searchByTag, handleSearch, closeDropdown]);
+  }, [currentFolder, subfolders, parentFolder, deleteTag, searchByTag, handleSearch, showToast, closeDropdown]);
 
   if (!currentFolder) return null;
 

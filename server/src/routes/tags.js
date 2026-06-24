@@ -148,8 +148,10 @@ router.patch('/:id/visibility', async (req, res) => {
 // Delete a tag
 router.delete('/:id', async (req, res) => {
   try {
+    let deletedNotesCount = 0;
     if (req.query.withNotes === 'true') {
       const noteIds = await Tag.getNoteIdsInFolder(req.params.id);
+      deletedNotesCount = noteIds.length;
       if (noteIds.length > 0) {
         await Note.bulkUpdate(noteIds, { is_deleted: true });
         const updatedNotes = await Note.findManyByIds(noteIds, true);
@@ -166,7 +168,7 @@ router.delete('/:id', async (req, res) => {
 
     req.app.get('io').emit('tag_deleted', req.params.id);
 
-    res.json({ message: 'Tag deleted successfully', tag });
+    res.json({ message: 'Tag deleted successfully', tag, deletedNotesCount });
   } catch (error) {
     console.error('Error deleting tag:', error);
     res.status(500).json({ message: 'Error deleting tag', error: error.message });

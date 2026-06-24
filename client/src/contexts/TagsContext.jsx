@@ -65,8 +65,9 @@ export const TagsProvider = ({ children }) => {
     }
   }, []);
 
-  // Create a new tag
-  const createTag = async (name, visible = true, isFolder = false, parentId = null) => {
+  // Create a new tag. Pass { silent: true } to suppress the default toast when
+  // the caller shows its own (e.g. folders/subfolders).
+  const createTag = async (name, visible = true, isFolder = false, parentId = null, { silent = false } = {}) => {
     try {
       const response = await tagsApi.createTag(name, visible, isFolder, parentId);
       
@@ -86,8 +87,10 @@ export const TagsProvider = ({ children }) => {
         }
       });
       
-      // Show success toast
-      showToast(`Tag #${response.tag.name} created`);
+      // Show success toast (unless the caller will show its own)
+      if (!silent) {
+        showToast(`Tag #${response.tag.name} created`);
+      }
 
       // Log successful creation
       console.log('Tag created successfully:', response.tag);
@@ -154,26 +157,29 @@ export const TagsProvider = ({ children }) => {
     }
   };
 
-  // Delete a tag
+  // Delete a tag. Pass { silent: true } to suppress the default toast (e.g. when
+  // a folder caller shows its own "Folder and N notes deleted" message).
+  // Returns { success, deletedNotesCount } so callers can report the note count.
   const deleteTag = async (id, options = {}) => {
+    const { silent = false } = options;
     try {
       // Get the tag name before deleting for the toast
       const tagToDelete = tags.find(tag => tag.id === id);
       const tagName = tagToDelete ? tagToDelete.name : '';
 
-      await tagsApi.deleteTag(id, options);
+      const result = await tagsApi.deleteTag(id, options);
       setTags(prevTags => prevTags.filter(tag => tag.id !== id));
-      
-      // Show success toast
-      if (tagName) {
+
+      // Show success toast (unless the caller will show its own)
+      if (tagName && !silent) {
         showToast(`Tag #${tagName} deleted`);
       }
-      
-      return true;
+
+      return { success: true, deletedNotesCount: result?.deletedNotesCount ?? 0 };
     } catch (err) {
       setError('Failed to delete tag');
       console.error(err);
-      return false;
+      return { success: false, deletedNotesCount: 0 };
     }
   };
 
