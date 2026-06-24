@@ -5,6 +5,13 @@ import styled from 'styled-components';
 // many ms instead of the toast vanishing instantly.
 const DISMISS_MS = 800;
 
+// Exit fade duration. Exported so the provider can drop the toast from state
+// only after the fade has played. Keep in sync with the CSS below.
+export const EXIT_MS = 220;
+
+// Past this horizontal drag (px) a swipe dismisses the toast; otherwise snaps back.
+const SWIPE_THRESHOLD = 80;
+
 // Maps a `variant` to a background color. Explicit `bgColor` overrides this.
 const VARIANT_BG = {
   warning: 'var(--warning-toast-bg)',
@@ -50,6 +57,9 @@ const ToastContainer = styled.div`
   pointer-events: auto;
   animation: toastFadeIn 0.3s ease-out;
   box-shadow: 0 2px 40px rgba(0, 0, 0, 0.3);
+  touch-action: pan-y; /* horizontal drags are ours (swipe-to-dismiss), vertical still scrolls */
+  opacity: ${props => (props.$exiting ? 0 : 1)};
+  transition: opacity 220ms ease; /* exit fade — keep in sync with EXIT_MS */
 
   @media (max-width: 600px) {
     display: flex;
@@ -133,12 +143,14 @@ const ProgressBar = styled.div`
  * this is what lets toasts safely stack when triggered by clicks.
  */
 const ToastItem = ({ toast, onHide }) => {
-  const { id, message, duration, action, loading, variant, bgColor, sticky } = toast;
+  const { id, message, duration, action, loading, variant, bgColor, sticky, exiting } = toast;
   const resolvedBg = bgColor || (variant ? VARIANT_BG[variant] : null);
 
+  const containerRef = useRef(null);
   const progressRef = useRef(null);
   const timerRef = useRef(null);
   const dismissingRef = useRef(false);
+  const swipeRef = useRef(null); // active touch-drag state, or null
 
   // Early dismiss: freeze the progress bar at its current width, then race it to
   // empty over DISMISS_MS before removing the toast (instead of vanishing).
@@ -181,8 +193,61 @@ const ToastItem = ({ toast, onHide }) => {
     finishAndHide();
   };
 
+  // --- Swipe to dismiss (touch). Drags the toast horizontally; past the
+  // threshold it flings off-screen and dismisses, otherwise it snaps back. We
+  // drive the transform directly on the node (no re-renders mid-drag). `touch-
+  // action: pan-y` keeps vertical scrolling intact. ---
+  const handleTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    swipeRef.current = { startX: e.touches[0].clientX, startY: e.touches[0].clientY, dx: 0, active: false };
+  };
+
+  const handleTouchMove = (e) => {
+    const s = swipeRef.current;
+    const el = containerRef.current;
+    if (!s || !el) return;
+    const dx = e.touches[0].clientX - s.startX;
+    const dy = e.touches[0].clientY - s.startY;
+    if (!s.active) {
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) { swipeRef.current = null; return; } // vertical → scroll
+      if (Math.abs(dx) < 8) return;
+      s.active = true;
+    }
+    s.dx = dx;
+    el.style.transition = 'none';
+    el.style.transform = `translateX(${dx}px)`;
+    el.style.opacity = String(Math.max(1 - Math.abs(dx) / 250, 0.2));
+  };
+
+  const handleTouchEnd = () => {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    const el = containerRef.current;
+    if (!s || !s.active || !el) return;
+    el.style.transition = `transform ${EXIT_MS}ms ease, opacity ${EXIT_MS}ms ease`;
+    if (Math.abs(s.dx) > SWIPE_THRESHOLD) {
+      const off = (s.dx > 0 ? 1 : -1) * (window.innerWidth || 400);
+      el.style.transform = `translateX(${off}px)`;
+      el.style.opacity = '0';
+      if (timerRef.current) clearTimeout(timerRef.current);
+      dismissingRef.current = true;
+      onHide(id);
+    } else {
+      el.style.transform = 'translateX(0)';
+      el.style.opacity = '';
+    }
+  };
+
   return (
-    <ToastContainer data-toast-id={id} $bgColor={resolvedBg}>
+    <ToastContainer
+      ref={containerRef}
+      data-toast-id={id}
+      $bgColor={resolvedBg}
+      $exiting={exiting}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {loading && <Spinner />}
       <ToastMessage>{message}</ToastMessage>
       {action && <ActionButton onClick={handleActionClick}>{action.label}</ActionButton>}
@@ -223,7 +288,9 @@ const ToastViewport = ({ toasts, onHide }) => {
           el.style.transform = `translateY(${oldTop - rect.top}px)`;
           void el.offsetHeight; // reflow so the next change transitions
           requestAnimationFrame(() => {
-            el.style.transition = `transform ${REFLOW_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            // Include opacity so this lingering inline transition doesn't clobber
+            // the exit fade if this same toast is dismissed later.
+            el.style.transition = `transform ${REFLOW_MS}ms cubic-bezier(0.4, 0, 0.2, 1), opacity ${EXIT_MS}ms ease`;
             el.style.transform = '';
           });
         }

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import ToastViewport from '../components/ToastViewport';
+import ToastViewport, { EXIT_MS } from '../components/ToastViewport';
 
 // Context for showing toasts from anywhere in the app
 const ToastContext = createContext(null);
@@ -46,10 +46,21 @@ export const useToast = () => {
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
   const idRef = useRef(0);
+  // Pending "actually remove after the exit animation" timers, keyed by id.
+  const removeTimersRef = useRef({});
 
-  const hideToast = useCallback((id) => {
+  const removeNow = useCallback((id) => {
+    delete removeTimersRef.current[id];
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
+
+  // Two-phase removal: flag the toast `exiting` (triggers the fade), then drop
+  // it from state once the animation has played. Covers every dismissal path.
+  const hideToast = useCallback((id) => {
+    if (removeTimersRef.current[id]) return; // already exiting
+    removeTimersRef.current[id] = setTimeout(() => removeNow(id), EXIT_MS);
+    setToasts(prev => prev.map(t => (t.id === id ? { ...t, exiting: true } : t)));
+  }, [removeNow]);
 
   /**
    * Show a toast.
@@ -81,6 +92,12 @@ export const ToastProvider = ({ children }) => {
       bgColor: o.bgColor || null,
       sticky,
     };
+
+    // Re-showing a toast that's mid-exit: cancel its pending removal so it stays.
+    if (o.id && removeTimersRef.current[o.id]) {
+      clearTimeout(removeTimersRef.current[o.id]);
+      delete removeTimersRef.current[o.id];
+    }
 
     setToasts(prev => {
       // If a caller supplies a stable id that's already present, update in
