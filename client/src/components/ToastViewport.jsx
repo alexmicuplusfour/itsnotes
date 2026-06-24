@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
 
 // When a toast is dismissed early, the progress bar races to empty over this
@@ -182,7 +182,7 @@ const ToastItem = ({ toast, onHide }) => {
   };
 
   return (
-    <ToastContainer $bgColor={resolvedBg}>
+    <ToastContainer data-toast-id={id} $bgColor={resolvedBg}>
       {loading && <Spinner />}
       <ToastMessage>{message}</ToastMessage>
       {action && <ActionButton onClick={handleActionClick}>{action.label}</ActionButton>}
@@ -191,14 +191,52 @@ const ToastItem = ({ toast, onHide }) => {
   );
 };
 
+// How long the survivors take to slide into their new positions on removal.
+const REFLOW_MS = 250;
+
 /**
  * Renders the stack of active toasts. Owned exclusively by ToastProvider.
+ *
+ * Uses a FLIP pass so that when a toast is removed, the remaining ones slide
+ * smoothly into their new positions instead of snapping.
  */
 const ToastViewport = ({ toasts, onHide }) => {
+  const containerRef = useRef(null);
+  const prevRectsRef = useRef(new Map());
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const prev = prevRectsRef.current;
+    const next = new Map();
+
+    if (container) {
+      container.querySelectorAll('[data-toast-id]').forEach((el) => {
+        const tid = el.getAttribute('data-toast-id');
+        const rect = el.getBoundingClientRect();
+        next.set(tid, rect.top);
+
+        const oldTop = prev.get(tid);
+        // Only animate items that existed before and actually moved (a brand-new
+        // toast has no previous position and keeps its own entry animation).
+        if (oldTop !== undefined && oldTop !== rect.top) {
+          el.style.transition = 'none';
+          el.style.transform = `translateY(${oldTop - rect.top}px)`;
+          void el.offsetHeight; // reflow so the next change transitions
+          requestAnimationFrame(() => {
+            el.style.transition = `transform ${REFLOW_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`;
+            el.style.transform = '';
+          });
+        }
+      });
+    }
+
+    prevRectsRef.current = next;
+  });
+
   if (!toasts.length) return null;
 
   return (
-    <Viewport>
+    <Viewport ref={containerRef}>
       {toasts.map(toast => (
         toast.message ? <ToastItem key={toast.id} toast={toast} onHide={onHide} /> : null
       ))}
