@@ -138,7 +138,6 @@ const SafePanel = styled.div`
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--border-color);
   border-radius: 10px;
   background: rgba(127, 127, 127, 0.04);
 `;

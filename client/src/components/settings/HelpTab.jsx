@@ -61,6 +61,27 @@ const HelpTab = () => (
     </SectionContainer>
 
     <SectionContainer>
+      <SectionTitle>Books, Movies & TV Shows</SectionTitle>
+      <p style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+        Paste a link from Goodreads (books) or IMDb / TMDB (movies & TV shows) and itsnotes turns it into a rich card — cover or poster, author or director, rating, year, and more — instead of a plain link.
+      </p>
+
+      <p style={{ marginBottom: '8px', fontSize: '14px', color: 'var(--text-secondary-color)', fontWeight: 500 }}>
+        How to add one
+      </p>
+      <ol style={{ marginTop: 0, marginBottom: '16px', paddingLeft: '20px', fontSize: '14px', color: 'var(--text-secondary-color)', lineHeight: 1.6 }}>
+        <li>Copy the page link from Goodreads, IMDb, or TMDB.</li>
+        <li>Open a note and click the Add Content <strong>(+)</strong> menu.</li>
+        <li>The menu detects the link on your clipboard and offers <strong>Add Goodreads / IMDb / TMDB Title</strong> — click it.</li>
+        <li>The details are fetched automatically and a card is inserted into the note.</li>
+      </ol>
+
+      <p style={{ marginTop: '20px', marginBottom: 0, fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+        Adding the same title again reuses the existing card rather than creating a duplicate.
+      </p>
+    </SectionContainer>
+
+    <SectionContainer>
       <SectionTitle>Advanced Search Guide</SectionTitle>
       <p style={{ marginBottom: '16px', fontSize: '14px', color: 'var(--text-secondary-color)' }}>
         This search supports advanced operators to help you find your notes more efficiently.

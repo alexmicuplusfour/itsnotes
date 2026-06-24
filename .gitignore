@@ -115,3 +115,6 @@ build
 
 # Local bug tracking
 bugs/
+
+# Cloudflare API Shield schema (generated)
+itsnotes-openapi.json
