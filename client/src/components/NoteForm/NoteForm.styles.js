@@ -598,7 +598,48 @@ export const HighlightContainer = styled.div`
       font-size: 14px;
       text-wrap-mode: wrap;
       white-space: break-spaces;
-    }  
+    }
+
+  /* Table styles — mirror TiptapEditor's so the disposable search view
+     renders tables identically to the live editor. */
+  table.tiptap-table {
+      border-collapse: collapse;
+      margin: 1rem 0;
+      width: 100%;
+      table-layout: auto;
+      font-size: 14px;
+      overflow-x: auto;
+      display: block;
+      max-width: 100%;
+    }
+
+  table.tiptap-table th,
+  table.tiptap-table td {
+      border: 1px solid var(--border-transparent, rgba(128, 128, 128, 0.3));
+      padding: 0.5rem 0.75rem;
+      vertical-align: top;
+      text-align: left;
+      min-width: 80px;
+      /* The container sets word-break: break-word for prose, but the editor
+         (.ProseMirror) doesn't. Reset it inside cells so columns size the
+         same way in both views — otherwise long reference links break mid
+         token here, shrinking col 2 and shifting the layout. */
+      word-break: normal;
+    }
+
+  table.tiptap-table th {
+      background-color: var(--fill-subtle, rgba(128, 128, 128, 0.1));
+      font-weight: 600;
+    }
+
+  table.tiptap-table tr:nth-child(even) td {
+      background-color: var(--fill-subtle, rgba(128, 128, 128, 0.05));
+    }
+
+  table.tiptap-table p {
+      margin: 0;
+      min-height: auto;
+    }
 
   /* Optional: You can also define highlight styles here */
   .highlighted-match {
