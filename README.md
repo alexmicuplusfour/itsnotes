@@ -25,23 +25,26 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
 
 <table>
   <tr>
+    <td><img src="docs/screenshots/list-view-a.png"/></td>
+    <td><img src="docs/screenshots/list-view-b.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/grid-light.png"/></td>
-    <td><img src="docs/screenshots/list-view.png"/></td>
-  </tr>
-  <tr>
     <td><img src="docs/screenshots/search.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/tagging.png"/></td>
-  </tr>
-  <tr>
     <td><img src="docs/screenshots/settings-backup.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/settings-markdown.png"/></td>
-  </tr>
-  <tr>
     <td><img src="docs/screenshots/settings-tagging.png"/></td>
-    <td><img src="docs/screenshots/settings-ai.png"/></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/settings-ai.png"/></td>
     <td><img src="docs/screenshots/note-dark.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/note-fullscreen.png"/></td>
   </tr>
 </table>
