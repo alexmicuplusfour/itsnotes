@@ -8,6 +8,8 @@ Instead of an endless wall of text, the feed is broken down by month markers. Th
 
 **[Try the demo →](https://try.itsnotes.app)**
 
+<a href="https://openalternative.co/itsnotes?utm_source=openalternative&utm_medium=badge&utm_campaign=embed&utm_content=tool-itsnotes" target="_blank"><img src="https://openalternative.co/itsnotes/badge.svg?theme=light&width=200&height=50" width="200" height="50" alt="itsnotes badge" loading="lazy" /></a>
+
 **Features:**
 
 - **Better navigation:** The timeline has month markers to break up the list. There are quick-access panels for colors, tags, saved searches, and a calendar.
