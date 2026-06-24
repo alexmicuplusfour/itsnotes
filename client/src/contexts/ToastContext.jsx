@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
-import ToastViewport from '../components/SuccessToast';
+import ToastViewport from '../components/ToastViewport';
 
 // Context for showing toasts from anywhere in the app
 const ToastContext = createContext(null);

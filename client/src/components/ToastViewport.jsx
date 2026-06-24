@@ -1,5 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import styled from 'styled-components';
+
+// When a toast is dismissed early, the progress bar races to empty over this
+// many ms instead of the toast vanishing instantly.
+const DISMISS_MS = 800;
 
 // Maps a `variant` to a background color. Explicit `bgColor` overrides this.
 const VARIANT_BG = {
@@ -132,23 +136,49 @@ const ToastItem = ({ toast, onHide }) => {
   const { id, message, duration, action, loading, variant, bgColor, sticky } = toast;
   const resolvedBg = bgColor || (variant ? VARIANT_BG[variant] : null);
 
+  const progressRef = useRef(null);
+  const timerRef = useRef(null);
+  const dismissingRef = useRef(false);
+
+  // Early dismiss: freeze the progress bar at its current width, then race it to
+  // empty over DISMISS_MS before removing the toast (instead of vanishing).
+  const finishAndHide = useCallback(() => {
+    if (dismissingRef.current) return;
+    dismissingRef.current = true;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    const bar = progressRef.current;
+    if (sticky || !bar) {
+      onHide(id);
+      return;
+    }
+    const current = getComputedStyle(bar).transform;
+    bar.style.animation = 'none';
+    bar.style.transform = current && current !== 'none' ? current : 'scaleX(0)';
+    void bar.offsetWidth; // reflow so the next change animates as a transition
+    bar.style.transition = `transform ${DISMISS_MS}ms linear`;
+    bar.style.transform = 'scaleX(0)';
+    setTimeout(() => onHide(id), DISMISS_MS);
+  }, [id, sticky, onHide]);
+
   useEffect(() => {
     if (sticky) return undefined;
-    const dismiss = () => onHide(id);
-    const timer = setTimeout(dismiss, duration);
-    window.addEventListener('click', dismiss);
-    window.addEventListener('scroll', dismiss, true);
+    // Natural expiry: the bar has already drained to empty, so just remove it.
+    timerRef.current = setTimeout(() => onHide(id), duration);
+    const onInteraction = () => finishAndHide();
+    window.addEventListener('click', onInteraction);
+    window.addEventListener('scroll', onInteraction, true);
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener('click', dismiss);
-      window.removeEventListener('scroll', dismiss, true);
+      clearTimeout(timerRef.current);
+      window.removeEventListener('click', onInteraction);
+      window.removeEventListener('scroll', onInteraction, true);
     };
-  }, [id, duration, sticky, onHide]);
+  }, [id, duration, sticky, onHide, finishAndHide]);
 
   const handleActionClick = (e) => {
     e.stopPropagation();
     action.onClick();
-    onHide(id);
+    finishAndHide();
   };
 
   return (
@@ -156,7 +186,7 @@ const ToastItem = ({ toast, onHide }) => {
       {loading && <Spinner />}
       <ToastMessage>{message}</ToastMessage>
       {action && <ActionButton onClick={handleActionClick}>{action.label}</ActionButton>}
-      {!sticky && <ProgressBar $duration={duration} />}
+      {!sticky && <ProgressBar ref={progressRef} $duration={duration} />}
     </ToastContainer>
   );
 };
