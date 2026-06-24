@@ -15,7 +15,7 @@ Instead of an endless wall of text, the feed is broken down by month markers. Th
 - **View modes:** The standard masonry grid, a stacked view, and a proper dense list view.
 - **Customization:** A heavy settings modal to tweak layouts, page backgrounds, and form behaviors.
 - **Easy imports:** Drop in a Google Takeout `.zip` to import Keep data, or bulk upload `.txt` and `.md` files directly.
-- **Markdown mirror:** Continuously export every note to a folder as a `.md` file with a metadata header (tags, color, reminders, pin/archive/trash state), images and attachments alongside — great for backups, grep, git, or opening in Obsidian.
+- **Markdown mirror:** Two-way sync between your notes and a folder of `.md` files. Every note is continuously written out with a metadata header (tags, color, reminders, pin/archive/trash state) and images/attachments alongside, and edits you make to the files in any editor (Obsidian, VS Code) are pulled back into your notes — automatically if you want. The database stays the source of truth: conflicting edits are kept safe in a `conflicts/` folder and renames are tracked by note ID, never duplicated. Great for backups, grep, git, or living in Obsidian.
 - **Quality of life:** Built-in note history for revisions, plus automatic metadata fetching for books and movies.
 - **Optional AI stuff:** Hooks for auto-tagging and reminder parsing, plus a built-in MCP server so external AI clients can query your database.
 
