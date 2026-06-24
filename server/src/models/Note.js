@@ -669,8 +669,9 @@ class Note {
    * Enhanced tokenizer that properly handles OR groups and complex operators
    */
   static tokenizeQueryWithOrSupport(query) {
-    // First, tokenize normally to get individual terms
-    const basicTokens = this.tokenizeQuery(query);
+    // First, tokenize normally to get individual terms, then rejoin any
+    // spaced adjacency wildcard ("a * b") that tokenizing split into 3 tokens.
+    const basicTokens = this.mergeSpacedWildcards(this.tokenizeQuery(query));
 
     // Filter out standalone OR tokens that aren't part of a valid OR expression
     // (e.g., trailing OR or leading OR)
@@ -726,6 +727,37 @@ class Note {
   }
 
   /**
+   * Rejoin a spaced adjacency wildcard: the help advertises "a * b" (word, then
+   * exactly one word, then word). Tokenizing splits that into ['a','*','b'],
+   * which the parser would otherwise read as two separate words plus a lone '*'.
+   * Merge "word * word" back into the single "a * b" token that
+   * createWildcardRegex() already knows how to turn into an adjacency pattern.
+   */
+  static mergeSpacedWildcards(tokens) {
+    // A term qualifies as a wildcard neighbour only if it's a plain word — not an
+    // operator, OR, a quoted phrase, or already containing a wildcard.
+    const isPlainWord = (t) =>
+      !!t &&
+      t.toUpperCase() !== 'OR' &&
+      !t.startsWith('#') && !t.startsWith('$') && !t.startsWith('-') &&
+      !t.startsWith('"') && !t.startsWith("'") &&
+      !t.startsWith('yr:') && !t.includes('*');
+
+    const out = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const left = out[out.length - 1];
+      const right = tokens[i + 1];
+      if (tokens[i] === '*' && isPlainWord(left) && isPlainWord(right)) {
+        out[out.length - 1] = `${left} * ${right}`;
+        i++; // consume the right-hand neighbour
+        continue;
+      }
+      out.push(tokens[i]);
+    }
+    return out;
+  }
+
+  /**
    * Tokenize search query handling quotes and special operators
    */
   static tokenizeQuery(query) {
@@ -759,9 +791,19 @@ class Note {
       tokens.push(currentToken);
     }
 
-    console.log('[SEARCH DEBUG] tokenizeQuery input:', query, '-> output:', tokens);
+    // Parentheses are used purely for visual grouping (e.g. "(zoom OR teams) z").
+    // Grouping itself is driven by OR adjacency, so the parens are decorative and
+    // must be stripped — otherwise they get glued onto terms ("(zoom", "teams)")
+    // and end up in literal ILIKE patterns that match nothing. Don't touch quoted
+    // phrases, which may legitimately contain parentheses.
+    const stripped = tokens.map(token => {
+      if (token.startsWith('"') || token.startsWith("'")) return token;
+      return token.replace(/^\(+/, '').replace(/\)+$/, '');
+    });
 
-    return tokens.filter(token => token.trim().length > 0);
+    console.log('[SEARCH DEBUG] tokenizeQuery input:', query, '-> output:', stripped);
+
+    return stripped.filter(token => token.trim().length > 0);
   }
 
   /**
@@ -1733,3 +1775,5 @@ class Note {
 }
 
 module.exports = Note;
+// Exposed for unit testing the wildcard/regex helpers without a database.
+module.exports.SearchQueryBuilder = SearchQueryBuilder;
