@@ -53,14 +53,15 @@ const AutoTagOptions = styled.div`
 // auto/suggest selector; `tags` shows the tag multi-select. Some features
 // expose only one of the two.
 const FEATURES = [
+  { feature: AUTO_TAG_FEATURES.ATTACHMENT_ADDED, id: 'attachment-added-autotag-toggle', icon: 'attachment', title: 'Attachment Added', description: 'Automatically tag a note when you add the first file attachment to it. Subsequent attachments won’t re-tag.', mode: true, tags: true },
+  { feature: AUTO_TAG_FEATURES.URL_CONTENT, id: 'url-content-autotag-toggle', icon: 'link', title: 'URL Content', description: 'Automatically tag notes when adding content from a URL (articles, web pages).', mode: true, tags: true },
+  { feature: AUTO_TAG_FEATURES.LINKED_NOTE, id: 'linked-note-autotag-toggle', icon: 'notes', title: 'Linked Note', description: 'Automatically tag notes created via "Add Note" from within another note.', mode: false, tags: true },
+  { feature: AUTO_TAG_FEATURES.TAG_SEARCH, id: 'tag-search-autotag-toggle', icon: 'search', title: 'Tag Search', description: 'When creating a note while viewing tag search results, add the searched tag(s) to the new note.', mode: true, tags: false },
   { feature: AUTO_TAG_FEATURES.REMINDERS, id: 'reminder-autotag-toggle', icon: 'bell', title: 'Reminders', description: 'Automatically tag notes when creating reminders from them.', mode: true, tags: true },
+  { feature: AUTO_TAG_FEATURES.AI_GENERATED, id: 'ai-generated-autotag-toggle', icon: 'magic', title: 'AI Tag Generation', description: 'Configure behavior when using the "Auto-tag" action in the tag picker.', mode: true, tags: false },
   { feature: AUTO_TAG_FEATURES.BOOK_FINISHED, id: 'book-finished-autotag-toggle', icon: 'book', title: 'Book Finished', description: 'Automatically tag notes when marking a book as finished.', mode: true, tags: true },
   { feature: AUTO_TAG_FEATURES.BOOK_ADDED, id: 'book-added-autotag-toggle', icon: 'book', title: 'Book Added', description: 'Automatically tag notes when adding a book from Goodreads.', mode: true, tags: true },
   { feature: AUTO_TAG_FEATURES.IMDB_ADDED, id: 'imdb-added-autotag-toggle', icon: 'video', title: 'IMDB Added', description: 'Automatically tag notes when adding a movie or show from IMDB.', mode: true, tags: true },
-  { feature: AUTO_TAG_FEATURES.URL_CONTENT, id: 'url-content-autotag-toggle', icon: 'link', title: 'URL Content', description: 'Automatically tag notes when adding content from a URL (articles, web pages).', mode: true, tags: true },
-  { feature: AUTO_TAG_FEATURES.TAG_SEARCH, id: 'tag-search-autotag-toggle', icon: 'search', title: 'Tag Search', description: 'When creating a note while viewing tag search results, add the searched tag(s) to the new note.', mode: true, tags: false },
-  { feature: AUTO_TAG_FEATURES.AI_GENERATED, id: 'ai-generated-autotag-toggle', icon: 'magic', title: 'AI Tag Generation', description: 'Configure behavior when using the "Auto-tag" action in the tag picker.', mode: true, tags: false },
-  { feature: AUTO_TAG_FEATURES.LINKED_NOTE, id: 'linked-note-autotag-toggle', icon: 'notes', title: 'Linked Note', description: 'Automatically tag notes created via "Add Note" from within another note.', mode: false, tags: true },
 ];
 
 const AutoTagFeature = ({ config, isDarkTheme }) => {

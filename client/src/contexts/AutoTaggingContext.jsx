@@ -13,6 +13,7 @@ export const AUTO_TAG_FEATURES = {
   TAG_SEARCH: 'tag_search',
   AI_GENERATED: 'ai_generated',
   LINKED_NOTE: 'linked_note',
+  ATTACHMENT_ADDED: 'attachment_added',
   // Add more features here as needed
 };
 
@@ -56,6 +57,11 @@ const DEFAULT_AUTO_TAG_SETTINGS = {
   [AUTO_TAG_FEATURES.LINKED_NOTE]: {
     enabled: false, // Disabled by default - user needs to configure
     mode: 'auto', // Only auto mode supported for this feature
+    tagIds: [], // Empty - user should select their own tags
+  },
+  [AUTO_TAG_FEATURES.ATTACHMENT_ADDED]: {
+    enabled: false, // Disabled by default - user needs to configure
+    mode: 'auto', // 'auto' = directly applied, 'suggest' = suggested
     tagIds: [], // Empty - user should select their own tags
   },
 };

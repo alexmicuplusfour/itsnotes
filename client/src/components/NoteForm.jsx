@@ -2231,8 +2231,22 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       return;
     }
 
+    // Detect whether this is the note's first file attachment. We only
+    // auto-tag on the first one — re-tagging on every subsequent attachment
+    // would be noise. "First" = the note had zero attachment nodes before now.
+    let existingAttachments = 0;
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'attachment') existingAttachments++;
+    });
+    const isFirstAttachment = existingAttachments === 0;
+
     await addAttachmentsToEditor(files, editor);
-  }, [addAttachmentsToEditor]);
+
+    if (isFirstAttachment) {
+      handleAutoApplyTags(AUTO_TAG_FEATURES.ATTACHMENT_ADDED);
+      handleSuggestTags(AUTO_TAG_FEATURES.ATTACHMENT_ADDED);
+    }
+  }, [addAttachmentsToEditor, handleAutoApplyTags, handleSuggestTags]);
 
   // Compute inline style for color CSS variable - avoids styled-components regenerating styles per color
   // IMPORTANT: Do NOT call getComputedStyle here - it forces synchronous layout calculation!
