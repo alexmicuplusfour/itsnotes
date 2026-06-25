@@ -1760,8 +1760,11 @@ export const NotesProvider = ({ children }) => {
         // This ensures that preview cards are updated even if the socket event is delayed
         updateNoteInCache(confirmedNote.id, confirmedNote);
 
-        // Invalidate full notes cache for this note - it will be re-fetched with full content next time
-        removeFromCache(id);
+        // Seed the full-note prefetch cache with the confirmed server copy instead of
+        // invalidating it. The PUT response is the same Note.findById(id, true) shape as
+        // GET /notes/:id?includeDetails=true (tags, image thumbnails, objects), so the note
+        // stays warm and the grid's viewport prefetch won't re-GET the note we just saved.
+        addToCache(id, confirmedNote);
 
         // Prefetch queue cleanup is now handled by the usePrefetch hook
       }
@@ -1778,7 +1781,7 @@ export const NotesProvider = ({ children }) => {
         return rest;
       });
     }
-  }, [_updateOrRemoveNoteInState, loadNotes, removeFromCache]);
+  }, [_updateOrRemoveNoteInState, loadNotes, removeFromCache, addToCache]);
 
   // --- Note Status Changes ---
 
