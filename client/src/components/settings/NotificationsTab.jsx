@@ -12,7 +12,22 @@ import pushoverLogo from '../../assets/images/favicon_pushover.png';
 import pushbulletLogo from '../../assets/images/favicon_pushbullet.png';
 import ntfyLogo from '../../assets/images/favicon_ntfy.png';
 
-const serviceLogoStyle = { width: 18, height: 18, borderRadius: 4, flexShrink: 0 };
+// Rounded "app-icon" tile that gives each brand logo real visual weight
+// instead of a tiny floating favicon. Neutral gray fill, no border.
+const ServiceIcon = styled.span`
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--input-bg-color);
+  img {
+    width: 22px;
+    height: 22px;
+  }
+`;
 
 const Description = styled.p`
   font-size: 14px;
@@ -42,7 +57,7 @@ const CardTitle = styled.div`
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
 `;
 
 // Subtle outline button, matching the "Refresh models" control in the AI tab.
@@ -107,7 +122,7 @@ const NotificationsTab = ({ settings, onChange }) => (
 
     <Card>
       <CardHeader>
-        <CardTitle><img src={pushoverLogo} alt="" style={serviceLogoStyle} />Pushover</CardTitle>
+        <CardTitle><ServiceIcon><img src={pushoverLogo} alt="" /></ServiceIcon>Pushover</CardTitle>
         <TestControl
           service="pushover"
           config={{ user: settings.PUSHOVER_USER, token: settings.PUSHOVER_TOKEN }}
@@ -135,7 +150,7 @@ const NotificationsTab = ({ settings, onChange }) => (
 
     <Card>
       <CardHeader>
-        <CardTitle><img src={pushbulletLogo} alt="" style={serviceLogoStyle} />Pushbullet</CardTitle>
+        <CardTitle><ServiceIcon><img src={pushbulletLogo} alt="" /></ServiceIcon>Pushbullet</CardTitle>
         <TestControl
           service="pushbullet"
           config={{ token: settings.PUSHBULLET_TOKEN }}
@@ -154,7 +169,7 @@ const NotificationsTab = ({ settings, onChange }) => (
 
     <Card>
       <CardHeader>
-        <CardTitle><img src={ntfyLogo} alt="" style={serviceLogoStyle} />Ntfy</CardTitle>
+        <CardTitle><ServiceIcon><img src={ntfyLogo} alt="" /></ServiceIcon>Ntfy</CardTitle>
         <TestControl
           service="ntfy"
           config={{ server: settings.NTFY_SERVER, topic: settings.NTFY_TOPIC }}
