@@ -134,8 +134,12 @@ app.use((req, res, next) => {
     if (fullPath.startsWith('/api/notes') && req.method !== 'GET') {
       if (body.notes) {
         io.emit('notes_updated', body.notes);
-      } else if (body.note && req.method !== 'POST') {
-        // Only emit note_updated for PUT/PATCH, not POST (creation handled by route)
+      } else if (body.note && req.method !== 'POST' && !res.locals.skipNoteBroadcast) {
+        // Central broadcast point for note updates: emit note_updated for any
+        // PUT/PATCH that returns a { note } (not POST — creation emits note_created).
+        // Route handlers no longer emit this themselves (that caused double
+        // broadcasts); a route can set res.locals.skipNoteBroadcast to suppress it
+        // when nothing actually changed (see PUT /:id in routes/notes.js).
         io.emit('note_updated', body.note);
       } else if (req.method === 'DELETE' && !body.tags) {
         // Only emit note_deleted if this is an actual note deletion (not tag removal)
