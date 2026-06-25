@@ -104,7 +104,12 @@ router.post('/notes/:noteId/images', async (req, res) => {
       if (!data.startsWith('data:image/')) {
         return res.status(400).json({ message: 'Invalid image data.' });
       }
-      if (size && size > DEMO_MAX_IMAGE_SIZE) {
+      // Measure the actual payload, not the client-supplied `size` (which is
+      // self-reported and trivially omitted/faked). `data` is a base64 data URL
+      // — the decoded byte length is ~3/4 of the base64 character count.
+      const base64 = data.slice(data.indexOf(',') + 1);
+      const approxBytes = Math.floor(base64.length * 0.75);
+      if (approxBytes > DEMO_MAX_IMAGE_SIZE) {
         return res.status(413).json({ message: 'Images must be under 10MB in demo mode.' });
       }
     }

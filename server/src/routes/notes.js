@@ -2,7 +2,7 @@ const express = require('express');
 const Note = require('../models/Note');
 const Tag = require('../models/Tag');
 const db = require('../db');
-const { blockInDemo } = require('../middleware/demoGuard');
+const { blockInDemo, limitNoteSizeInDemo } = require('../middleware/demoGuard');
 const router = express.Router();
 
 // Pull unique object-card ids out of note HTML without spinning up a full DOM.
@@ -203,7 +203,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create a new note
-router.post('/', async (req, res) => {
+router.post('/', limitNoteSizeInDemo, async (req, res) => {
   try {
     const { title, content, is_pinned, color, created_at } = req.body;
     if (!content && !title) {
@@ -309,7 +309,7 @@ router.post('/:id/duplicate', async (req, res) => {
 });
 
 // Update a note
-router.put('/:id', async (req, res) => {
+router.put('/:id', limitNoteSizeInDemo, async (req, res) => {
   const noteId = req.params.id;
   const { title, content, is_pinned, is_archived, is_deleted, color } = req.body;
   const MAX_VERSIONS_TO_KEEP = 8; // Keep your existing constants

@@ -90,9 +90,13 @@ app.set('io', io);
 // Middleware
 app.use(cors()); // Consider more specific CORS settings for production
 
-// Configure Express to handle large file uploads - MUST come before routes
-app.use(express.json({ limit: '1000mb' }));
-app.use(express.urlencoded({ limit: '1000mb', extended: true }));
+// Configure Express body limits - MUST come before routes. 50mb is generous
+// headroom for the largest legitimate JSON body (a base64-encoded image, which
+// the server then re-encodes down) while preventing a single request from
+// buffering hundreds of MB into memory. File imports/backups use multipart
+// (multer), not these parsers, so they aren't bound by this.
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Set server timeouts for large file handling (applies to the HTTPS server)
 server.timeout = 3600000; // 1 hour
