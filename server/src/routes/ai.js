@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { combinePrompts } = require('../constants/aiPrompts');
 const { getAIProvider, getDefaultModel } = require('../services/aiProvider');
+const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -41,6 +42,14 @@ router.post('/suggest-tags', async (req, res) => {
       return res.status(400).json({ error: 'No available tags to choose from' });
     }
 
+    // The client sends the note's stored HTML. Strip it to clean plain text so the
+    // model reads the actual content, not markup, image tags, or img alt/filename noise.
+    const plainContent = convertHtmlToPlainText(noteContent);
+
+    if (!plainContent) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
     const corePrompt = process.env.AI_PROMPT_AUTO_TAG || '';
     const customAdditions = process.env.AI_PROMPT_AUTO_TAG_CUSTOM || '';
     const basePrompt = combinePrompts(corePrompt, customAdditions);
@@ -49,7 +58,7 @@ router.post('/suggest-tags', async (req, res) => {
       ${basePrompt}
 
       Here is the note content:
-      "${noteContent}"
+      "${plainContent}"
 
       Here is the list of available tags:
       ${availableTags.map(t => `- ${t.name}`).join('\n')}
@@ -95,6 +104,14 @@ router.post('/summarize', async (req, res) => {
       return res.status(400).json({ error: 'Note content is required' });
     }
 
+    // The client sends the note's stored HTML. Strip it to clean plain text so the
+    // model summarizes the actual content, not markup or image tags.
+    const plainContent = convertHtmlToPlainText(noteContent);
+
+    if (!plainContent) {
+      return res.status(400).json({ error: 'Note content is required' });
+    }
+
     const corePrompt = process.env.AI_PROMPT_SUMMARIZE || '';
     const customAdditions = process.env.AI_PROMPT_SUMMARIZE_CUSTOM || '';
     const systemPrompt = combinePrompts(corePrompt, customAdditions);
@@ -103,7 +120,7 @@ router.post('/summarize', async (req, res) => {
     const model = process.env.AI_MODEL_SUMMARIZE || getDefaultModel('summarize');
     const summary = await provider.chat({
       system: systemPrompt,
-      messages: [{ role: 'user', content: noteContent }],
+      messages: [{ role: 'user', content: plainContent }],
       model,
     });
 
