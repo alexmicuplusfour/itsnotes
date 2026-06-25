@@ -29,15 +29,8 @@ const SelectionCount = styled.div`
   color: var(--text-color-contrast);
 `;
 
-// Styled component for the bulk action buttons container
-const BulkActionsContainer = styled.div`
-  display: flex;
-  align-items: center;
-  position: relative; /* For color picker positioning */
-  gap: 14px;
-`;
-
 // Removed BulkColorPicker and BulkColorButton styled components
+// (bulk action buttons now live in the floating SelectionPill below)
 
 const HeaderContainer = styled.header`
   position: fixed;
@@ -565,6 +558,131 @@ const NewNoteButton = styled.button`
   `}
 `;
 
+// --- Bulk selection action pill (replaces the floating "new note" button while
+// notes are selected). Anchored where the FAB sits: bottom-right on desktop,
+// bottom-centered on mobile. Glassy look mirrors the editor's BottomActionContainer. ---
+const pillIn = keyframes`
+  from { opacity: 0; transform: translateY(12px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+`;
+
+const SelectionPillWrapper = styled.div`
+  position: fixed;
+  bottom: ${props => props.$headerHidden ? '20px' : '30px'};
+  right: 30px;
+  z-index: 901;
+
+  @media (max-width: 600px) {
+    right: 0;
+    left: 0;
+    margin-left: auto;
+    margin-right: auto;
+    width: fit-content;
+    max-width: calc(100% - 24px);
+  }
+`;
+
+const SelectionPill = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 50vh;
+  background-color: var(--foreground-color);
+  box-shadow: 0 2px 14px var(--shadow-color);
+  color: var(--text-color-contrast);
+  animation: ${pillIn} 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  @media (max-width: 600px) {
+    /* Allow horizontal scroll if the action set is wider than the screen */
+    overflow-x: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+`;
+
+const SelectionExitButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color-contrast);
+  border-radius: 50vh;
+  padding: 4px 10px 4px 6px;
+  height: 36px;
+  flex-shrink: 0;
+
+  /* Pill is a contrast surface (--foreground-color), so use the inverse-surface
+     hover tone so it stays visible against the dark/light pill. */
+  @media (hover: hover) {
+    &:hover { background-color: var(--list-hover-color); }
+  }
+`;
+
+const SelectionDivider = styled.span`
+  width: 1px;
+  height: 24px;
+  flex-shrink: 0;
+  background-color: var(--menu-item-separator-light);
+`;
+
+const SelectionActionButton = styled.button`
+  font-size: 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-color-contrast);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  flex-shrink: 0;
+  box-sizing: content-box;
+  line-height: 1;
+
+  /* Inverse-surface hover (see SelectionExitButton) */
+  @media (hover: hover) {
+    &:hover { background-color: var(--list-hover-color); }
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+`;
+
+// Overflow menu for the selection pill (Download / Copy Reference). Opens upward,
+// anchored to the pill's bottom-right corner so it never needs JS positioning.
+const SelectionOverflowMenu = styled.div`
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  min-width: max-content;
+  white-space: nowrap;
+  background-color: var(--foreground-color);
+  border-radius: 12px;
+  box-shadow: 0 2px 14px var(--shadow-color);
+  z-index: 902;
+  padding: 6px 0;
+  opacity: ${props => props.$isOpen ? 1 : 0};
+  visibility: ${props => props.$isOpen ? 'visible' : 'hidden'};
+  transform: ${props => props.$isOpen ? 'translateY(0)' : 'translateY(8px)'};
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  @media (max-width: 600px) {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%) ${props => props.$isOpen ? 'translateY(0)' : 'translateY(8px)'};
+  }
+`;
+
 // Mobile Search Overlay
 const MobileSearchOverlay = styled.div`
   position: fixed;
@@ -764,6 +882,7 @@ const Header = () => {
   const [cursorPosition, setCursorPosition] = useState(0);
   const [showBulkColorPicker, setShowBulkColorPicker] = useState(false); // State for bulk color picker
   const [showBulkTagPicker, setShowBulkTagPicker] = useState(false); // State for bulk tag picker
+  const [isSelectionMenuOpen, setIsSelectionMenuOpen] = useState(false); // Overflow menu inside the selection pill
   const [isDragOver, setIsDragOver] = useState(false);
   const { showToast, hideToast } = useToast();
 
@@ -881,6 +1000,7 @@ const Header = () => {
   const bulkTagButtonRef = useRef(null); // Ref for the bulk tag button
   const bulkTagPickerRef = useRef(null); // Ref for the bulk tag picker container
   const bulkTagPickerOverlayRef = useRef(null); // Ref for the bulk tag picker overlay
+  const selectionPillRef = useRef(null); // Ref for the bulk selection action pill (overflow menu outside-click)
   const searchInputRef = useRef(null);
   // Initialize with a unique symbol to ensure the first sync always happens
   const prevSearchQueryRef = useRef(Symbol('initial'));
@@ -895,6 +1015,7 @@ const Header = () => {
     if (!isSelectionModeActive) {
       setShowBulkTagPicker(false);
       setShowBulkColorPicker(false);
+      setIsSelectionMenuOpen(false);
     }
   }, [isSelectionModeActive]);
 
@@ -1012,6 +1133,11 @@ const Header = () => {
       if (!isSelectionModeActive && actionMenuRef.current && !actionMenuRef.current.contains(event.target) &&
           actionDropdownRef.current && !actionDropdownRef.current.contains(event.target)) {
         setIsActionMenuOpen(false);
+      }
+
+      // Close the selection pill's overflow menu when clicking outside the pill
+      if (selectionPillRef.current && !selectionPillRef.current.contains(event.target)) {
+        setIsSelectionMenuOpen(false);
       }
 
       // Bulk color picker outside click is handled by the component itself now
@@ -1763,7 +1889,7 @@ const Header = () => {
       {/* Action Menu - memoized to prevent re-renders on scroll */}
       <ActionMenu
         isOpen={isActionMenuOpen}
-        isSelectionModeActive={isSelectionModeActive}
+        isSelectionModeActive={false} /* Bulk actions now live in the selection pill, not the header menu */
         view={view}
         searchMode={searchMode}
         layoutView={layoutView}
@@ -1779,26 +1905,12 @@ const Header = () => {
         actionDropdownRef={actionDropdownRef}
       />
       
-      <HeaderContainer $isHidden={isHeaderHidden} $isSelectionModeActive={isSelectionModeActive} $isSearchInputFocused={isSearchInputFocused} $isQuickSearchPanelOpen={isQuickSearchPanelOpen}>
-        {/* Left section - Conditional rendering based on selection mode */}
+      {/* Header stays in its normal state during selection mode; bulk actions live
+          in the floating selection pill instead of replacing the header. */}
+      <HeaderContainer $isHidden={isHeaderHidden} $isSelectionModeActive={false} $isSearchInputFocused={isSearchInputFocused} $isQuickSearchPanelOpen={isQuickSearchPanelOpen}>
+        {/* Left section */}
         <div style={{ display: 'flex', alignItems: 'center', minWidth: '40px' }}> {/* Increased minWidth */}
-          {isSelectionModeActive ? (
-            <>
-              <SharedHighlightedButton
-                type="button"
-                title="Clear selection"
-                onClick={clearSelection}
-                style={{ flexShrink: 0, width:'auto', marginRight: '-72px'}}  
-              >
-                <SharedCircleIconWrapper style={{ width: '36px', height: '36px', borderRadius: '50% 0 0 50%', paddingLeft: '8px' }}>
-                  <Icon name="close" color="var(--mobile-background-color)"/>
-                </SharedCircleIconWrapper>
-                <SharedCircleIconWrapper style={{ width: 'auto', minWidth: '36px', paddingLeft: '4px', paddingRight: '14px' , height: '36px', borderRadius: '0 50vh 50vh 0' }}>
-                  <SelectionCount>{selectedNoteIds.size}</SelectionCount>
-                </SharedCircleIconWrapper>
-              </SharedHighlightedButton>
-            </>
-          ) : isSearchActive ? (
+          {isSearchActive ? (
             <SharedHighlightedButton
               type="button"
                 title="Exit Search"
@@ -1835,8 +1947,8 @@ const Header = () => {
           )}
         </div>
 
-        {/* Center - Search (Hidden in selection mode) */}
-        {!isSelectionModeActive && ((view === 'main') || isSearchActive) && <SearchContainer $isSelectionModeActive={isSelectionModeActive} >
+        {/* Center - Search */}
+        {((view === 'main') || isSearchActive) && <SearchContainer $isSelectionModeActive={false} >
           {/* Remove onSubmit from the form wrapper */}
           <SearchBarWrapper $isSearchActive={isSearchActive}>
             {/* Tag Typeahead Dropdown */}
@@ -1920,83 +2032,13 @@ const Header = () => {
           </SearchBarWrapper>
         </SearchContainer>}
 
-        {/* Right - Conditional rendering based on selection mode */}
-        {(isSelectionModeActive || 
-          ((!isSearchActive && view !== "main") || (!isSearchActive && isMobileView)) || 
+        {/* Right - normal header actions (search/overflow). Bulk actions moved to the selection pill. */}
+        {(((!isSearchActive && view !== "main") || (!isSearchActive && isMobileView)) ||
           !(isMobileView && isSearchInputFocused)) && (
           <div style={{ minWidth: '40px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}> {/* Increased minWidth */}
-            {isSelectionModeActive ? (
-            <BulkActionsContainer> {/* Removed ref from here */}
-              {/* Bulk Tag Picker Button */}
-              {view !== "trash" &&
-              <MenuButton
-                ref={bulkTagButtonRef} // Add ref
-                onClick={() => setShowBulkTagPicker(!showBulkTagPicker)}
-                title="Add/Remove tags"
-              >
-                <Icon name="tag" size="22"/>
-              </MenuButton>
-              }
-
-              {/* Bulk Color Change Button */}
-              {view !== "trash" &&
-              <MenuButton
-                ref={bulkPaletteButtonRef} // Attach ref here
-                onClick={() => setShowBulkColorPicker(!showBulkColorPicker)}
-                title="Change color"
-                className="bulk-palette-button"
-              >
-                <Icon name="palette" size="22"/>
-              </MenuButton>
-              }
-
-              {/* Bulk Download Button - Moved to Action Menu */}
-              
-              {/* View-specific Bulk Action Buttons */}
-              {view === 'archive' ? (
-                /* Archive view: Show unarchive button */
-                <MenuButton onClick={unarchiveSelectedNotes} title="Unarchive selected">
-                  <Icon name="unarchive" />
-                </MenuButton>
-              ) : view === 'trash' ? (
-                /* Trash view: Show delete permanently button */
-                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
-                  <MenuButton onClick={deleteForeverSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Delete permanently"}>
-                    <Icon name="deleteForever" size="22"/>
-                  </MenuButton>
-                </span>
-              ) : (
-                /* Main view: Show archive button */
-                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
-                  <MenuButton onClick={archiveSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Archive selected"}>
-                    <Icon name="archive" size="22"/>
-                  </MenuButton>
-                </span>
-              )}
-
-              {/* Show trash/restore button depending on view */}
-              {view === 'trash' ? (
-                /* Trash view: Show restore button */
-                <MenuButton onClick={restoreSelectedNotes} title="Restore selected">
-                  <Icon name="restore" size="22"/>
-                </MenuButton>
-              ) : (
-                /* Main and Archive views: Show trash button */
-                <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
-                  <MenuButton onClick={trashSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Trash selected"}>
-                    <Icon name="trash" size="22"/>
-                  </MenuButton>
-                </span>
-              )}
-            </BulkActionsContainer>
-          ) : (
-            // Normal Action Menu
-            <>
-              {((!isSearchActive && view !== "main")) && <MenuButton onClick={handleSearchClick} $isSearchActive={isSearchActive}>
-                  <Icon name="search" />
-                </MenuButton>}
-            </>
-          )}
+            {((!isSearchActive && view !== "main")) && <MenuButton onClick={handleSearchClick} $isSearchActive={isSearchActive}>
+                <Icon name="search" />
+              </MenuButton>}
           {!(isMobileView && isSearchInputFocused) && (
             <MenuButton onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}>
               <Icon name="more" />
@@ -2006,9 +2048,71 @@ const Header = () => {
         )}
       </HeaderContainer>
 
-      {/* Floating action button - hide in list view when note is open */}
-      {!(layoutView === 'list' && openedNote) && (
-      <NewNoteButton 
+      {/* Floating action: the bulk-selection action pill while notes are selected,
+          otherwise the new-note FAB (hidden in list view when a note is open). */}
+      {isSelectionModeActive ? (
+        <SelectionPillWrapper ref={selectionPillRef} $headerHidden={isHeaderHidden}>
+          <SelectionOverflowMenu $isOpen={isSelectionMenuOpen}>
+            <MenuItem onClick={() => { downloadSelectedNotes(); setIsSelectionMenuOpen(false); }}>
+              <MenuIcon><Icon name="download" size={18} /></MenuIcon>
+              Download
+            </MenuItem>
+            <MenuItem onClick={() => { handleBulkCopyReference(); setIsSelectionMenuOpen(false); }}>
+              <MenuIcon><Icon name="copy" size={18} /></MenuIcon>
+              Copy Reference(s)
+            </MenuItem>
+          </SelectionOverflowMenu>
+          <SelectionPill>
+            <SelectionExitButton onClick={clearSelection} title="Clear selection">
+              <Icon name="close" size={20} strokeWidth="2.5" />
+              <SelectionCount>{selectedNoteIds.size}</SelectionCount>
+            </SelectionExitButton>
+            <SelectionDivider />
+            {view !== "trash" && (
+              <SelectionActionButton ref={bulkTagButtonRef} onClick={() => setShowBulkTagPicker(!showBulkTagPicker)} title="Add/Remove tags">
+                <Icon name="tag" size="22"/>
+              </SelectionActionButton>
+            )}
+            {view !== "trash" && (
+              <SelectionActionButton ref={bulkPaletteButtonRef} onClick={() => setShowBulkColorPicker(!showBulkColorPicker)} title="Change color" className="bulk-palette-button">
+                <Icon name="palette" size="22"/>
+              </SelectionActionButton>
+            )}
+            {view === 'archive' ? (
+              <SelectionActionButton onClick={unarchiveSelectedNotes} title="Unarchive selected">
+                <Icon name="unarchive" />
+              </SelectionActionButton>
+            ) : view === 'trash' ? (
+              <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                <SelectionActionButton onClick={deleteForeverSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Delete permanently"}>
+                  <Icon name="deleteForever" size="22"/>
+                </SelectionActionButton>
+              </span>
+            ) : (
+              <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                <SelectionActionButton onClick={archiveSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Archive selected"}>
+                  <Icon name="archive" size="22"/>
+                </SelectionActionButton>
+              </span>
+            )}
+            {view === 'trash' ? (
+              <SelectionActionButton onClick={restoreSelectedNotes} title="Restore selected">
+                <Icon name="restore" size="22"/>
+              </SelectionActionButton>
+            ) : (
+              <span style={{ display: 'inline-flex' }} title={isDemoMode ? demoActionTooltip : undefined}>
+                <SelectionActionButton onClick={trashSelectedNotes} disabled={isDemoMode} title={isDemoMode ? undefined : "Trash selected"}>
+                  <Icon name="trash" size="22"/>
+                </SelectionActionButton>
+              </span>
+            )}
+            <SelectionActionButton onClick={() => setIsSelectionMenuOpen(o => !o)} title="More actions">
+              <Icon name="more" />
+            </SelectionActionButton>
+          </SelectionPill>
+        </SelectionPillWrapper>
+      ) : !(layoutView === 'list' && openedNote) ? (
+      <NewNoteButton
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -2048,7 +2152,7 @@ const Header = () => {
       }} $headerHidden={isHeaderHidden}>
         {isProcessing ? <Spinner /> : <Icon name="add" size={28} strokeWidth={2.5} />}
       </NewNoteButton>
-      )}
+      ) : null}
 
       {/* This NoteForm instance is now primarily a fallback if createNote fails before navigation */}
       {isFormOpen && (
@@ -2069,8 +2173,8 @@ const Header = () => {
           onColorSelect={handleBulkColorChange}
           onClose={handleCloseBulkColorPicker}
           targetRef={bulkPaletteButtonRef}
-          position="bottom-right"
-          mobileBottomSheet={isMobile}    
+          position="top-right"
+          mobileBottomSheet={isMobile}
         />
       )}
 
