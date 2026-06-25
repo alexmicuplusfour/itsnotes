@@ -148,8 +148,6 @@ Notes, checklists, labels, colors, archive/trash/pin state, original timestamps,
 
 ## Alternatives
 
-itsnotes isn't the only self-hosted note app out there. If it's not quite what you're after, these are worth a look:
-
 - **[memos](https://github.com/usememos/memos)** — A lightweight, privacy-first hub for quick notes and memos. Leans toward a fast, microblog-style stream rather than a Keep-like board, and ships as a single Go binary.
 - **[Joplin](https://github.com/laurent22/joplin)** — A mature, full-featured note and to-do app with Markdown, end-to-end encryption, web clipper, and sync across desktop, mobile, and web. The heavyweight option if you want notebooks and offline apps everywhere.
 - **[Zen](https://github.com/sheshbabu/zen)** — A minimal, single-user self-hosted notes app focused on simplicity and staying out of your way. A good pick if you want something tiny and no-frills.
