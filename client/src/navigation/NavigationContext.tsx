@@ -151,6 +151,17 @@ export function NavigationProvider({
     const handlePopState = async () => {
       console.log('[NavigationContext] Popstate event fired');
 
+      // If WE triggered this back() programmatically (closeNote / closeAllNotes),
+      // the note was ALREADY saved before the back(), so skip the redundant save.
+      // This is a one-shot flag — consume it here. A real browser/OS back leaves
+      // it false and falls through to the normal save below.
+      if ((service as any).skipPopstateSaveOnce) {
+        console.log('[NavigationContext] Programmatic back detected, skipping redundant popstate save');
+        (service as any).skipPopstateSaveOnce = false;
+        currentNoteIdBeforePopState = null;
+        return;
+      }
+
       // Use the captured note ID from BEFORE the URL changed
       // Call via service since callbacks are set there by NavigationBridge
       if (currentNoteIdBeforePopState) {

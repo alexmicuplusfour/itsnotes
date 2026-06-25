@@ -437,11 +437,12 @@ router.put('/:id', limitNoteSizeInDemo, async (req, res) => {
       return res.status(404).json({ message: 'Note could not be found after update process.' });
     }
 
-    // 10. Emit socket event ONLY if the main note record was actually changed
-    if (needsMainTableUpdate) {
-      console.log('[SERVER] Broadcasting note updated:', finalNoteWithDetails);
-      // Send the FULL note object with details in the socket event
-      req.app.get('io').emit('note_updated', finalNoteWithDetails);
+    // 10. The res.json interceptor (index.js) broadcasts note_updated for the
+    // { note } response below. If the main record didn't actually change (e.g. a
+    // forced save of an unchanged note), suppress that broadcast — there's nothing
+    // for other clients to update.
+    if (!needsMainTableUpdate) {
+      res.locals.skipNoteBroadcast = true;
     }
 
     // 11. Respond with the complete note object including images/tags
@@ -509,9 +510,7 @@ router.patch('/:id/archive', async (req, res) => {
     }
     const note = await loadNoteWithDetails(req.params.id);
 
-    console.log('[SERVER] Broadcasting note archived:', note);
-    req.app.get('io').emit('note_updated', note);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note });
   } catch (error) {
     console.error('Error archiving note:', error);
@@ -528,9 +527,7 @@ router.patch('/:id/unarchive', async (req, res) => {
     }
     const note = await loadNoteWithDetails(req.params.id);
 
-    console.log('[SERVER] Broadcasting note unarchived:', note);
-    req.app.get('io').emit('note_updated', note);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note });
   } catch (error) {
     console.error('Error unarchiving note:', error);
@@ -547,9 +544,7 @@ router.patch('/:id/trash', async (req, res) => {
     }
     const note = await loadNoteWithDetails(req.params.id);
 
-    console.log('[SERVER] Broadcasting note trashed:', note);
-    req.app.get('io').emit('note_updated', note);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note });
   } catch (error) {
     console.error('Error trashing note:', error);
@@ -566,9 +561,7 @@ router.patch('/:id/restore', async (req, res) => {
     }
     const note = await loadNoteWithDetails(req.params.id);
 
-    console.log('[SERVER] Broadcasting note restored:', note);
-    req.app.get('io').emit('note_updated', note);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note });
   } catch (error) {
     console.error('Error restoring note:', error);
@@ -622,10 +615,7 @@ router.patch('/:id/pin', async (req, res) => {
     await Note.addTagsAndImages([updatedNote]);
     await Note.addObjects([updatedNote]);
 
-    // For debugging the socket.io connection
-    console.log('[SERVER] Broadcasting note pin toggled:', updatedNote);
-    req.app.get('io').emit('note_updated', updatedNote);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note: updatedNote });
   } catch (error) {
     console.error('Error toggling pin status:', error);
@@ -650,9 +640,7 @@ router.patch('/:id/color', async (req, res) => {
 
     const updatedNoteWithDetails = await loadNoteWithDetails(req.params.id);
 
-    console.log('[SERVER] Broadcasting note color changed:', updatedNoteWithDetails);
-    req.app.get('io').emit('note_updated', updatedNoteWithDetails);
-
+    // note_updated is broadcast centrally by the res.json interceptor (index.js).
     res.json({ note: updatedNoteWithDetails });
   } catch (error) {
     console.error('Error changing note color:', error);
