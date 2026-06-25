@@ -36,14 +36,18 @@ const Description = styled.p`
   margin: 0;
 `;
 
-// Bordered card per service, matching the Maintenance tab.
+// Borderless card per service with a subtle fill, matching the
+// auto-tagging cards in the Tagging tab.
 const Card = styled.div`
-  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  background-color: rgba(255, 255, 255, 0.03);
+  :root.light-theme & {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
 `;
 
 const CardHeader = styled.div`
