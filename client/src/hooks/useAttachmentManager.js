@@ -3,8 +3,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { NodeSelection } from 'prosemirror-state';
 import api from '../services/api';
 import { scrollEditorSelectionIntoView, findScrollableAncestor } from '../utils/editorScroll';
+import { useToast } from '../contexts/ToastContext';
 
 export const useAttachmentManager = (noteId) => {
+  const { showToast } = useToast();
   const handleAddAttachment = useCallback(async (files, editor) => {
     if (!editor) {
       console.error('Editor instance not found');
@@ -94,6 +96,7 @@ export const useAttachmentManager = (noteId) => {
         });
       } catch (error) {
         console.error('Upload failed', error);
+        showToast(error.response?.data?.message || `Couldn't upload "${file.name}"`, { variant: 'error' });
         // Show error state
         let found = false;
         editor.state.doc.descendants((node, pos) => {
@@ -110,7 +113,7 @@ export const useAttachmentManager = (noteId) => {
         });
       }
     });
-  }, [noteId]);
+  }, [noteId, showToast]);
 
   return { handleAddAttachment };
 };

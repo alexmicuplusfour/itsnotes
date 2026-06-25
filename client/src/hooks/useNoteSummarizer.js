@@ -1,10 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { aiApi } from '../services/api';
 import { marked } from 'marked';
+import { useToast } from '../contexts/ToastContext';
 
 export const useNoteSummarizer = (note, contentInputRef) => {
   const inFlightRef = useRef(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
+  const { showToast } = useToast();
 
   const handleSummarizeWithAI = useCallback(async (e) => {
     if (inFlightRef.current) return;
@@ -65,12 +67,12 @@ export const useNoteSummarizer = (note, contentInputRef) => {
       if (contentInputRef?.current) {
           contentInputRef.current.replaceAIPlaceholder(placeholderText, "");
       }
-      alert("Failed to summarize with AI. Please try again.");
+      showToast(error.response?.data?.message || 'Failed to generate summary. Please try again.', { variant: 'error' });
     } finally {
       inFlightRef.current = false;
       setIsSummarizing(false);
     }
-  }, [note?.content, contentInputRef]);
+  }, [note?.content, contentInputRef, showToast]);
 
   return { handleSummarizeWithAI, isSummarizing };
 };

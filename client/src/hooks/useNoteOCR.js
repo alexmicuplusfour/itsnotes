@@ -1,9 +1,11 @@
 import { useCallback, useRef, useState } from 'react';
 import { aiApi } from '../services/api';
+import { useToast } from '../contexts/ToastContext';
 
 export const useNoteOCR = (contentInputRef) => {
   const inFlightRef = useRef(false);
   const [isExtractingOCR, setIsExtractingOCR] = useState(false);
+  const { showToast } = useToast();
 
   const handleInsertOCR = useCallback(async (imageFile) => {
     if (inFlightRef.current) return;
@@ -50,11 +52,12 @@ export const useNoteOCR = (contentInputRef) => {
       if (contentInputRef?.current && contentInputRef.current.replaceAIPlaceholder) {
           contentInputRef.current.replaceAIPlaceholder(placeholderText, '');
       }
+      showToast(error.response?.data?.message || 'Failed to extract text from the image.', { variant: 'error' });
     } finally {
       inFlightRef.current = false;
       setIsExtractingOCR(false);
     }
-  }, [contentInputRef]);
+  }, [contentInputRef, showToast]);
 
   return { handleInsertOCR, isExtractingOCR };
 };

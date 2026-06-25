@@ -288,7 +288,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       const content = editor.getText();
       if (!content || !content.trim()) {
         console.log("Note content empty, cannot create reminder");
-        // Show toast maybe?
+        showToast('Add some text first to generate a reminder.');
         return;
       }
 
@@ -348,7 +348,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         }
       } catch (error) {
         console.error("Failed to create reminder:", error);
-        // Show error toast
+        showToast(error.response?.data?.message || 'Could not generate a reminder.', { variant: 'error' });
       } finally {
         setIsCreatingReminder(false);
       }
@@ -1446,14 +1446,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         }
       } else {
         console.error("Failed to add image via hook:", result.error);
-        // Error is already handled/displayed by the hook's error state/effect
+        showToast(result.error || 'Could not add the image.', { variant: 'error' });
       }
     };
 
     document.body.appendChild(fileInput);
     fileInput.click();
     // No 'finally' needed here as input is removed earlier
-  }, [note?.id, addImage, isMobile]); // Removed adjustTextareaHeight dependency
+  }, [note?.id, addImage, isMobile, showToast]); // Removed adjustTextareaHeight dependency
 
   /* Redundant handlers removed (moved to useNoteContentActions) */
 
@@ -2161,8 +2161,9 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       }
     } else {
       console.error(`[NoteForm] Failed to add image via paste: ${file.name}`, result.error);
+      showToast(result.error || 'Could not add the image.', { variant: 'error' });
     }
-  }, [addImage, note?.id, markAsModified]);
+  }, [addImage, note?.id, markAsModified, showToast]);
 
   // Handle image click
   const handleImageClick = useCallback((imageData) => {
