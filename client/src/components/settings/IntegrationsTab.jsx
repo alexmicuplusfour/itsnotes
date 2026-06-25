@@ -158,6 +158,10 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
             value={settings.TMDB_API_KEY || ''}
             onChange={onChange}
             placeholder="Enter your TMDB API key"
+            autoComplete="off"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
           />
         </FormGroup>
       </SectionContainer>
@@ -192,7 +196,10 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
             value={settings.JINA_API_KEY || ''}
             onChange={onChange}
             placeholder="jina_..."
-            autoComplete="off"
+            autoComplete="new-password"
+            data-1p-ignore
+            data-lpignore="true"
+            data-bwignore
           />
           {jinaStatus && (
             <p style={{
@@ -230,6 +237,10 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
                 value={settings.FOXIT_SNOOPER_URL || ''}
                 onChange={onChange}
                 placeholder="http://192.168.100.110:3456"
+                autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
               />
               <p style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-color)' }}>
                 Leave empty to use the server default. Enter the IP:port where the Foxit Snooper is running.
