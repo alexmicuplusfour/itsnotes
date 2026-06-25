@@ -283,6 +283,12 @@ export const notesApi = {
     return response.data; // { configured, valid?, balance?, error? }
   },
 
+  // Validate a TMDB API key (pass the value currently typed in Settings)
+  testTmdbKey: async (apiKey) => {
+    const response = await api.post('/notes/tmdb-test', { apiKey });
+    return response.data; // { configured, valid?, error? }
+  },
+
   // Mint a long-lived token for the "itsnotes clipper" browser extension.
   generateExtensionToken: async () => {
     const response = await api.post('/auth/extension-token');

@@ -508,6 +508,28 @@ router.post('/jina-balance', async (req, res) => {
     }
 });
 
+// Validate a TMDB API key by hitting the lightweight /configuration endpoint.
+// Accepts the key in the body so the Settings UI can test the value currently
+// typed in, falling back to the saved one.
+router.post('/tmdb-test', async (req, res) => {
+    const key = req.body?.apiKey || process.env.TMDB_API_KEY;
+    if (!key) return res.json({ configured: false });
+
+    try {
+        await axios.get('https://api.themoviedb.org/3/configuration', {
+            params: { api_key: key },
+            timeout: 10000,
+        });
+        return res.json({ configured: true, valid: true });
+    } catch (e) {
+        if (e.response?.status === 401) {
+            return res.json({ configured: true, valid: false, error: 'Invalid API key' });
+        }
+        console.error('[tmdb-test] check failed:', e.message);
+        return res.json({ configured: true, valid: false, error: 'Could not reach TMDB' });
+    }
+});
+
 // Extract content from URL - Puppeteer first, Axios fallback
 router.post('/extract-url', async (req, res) => {
     const { url, noteId, includeImages = false } = req.body;

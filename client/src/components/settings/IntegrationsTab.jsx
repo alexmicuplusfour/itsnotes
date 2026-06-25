@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Switch from '../Switch';
 import { notesApi } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 import {
   SectionContainer,
   SectionTitle,
@@ -12,9 +13,10 @@ import CopyableField from './CopyableField';
 
 const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const foxitEnabled = settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true';
+  const { showToast } = useToast();
 
   const [jinaLoading, setJinaLoading] = useState(false);
-  const [jinaStatus, setJinaStatus] = useState(null);
+  const [tmdbTesting, setTmdbTesting] = useState(false);
   const [foxitTokenCopied, setFoxitTokenCopied] = useState(false);
 
   // Fill the Foxit snooper token with a fresh random secret and copy it, since
@@ -60,27 +62,41 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
 
   const refreshJinaTokens = useCallback(async () => {
     setJinaLoading(true);
-    setJinaStatus(null);
     try {
       const data = await notesApi.getJinaBalance();
-      setJinaStatus(data);
+      if (data.configured === false) {
+        showToast('Save an API key first, then check again.');
+      } else if (data.valid === false) {
+        showToast('Invalid Jina API key', { variant: 'error' });
+      } else if (typeof data.balance === 'number') {
+        showToast(`${data.balance.toLocaleString()} tokens remaining`, { variant: 'success' });
+      } else {
+        showToast(data.error || "Couldn't read the balance for this key.", { variant: 'error' });
+      }
     } catch (e) {
-      setJinaStatus({ error: 'Could not fetch balance' });
+      showToast('Could not fetch balance', { variant: 'error' });
     } finally {
       setJinaLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
-  // Friendly one-liner describing the last token check.
-  const jinaMessage = () => {
-    if (!jinaStatus) return null;
-    if (jinaStatus.configured === false) return 'Save an API key first, then check again.';
-    if (jinaStatus.valid === false) return 'Invalid API key.';
-    if (typeof jinaStatus.balance === 'number') {
-      return `${jinaStatus.balance.toLocaleString()} tokens remaining`;
+  const handleTestTmdb = useCallback(async () => {
+    setTmdbTesting(true);
+    try {
+      const data = await notesApi.testTmdbKey(settings.TMDB_API_KEY || '');
+      if (data.configured === false) {
+        showToast('Enter an API key first.');
+      } else if (data.valid) {
+        showToast('TMDB key works', { variant: 'success' });
+      } else {
+        showToast(data.error || 'Invalid TMDB API key', { variant: 'error' });
+      }
+    } catch (e) {
+      showToast('Could not reach TMDB', { variant: 'error' });
+    } finally {
+      setTmdbTesting(false);
     }
-    return jinaStatus.error || "Couldn't read the balance for this key.";
-  };
+  }, [settings.TMDB_API_KEY, showToast]);
 
   return (
     <>
@@ -146,7 +162,25 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
         </FormGroup>
       </SectionContainer>
       <SectionContainer>
-        <SectionTitle>The Movie Database (TMDB)</SectionTitle>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <SectionTitle style={{ margin: 0 }}>The Movie Database (TMDB)</SectionTitle>
+          <button
+            onClick={handleTestTmdb}
+            disabled={tmdbTesting}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '12px',
+              cursor: tmdbTesting ? 'not-allowed' : 'pointer',
+              color: 'var(--text-secondary-color)',
+              opacity: tmdbTesting ? 0.6 : 1,
+            }}
+          >
+            {tmdbTesting ? 'Testing…' : 'Test key'}
+          </button>
+        </div>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
           Enables automatic metadata lookup when adding movies and TV shows from IMDb or TMDB URLs. Fetches title, poster, rating, director, cast, and more. Get a free API key at themoviedb.org/settings/api.
         </p>
@@ -201,17 +235,6 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
             data-lpignore="true"
             data-bwignore
           />
-          {jinaStatus && (
-            <p style={{
-              marginTop: '6px',
-              fontSize: '13px',
-              color: (jinaStatus.valid === false || (jinaStatus.error && jinaStatus.balance == null))
-                ? 'var(--danger-color, #d9534f)'
-                : 'var(--text-secondary-color)',
-            }}>
-              {jinaMessage()}
-            </p>
-          )}
         </FormGroup>
       </SectionContainer>
       <SectionContainer>

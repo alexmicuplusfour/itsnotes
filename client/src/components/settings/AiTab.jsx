@@ -4,6 +4,7 @@ import api, { aiApi, getServerUrl } from '../../services/api';
 import Icon from '../Icons';
 import Switch from '../Switch';
 import CopyableField from './CopyableField';
+import { useToast } from '../../contexts/ToastContext';
 import {
   SectionContainer,
   SectionTitle,
@@ -136,23 +137,32 @@ const PromptFeature = ({ config, settings, onChange, models, loading, isDarkThem
 );
 
 const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => {
+  const { showToast } = useToast();
   const [availableModels, setAvailableModels] = useState([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [mcpToken, setMcpToken] = useState(null);
   const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
-  const [mcpTokenError, setMcpTokenError] = useState(null);
 
-  const loadModels = useCallback(async () => {
+  // `notify` is true only for the explicit "Refresh models" click — the mount
+  // and provider-change loads stay silent.
+  const loadModels = useCallback(async ({ notify = false } = {}) => {
     setModelsLoading(true);
     try {
       const data = await aiApi.getModels();
-      setAvailableModels(data.models || []);
+      const models = data.models || [];
+      setAvailableModels(models);
+      // Success is self-evident (the dropdowns populate) — only speak up when
+      // there's nothing to show.
+      if (notify && models.length === 0) {
+        showToast('No models found — check your API key', { variant: 'error' });
+      }
     } catch (e) {
       setAvailableModels([]);
+      if (notify) showToast('Could not load models. Check your API key.', { variant: 'error' });
     } finally {
       setModelsLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     loadModels();
@@ -189,12 +199,11 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
 
   const generateMcpToken = async () => {
     setMcpTokenLoading(true);
-    setMcpTokenError(null);
     try {
       const { data } = await api.post('/auth/mcp-token');
       setMcpToken(data.token);
     } catch (e) {
-      setMcpTokenError('Could not generate a token. Make sure you are logged in.');
+      showToast('Could not generate a token. Make sure you are logged in.', { variant: 'error' });
     } finally {
       setMcpTokenLoading(false);
     }
@@ -242,11 +251,6 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
                 <McpActionButton onClick={generateMcpToken} disabled={mcpTokenLoading}>
                   {mcpTokenLoading ? 'Generating…' : 'Generate connection token'}
                 </McpActionButton>
-                {mcpTokenError && (
-                  <p style={{ fontSize: '12px', color: 'var(--danger-color, #e53935)', margin: '8px 0 0' }}>
-                    {mcpTokenError}
-                  </p>
-                )}
               </FormGroup>
             ) : (
               <>
@@ -326,7 +330,7 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
           <SectionTitle style={{ margin: 0 }}>AI Prompts</SectionTitle>
           <button
-            onClick={loadModels}
+            onClick={() => loadModels({ notify: true })}
             disabled={modelsLoading}
             style={{
               background: 'none',
