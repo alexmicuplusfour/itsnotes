@@ -241,6 +241,7 @@ export const ColorPicker = ({
     useEffect(() => {
         console.log("[ColorPicker Effect] Running. mobileBottomSheet:", mobileBottomSheet, "isMobileView:", isMobileView, "targetRef:", !!targetRef?.current);
         let animationFrameId;
+        let handleResize;
         // Don't reset isPositioned here immediately, set it only when needed
 
         // Determine the mode for this effect run
@@ -262,70 +263,74 @@ export const ColorPicker = ({
         else if (targetRef?.current) {
             console.log("[ColorPicker Effect] Mode: Popover, targetRef available");
             setIsPositioned(false); // Reset first for animation trigger
+
+            // Calculate the popover position relative to its trigger. Returns null
+            // if refs/dimensions aren't ready yet.
+            const computePosition = () => {
+                if (!targetRef.current || !pickerRef.current) return null;
+                const targetRect = targetRef.current.getBoundingClientRect();
+                const pickerHeight = pickerRef.current.offsetHeight;
+                const pickerWidth = pickerRef.current.offsetWidth;
+                if (pickerHeight === 0 || pickerWidth === 0) return null;
+
+                let top, left;
+                const windowHeight = window.innerHeight;
+                const windowWidth = window.innerWidth;
+
+                // Horizontal position
+                switch (position) {
+                    case 'top-left':
+                    case 'bottom-left': left = targetRect.left; break;
+                    case 'top-right':
+                    case 'bottom-right':
+                    default: left = targetRect.right - pickerWidth; break;
+                }
+
+                // Vertical position with smart fallback (mirrors NoteTagPicker logic)
+                const topAbove = targetRect.top - pickerHeight - GAP;
+                const topBelow = targetRect.bottom + GAP;
+                if (position.startsWith('top')) {
+                    top = topAbove >= PADDING
+                        ? topAbove
+                        : (topBelow + pickerHeight <= windowHeight - PADDING ? topBelow : Math.max(PADDING, windowHeight - pickerHeight - PADDING));
+                } else {
+                    top = topBelow + pickerHeight <= windowHeight - PADDING
+                        ? topBelow
+                        : (topAbove >= PADDING ? topAbove : Math.max(PADDING, windowHeight - pickerHeight - PADDING));
+                }
+
+                if (left + pickerWidth > windowWidth - PADDING) left = windowWidth - pickerWidth - PADDING;
+                if (left < PADDING) left = PADDING;
+
+                return { top: top + window.scrollY, left: left + window.scrollX };
+            };
+
             animationFrameId = requestAnimationFrame(() => {
-                console.log("[ColorPicker Effect] Popover: Inside rAF");
-                if (targetRef.current && pickerRef.current) {
-                    console.log("[ColorPicker Effect] Popover: Refs still available");
-                    const targetRect = targetRef.current.getBoundingClientRect();
-                    const pickerHeight = pickerRef.current.offsetHeight;
-                    const pickerWidth = pickerRef.current.offsetWidth;
-
-                    if (pickerHeight === 0 || pickerWidth === 0) {
-                         console.warn("[ColorPicker Effect] Popover: Picker dimensions are zero in rAF!");
-                         return; // Abort if no dimensions yet
-                    }
-                    console.log("[ColorPicker Effect] Popover: Picker dimensions:", pickerWidth, pickerHeight);
-
-                    let top, left;
-                    const windowHeight = window.innerHeight;
-                    const windowWidth = window.innerWidth;
-
-                    // Horizontal position
-                    switch (position) {
-                        case 'top-left':
-                        case 'bottom-left': left = targetRect.left; break;
-                        case 'top-right':
-                        case 'bottom-right':
-                        default: left = targetRect.right - pickerWidth; break;
-                    }
-
-                    // Vertical position with smart fallback (mirrors NoteTagPicker logic)
-                    const topAbove = targetRect.top - pickerHeight - GAP;
-                    const topBelow = targetRect.bottom + GAP;
-                    if (position.startsWith('top')) {
-                        top = topAbove >= PADDING
-                            ? topAbove
-                            : (topBelow + pickerHeight <= windowHeight - PADDING ? topBelow : Math.max(PADDING, windowHeight - pickerHeight - PADDING));
-                    } else {
-                        top = topBelow + pickerHeight <= windowHeight - PADDING
-                            ? topBelow
-                            : (topAbove >= PADDING ? topAbove : Math.max(PADDING, windowHeight - pickerHeight - PADDING));
-                    }
-
-                    if (left + pickerWidth > windowWidth - PADDING) left = windowWidth - pickerWidth - PADDING;
-                    if (left < PADDING) left = PADDING;
-                    // --- End calculation logic ---
-
-                    const newPosition = { top: top + window.scrollY, left: left + window.scrollX };
-                    console.log("[ColorPicker Effect] Popover: Calculated position", newPosition);
-
-                    // Set position state *then* trigger animation
-                    // Using flushSync ensures state is updated before setting isPositioned
+                const newPosition = computePosition();
+                if (newPosition) {
+                    // Set position state *then* trigger animation. flushSync ensures
+                    // state is updated before setting isPositioned.
                     const applyPositionAndAnimate = () => {
                         setPickerPosition(newPosition);
                         setIsPositioned(true);
-                        console.log("[ColorPicker Effect] Popover: Applied position and set isPositioned = true");
                     }
                     if (flushSync) { flushSync(applyPositionAndAnimate); }
                     else { applyPositionAndAnimate(); }
-
                 } else {
-                     console.warn("[ColorPicker Effect] Popover: targetRef or pickerRef became null during rAF.");
-                     // Ensure reset if refs disappear
+                     console.warn("[ColorPicker Effect] Popover: targetRef or pickerRef not ready during rAF.");
                      if (flushSync) { flushSync(() => setIsPositioned(false)); }
                      else { setIsPositioned(false); }
                 }
             });
+
+            // Keep the popover anchored to its trigger button on window resize.
+            // Only the position is updated (no isPositioned reset) so it follows
+            // smoothly without re-running the open animation.
+            handleResize = () => {
+                const newPosition = computePosition();
+                if (newPosition) setPickerPosition(newPosition);
+            };
+            window.addEventListener('resize', handleResize);
         } else {
             console.log("[ColorPicker Effect] Conditions not met (No targetRef for Popover mode). Setting isPositioned = false.");
             // Ensure picker is hidden if no target ref is available for popover mode
@@ -335,6 +340,7 @@ export const ColorPicker = ({
         return () => {
             console.log("[ColorPicker Effect] Cleanup");
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (handleResize) window.removeEventListener('resize', handleResize);
         };
     // Depend on the derived boolean `useBottomSheet` or individual states
     }, [targetRef, position, mobileBottomSheet, isMobileView]); // Dependencies are key

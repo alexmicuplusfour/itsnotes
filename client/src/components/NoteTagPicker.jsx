@@ -747,7 +747,11 @@ export const TagPicker = ({
 
     adjustPosition(); // Call it directly
 
+    // Keep the picker anchored to its trigger button when the window resizes.
+    window.addEventListener('resize', adjustPosition);
+
     return () => {
+      window.removeEventListener('resize', adjustPosition);
       if (rafIdForTransitionReset) {
         cancelAnimationFrame(rafIdForTransitionReset);
       }

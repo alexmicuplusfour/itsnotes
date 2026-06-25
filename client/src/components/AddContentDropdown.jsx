@@ -57,6 +57,13 @@ const DropdownMenu = styled.div`
   padding-top: 6px;
   padding-bottom: 6px;
 
+  /* Flex column so rows stretch to the menu's actual rendered width (instead of
+     resolving width:100% against the shrink-to-fit/max-content basis, which let
+     right-aligned content fall outside the overflow:hidden edge). */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
   opacity: ${props => props.$isPositioned ? 1 : 0};
   pointer-events: ${props => props.$isPositioned ? 'auto' : 'none'};
 
@@ -92,7 +99,8 @@ const DropdownMenu = styled.div`
 `;
 
 const DropdownItem = styled.button`
-  width: 100%;
+  /* Width comes from the parent flex column's align-items:stretch — no width:100%,
+     which would re-introduce the shrink-to-fit overflow bug. */
   padding: 10px 12px;
   text-align: left;
   background: none;
@@ -142,6 +150,49 @@ const DropdownPreviewText = styled.div`
     margin-top: 4px;
   }
 `;
+
+// Label that sits before a RowTrailingAction. The right margin guarantees a gap
+// from the action even when the row is the menu's widest (so margin-left:auto on
+// the action has no slack of its own to add).
+const RowLabel = styled.span`
+  margin-right: 12px;
+`;
+
+// Trailing action for a dropdown row: margin-left:auto right-aligns it within the
+// flex row. Pure flexbox, no positioning math — reusable for any row that wants a
+// right-aligned action. Here it's the OCR paste shortcut, shown only when the
+// clipboard holds an image.
+const RowTrailingAction = styled.span`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 5px;
+  border-radius: 6px;
+  color: var(--text-color-muted);
+  cursor: pointer;
+
+  &:hover {
+    background-color: ${props => props.theme === 'dark'
+    ? 'rgba(255, 255, 255, 0.15)'
+    : 'rgba(0, 0, 0, 0.08)'};
+    color: var(--text-color);
+  }
+
+  & > svg {
+    margin-right: 0;
+  }
+
+  @media (max-width: 768px) {
+    padding: 8px;
+
+    & > svg {
+      width: 22px;
+      height: 22px;
+    }
+  }
+`;
  
 const AddContentDropdown = ({
   isOpen,
@@ -170,6 +221,9 @@ const AddContentDropdown = ({
   const [isPositioned, setIsPositioned] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(isOpen);
+  // Whether the clipboard currently holds an image, so we can offer a direct
+  // "paste to OCR" shortcut instead of forcing the user to save the file first.
+  const [hasClipboardImage, setHasClipboardImage] = useState(false);
 
   // Force immediate render if open to avoid "double click" requirement
   if (isOpen && !shouldRender) {
@@ -213,50 +267,116 @@ const AddContentDropdown = ({
     }
   };
 
-  // Positioning logic
+  // When the menu opens, peek at the clipboard for an image so we can surface a
+  // direct paste shortcut on the OCR row. Only relevant when AI/OCR is enabled.
+  React.useEffect(() => {
+    if (!isOpen || !aiEnabled) {
+      setHasClipboardImage(false);
+      return;
+    }
+
+    if (window.isSecureContext === false || !navigator.clipboard || !navigator.clipboard.read) {
+      return;
+    }
+
+    let cancelled = false;
+    navigator.clipboard.read()
+      .then((items) => {
+        const found = items.some(item => item.types.some(type => type.startsWith('image/')));
+        if (!cancelled) setHasClipboardImage(found);
+      })
+      .catch((err) => {
+        // Permission denied / unsupported — just hide the shortcut silently.
+        console.warn('[AddContentDropdown] Could not read clipboard for image:', err);
+        if (!cancelled) setHasClipboardImage(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [isOpen, aiEnabled]);
+
+  // Read the image off the clipboard and hand it straight to the OCR pipeline.
+  // Falls back to the file picker if the clipboard no longer has an image.
+  const handlePasteOcrClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      ocrFileInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const ext = (blob.type.split('/')[1] || 'png').split(';')[0];
+          const file = new File([blob], `clipboard-image.${ext}`, { type: blob.type });
+          if (onInsertOCR) onInsertOCR(file);
+          if (onClose) onClose();
+          return;
+        }
+      }
+      // Clipboard changed since we checked — fall back to picking a file.
+      ocrFileInputRef.current?.click();
+    } catch (err) {
+      console.warn('[AddContentDropdown] Failed to read image from clipboard:', err);
+      ocrFileInputRef.current?.click();
+    }
+  };
+
+  // Positioning logic. Re-runs on open and whenever the window resizes so the
+  // menu stays anchored to its trigger button (matching the note-actions menu).
   useLayoutEffect(() => {
     if (!isOpen || window.innerWidth <= 768) {
       setIsPositioned(false);
       return;
     }
 
-    if (!triggerRef?.current || !dropdownRef.current) return;
+    const updatePosition = () => {
+      if (!triggerRef?.current || !dropdownRef.current) return;
 
-    const triggerRect = triggerRef.current.getBoundingClientRect();
-    const dropdownRect = dropdownRef.current.getBoundingClientRect();
-    const windowHeight = window.innerHeight;
-    const windowWidth = window.innerWidth;
-    const GAP = 8;
-    const PADDING = 10;
+      const triggerRect = triggerRef.current.getBoundingClientRect();
+      const dropdownRect = dropdownRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
+      const GAP = 8;
+      const PADDING = 10;
 
-    // Default: Position above the trigger, aligned to the right
-    let top = triggerRect.top - dropdownRect.height - GAP;
-    let left = triggerRect.right - dropdownRect.width;
+      // Default: Position above the trigger, aligned to the right
+      let top = triggerRect.top - dropdownRect.height - GAP;
+      let left = triggerRect.right - dropdownRect.width;
 
-    // Check if it fits above
-    if (top < PADDING) {
-      // Try below
-      const topBelow = triggerRect.bottom + GAP;
-      if (topBelow + dropdownRect.height <= windowHeight - PADDING) {
-        top = topBelow;
-      } else {
-        // If neither fits perfectly, clamp to top PADDING
-        top = Math.max(PADDING, top);
+      // Check if it fits above
+      if (top < PADDING) {
+        // Try below
+        const topBelow = triggerRect.bottom + GAP;
+        if (topBelow + dropdownRect.height <= windowHeight - PADDING) {
+          top = topBelow;
+        } else {
+          // If neither fits perfectly, clamp to top PADDING
+          top = Math.max(PADDING, top);
+        }
       }
-    }
 
-    // Ensure it doesn't go off-screen left
-    if (left < PADDING) {
-      left = PADDING;
-    }
-    
-    // Ensure it doesn't go off-screen right
-    if (left + dropdownRect.width > windowWidth - PADDING) {
-      left = windowWidth - dropdownRect.width - PADDING;
-    }
+      // Ensure it doesn't go off-screen left
+      if (left < PADDING) {
+        left = PADDING;
+      }
 
-    setPosition({ top, left });
-    setIsPositioned(true);
+      // Ensure it doesn't go off-screen right
+      if (left + dropdownRect.width > windowWidth - PADDING) {
+        left = windowWidth - dropdownRect.width - PADDING;
+      }
+
+      setPosition({ top, left });
+      setIsPositioned(true);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
 
   }, [isOpen, triggerRef]);
 
@@ -425,7 +545,19 @@ const AddContentDropdown = ({
             data-add-content-dropdown="item"
           >
             <Icon name="ocr" size={18} />
-            Insert OCR Text
+            <RowLabel>Insert OCR Text…</RowLabel>
+            {hasClipboardImage && (
+              <RowTrailingAction
+                role="button"
+                tabIndex={0}
+                theme={isDarkTheme ? 'dark' : 'light'}
+                onClick={handlePasteOcrClick}
+                title="Paste image from clipboard"
+                aria-label="Paste image from clipboard for OCR"
+              >
+                <Icon name="clipboard" size={16} />
+              </RowTrailingAction>
+            )}
           </DropdownItem>
           </>}
           <DropdownItem
@@ -446,7 +578,7 @@ const AddContentDropdown = ({
             data-add-content-dropdown="item"
           >
             <Icon name="attachment" size={20} />
-            Attach files
+            Attach files…
           </DropdownItem>
           <input
             type="file"
@@ -533,7 +665,19 @@ const AddContentDropdown = ({
           data-add-content-dropdown="item"
         >
           <Icon name="ocr" size={18} />
-          Insert OCR Text
+          <RowLabel>Insert OCR Text…</RowLabel>
+          {hasClipboardImage && (
+            <RowTrailingAction
+              role="button"
+              tabIndex={0}
+              theme={isDarkTheme ? 'dark' : 'light'}
+              onClick={handlePasteOcrClick}
+              title="Paste image from clipboard"
+              aria-label="Paste image from clipboard for OCR"
+            >
+              <Icon name="clipboard" size={16} />
+            </RowTrailingAction>
+          )}
         </DropdownItem>
         </>}
         <DropdownItem
@@ -565,7 +709,7 @@ const AddContentDropdown = ({
           data-add-content-dropdown="item"
         >
           <Icon name="attachment" size={20} />
-          Attach files
+          Attach files…
         </DropdownItem>
         <input
           type="file"
