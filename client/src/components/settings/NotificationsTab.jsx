@@ -8,6 +8,7 @@ import {
   Input,
 } from './styles';
 import { notificationsApi } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 import pushoverLogo from '../../assets/images/favicon_pushover.png';
 import pushbulletLogo from '../../assets/images/favicon_pushbullet.png';
 import ntfyLogo from '../../assets/images/favicon_ntfy.png';
@@ -75,41 +76,27 @@ const TestButton = styled.button`
   &:hover { border-color: var(--foreground-color); }
 `;
 
-const TestFeedback = styled.span`
-  font-size: 12px;
-  text-align: right;
-  color: ${props => (props.$ok ? 'var(--success-color, #2e9e44)' : 'var(--danger-color, #e5484d)')};
-`;
-
 // Self-contained "Send test" control for a single service.
 const TestControl = ({ service, config }) => {
-  const [status, setStatus] = useState('idle'); // idle | testing | ok | error
-  const [message, setMessage] = useState('');
+  const [testing, setTesting] = useState(false);
+  const { showToast } = useToast();
 
   const runTest = async () => {
-    setStatus('testing');
-    setMessage('');
+    setTesting(true);
     try {
       await notificationsApi.test(service, config);
-      setStatus('ok');
-      setMessage('Sent — check your device');
+      showToast('Test sent — check your device', { variant: 'success' });
     } catch (e) {
-      setStatus('error');
-      setMessage(e.response?.data?.message || 'Test failed');
+      showToast(e.response?.data?.message || 'Test failed', { variant: 'error' });
+    } finally {
+      setTesting(false);
     }
   };
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-      {(status === 'ok' || status === 'error') && (
-        <TestFeedback $ok={status === 'ok'}>
-          {status === 'ok' ? '✓ ' : '✗ '}{message}
-        </TestFeedback>
-      )}
-      <TestButton onClick={runTest} disabled={status === 'testing'}>
-        {status === 'testing' ? 'Sending…' : 'Send test'}
-      </TestButton>
-    </div>
+    <TestButton onClick={runTest} disabled={testing}>
+      {testing ? 'Sending…' : 'Send test'}
+    </TestButton>
   );
 };
 

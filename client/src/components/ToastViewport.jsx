@@ -16,7 +16,7 @@ const SWIPE_THRESHOLD = 80;
 const VARIANT_BG = {
   warning: 'var(--warning-toast-bg)',
   error: '#c0392b',
-  success: null, // default foreground color
+  success: 'var(--success-color, #2e9e44)',
 };
 
 const Viewport = styled.div`
@@ -46,7 +46,7 @@ const ToastContainer = styled.div`
   position: relative;
   overflow: hidden;
   background-color: ${props => props.$bgColor || 'var(--foreground-color)'};
-  color: ${props => props.$bgColor ? 'var(--text-color)' : 'var(--text-color-contrast)'};
+  color: ${props => props.$bgColor ? 'rgba(255, 255, 255, 0.95)' : 'var(--text-color-contrast)'};
   padding: 10px 16px;
   border-radius: 4px;
   font-size: 14px;
@@ -125,7 +125,7 @@ const ProgressBar = styled.div`
   height: 3px;
   width: 100%;
   transform-origin: left;
-  background: rgba(128, 128, 128, 0.5);
+  background: ${props => (props.$onColor ? 'rgba(255, 255, 255, 0.4)' : 'rgba(128, 128, 128, 0.5)')};
   animation: toastShrink ${props => props.$duration}ms linear forwards;
 
   @keyframes toastShrink {
@@ -251,7 +251,7 @@ const ToastItem = ({ toast, onHide }) => {
       {loading && <Spinner />}
       <ToastMessage>{message}</ToastMessage>
       {action && <ActionButton onClick={handleActionClick}>{action.label}</ActionButton>}
-      {!sticky && <ProgressBar ref={progressRef} $duration={duration} />}
+      {!sticky && <ProgressBar ref={progressRef} $duration={duration} $onColor={!!resolvedBg} />}
     </ToastContainer>
   );
 };
