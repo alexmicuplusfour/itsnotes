@@ -46,6 +46,14 @@ export class NavigationService {
   private isFirstNoteInSession = true;
   private previousState?: NavigationState;
 
+  // One-shot flag: set immediately before a programmatic `window.history.back()`
+  // that we have ALREADY saved for (closeNote / closeAllNotes save the current
+  // note before going back). The popstate handler in NavigationContext reads and
+  // clears this so it does NOT fire a redundant second save for our own back().
+  // A real browser/OS back leaves this false → popstate still saves normally.
+  // Marked public so the popstate handler can consume it via the service ref.
+  public skipPopstateSaveOnce = false;
+
   // Callbacks for external actions
   private saveNoteCallback?: (noteId: string) => Promise<void>;
   private fetchNoteCallback?: (noteId: string) => Promise<void>;
@@ -320,6 +328,9 @@ export class NavigationService {
     if (currentState.noteStack.length > 1) {
       console.log('[NavigationService] Closing stacked note, going back in history');
 
+      // We already saved above (saveNoteCallback). Tell the popstate handler to
+      // skip its own save for this programmatic back() — avoids a redundant second save.
+      this.skipPopstateSaveOnce = true;
       // Use browser back - the history entry was updated with scroll position when we opened the reference
       window.history.back();
 
@@ -347,6 +358,9 @@ export class NavigationService {
       // No search active - use browser back to properly remove the note entry from history
       // This avoids accumulating ghost history entries when opening/closing multiple notes
       console.log('[NavigationService] Closing single note, going back in history');
+      // We already saved above (saveNoteCallback). Tell the popstate handler to
+      // skip its own save for this programmatic back() — avoids a redundant second save.
+      this.skipPopstateSaveOnce = true;
       window.history.back();
     }
 
@@ -401,6 +415,9 @@ export class NavigationService {
       // No search active - use browser back to properly remove the note entry from history
       // This avoids accumulating ghost history entries when clicking outside multiple times
       console.log('[NavigationService] Closing all notes, going back in history');
+      // We already saved above (saveNoteCallback). Tell the popstate handler to
+      // skip its own save for this programmatic back() — avoids a redundant second save.
+      this.skipPopstateSaveOnce = true;
       window.history.back();
     }
 
