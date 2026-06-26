@@ -12,7 +12,24 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      build_id: ${{ steps.id.outputs.build_id }}
+    steps:
+      - name: Compute build id
+        id: id
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          COUNT=$(gh api "/repos/${{ github.repository }}/actions/workflows/docker-publish.yml/runs?created=$DATE" --jq '.total_count')
+          echo "build_id=$DATE.$(printf '%02d' "$COUNT")" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,6 +74,8 @@ jobs:
         with:
           context: ${{ matrix.context }}
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VITE_BUILD_ID=${{ needs.prepare.outputs.build_id }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -9,6 +9,10 @@ COPY package*.json ./
 # Install all dependencies (including devDependencies needed for build)
 RUN npm ci
 
+# Build stamp injected by CI (date + per-day count, e.g. 2026-06-26.03)
+ARG VITE_BUILD_ID=dev
+ENV VITE_BUILD_ID=$VITE_BUILD_ID
+
 # Copy source code
 COPY . .
 

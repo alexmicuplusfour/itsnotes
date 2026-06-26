@@ -153,18 +153,24 @@ const SidebarMenuItem = styled.button`
   }
 `;
 
+const GithubFooterRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+`;
+
 const GithubLink = styled.a`
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  margin-top: 4px;
   font-size: 12px;
   color: var(--text-color-contrast);
   opacity: 0.5;
   text-decoration: none;
   transition: opacity 0.2s ease;
-  align-self: flex-start;
 
   &:hover {
     opacity: 0.9;
@@ -173,6 +179,15 @@ const GithubLink = styled.a`
   svg {
     flex-shrink: 0;
   }
+`;
+
+const BuildStamp = styled.span`
+  padding: 8px 16px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-color-contrast);
+  opacity: 0.35;
+  white-space: nowrap;
 `;
 
 const SidebarCloseButton = styled.button`
@@ -348,15 +363,20 @@ const MainNavigationMenu = memo(({
           <Icon name="signOut" size={20} />
           <span>Sign Out</span>
         </SidebarMenuItem>
-        <GithubLink
-          href="https://github.com/alexmicuplusfour/itsnotes"
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Icon name="github" size={12} />
-          <span>GitHub</span>
-        </GithubLink>
+        <GithubFooterRow>
+          <GithubLink
+            href="https://github.com/alexmicuplusfour/itsnotes"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Icon name="github" size={12} />
+            <span>GitHub</span>
+          </GithubLink>
+          {import.meta.env.VITE_BUILD_ID && (
+            <BuildStamp title="Build">{import.meta.env.VITE_BUILD_ID}</BuildStamp>
+          )}
+        </GithubFooterRow>
       </SidebarMenuList>
     </SidebarContainer>
     </>
