@@ -359,21 +359,65 @@ class SocketService {
       console.log('Page is now visible.');
       this.requestWakeLock(); // Re-acquire wake lock if needed/possible
 
-      // Check socket status - Only attempt to connect if NOT already connected
+      // Check socket status. NOTE: after the page was frozen in the background
+      // (e.g. phone locked / app switched away), `socket.connected` can still
+      // report `true` even though the underlying connection is dead, because no
+      // JS ran while frozen to observe the drop. If we trust that stale flag we
+      // skip reconnecting and only notice the dead link when socket.io's ping
+      // eventually times out (~5s+), which is what makes recovery slow.
       if (!this.socket || !this.socket.connected) {
         console.log('Socket is not connected. Attempting to connect/reconnect...');
         // Explicitly try to connect. This will trigger 'connect' or 'reconnect'
         // which will then call _triggerSync() upon success via the 'connect'/'reconnect' handlers.
         this.connect();
       } else {
-         console.log('Socket is already connected. No proactive sync needed on visibility change.');
+        // Socket *claims* to be connected. Don't blindly tear it down — on a quick
+        // app switch the link is usually genuinely fine, and dropping it would force
+        // a needless multi-second reconnect. Instead probe it: ping the server and,
+        // if there's no response shortly, treat it as stale and force a reconnect.
+        console.log('Socket reports connected on resume; probing liveness...');
+        this._probeLiveness();
       }
     } else {
       console.log('Page is now hidden.');
       // We are keeping the connection alive intentionally.
     }
   };
-  
+
+  // Verify a (supposedly) connected socket is actually alive after resume.
+  // Sends a keep-alive ping; if the server's keep_alive_response doesn't arrive
+  // within the timeout, the connection is stale (the page was frozen and the link
+  // silently died) so we force a fresh reconnect. The forced disconnect is silent
+  // — the 'disconnect' handler ignores 'io client disconnect', so it won't fire
+  // the "Reconnecting..." toast path.
+  _probeLiveness(timeoutMs = 2000) {
+    if (!this.socket || !this.socket.connected) {
+      this.connect();
+      return;
+    }
+
+    let settled = false;
+    const onResponse = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(probeTimer);
+      this.socket.off('keep_alive_response', onResponse);
+      console.log('Liveness probe OK; connection is alive.');
+    };
+
+    const probeTimer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      this.socket.off('keep_alive_response', onResponse);
+      console.log('Liveness probe timed out; connection is stale. Forcing reconnect.');
+      this.socket.disconnect();
+      this.socket.connect();
+    }, timeoutMs);
+
+    this.socket.once('keep_alive_response', onResponse);
+    this.socket.emit('keep_alive', { timestamp: Date.now() });
+  }
+
   // Keep the connection alive by sending periodic pings
   startKeepAlive() {
     console.log("Starting custom keep-alive pings.");

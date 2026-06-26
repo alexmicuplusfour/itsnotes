@@ -31,6 +31,11 @@ export const AuthProvider = ({ children }) => {
   const [isSocketConnected, setIsSocketConnected] = useState(null);
   const disconnectTimerRef = React.useRef(null);
   const isDisconnectedRef = React.useRef(false);
+  // Timestamp of the last time the app came to the foreground. The reconnect
+  // toast is suppressed for a window after this, because the background→foreground
+  // reconnect can genuinely take many seconds (radio wake-up, TLS, handshake,
+  // auth) and we don't want to flash "Reconnecting..." every time you switch back.
+  const lastForegroundAtRef = React.useRef(Date.now());
 
   // Register connection status callback when authenticated
   useEffect(() => {
@@ -42,11 +47,28 @@ export const AuthProvider = ({ children }) => {
       return () => {};
     }
 
+    // How long after returning to the foreground we refuse to show the toast.
+    // Covers the slow post-resume reconnect on mobile; a genuine in-use outage
+    // still surfaces because by then the foreground timestamp is old.
+    const FOREGROUND_GRACE_MS = 15000;
+
+    // Decide whether to actually surface the toast. If we're still inside the
+    // post-foreground grace window, re-check later instead of showing it — this
+    // way a reconnect that takes 10–12s after resume never flashes the toast,
+    // while a sustained outage eventually does.
+    const evaluateDisconnected = () => {
+      if (!isDisconnectedRef.current) return;
+      const sinceForeground = Date.now() - lastForegroundAtRef.current;
+      if (sinceForeground < FOREGROUND_GRACE_MS) {
+        startDisconnectTimer(FOREGROUND_GRACE_MS - sinceForeground);
+        return;
+      }
+      setIsSocketConnected(false);
+    };
+
     const startDisconnectTimer = (delay) => {
       clearTimeout(disconnectTimerRef.current);
-      disconnectTimerRef.current = setTimeout(() => {
-        if (isDisconnectedRef.current) setIsSocketConnected(false);
-      }, delay);
+      disconnectTimerRef.current = setTimeout(evaluateDisconnected, delay);
     };
 
     socketService.registerConnectionStatusCallback((connected) => {
@@ -57,27 +79,60 @@ export const AuthProvider = ({ children }) => {
         setIsSocketConnected(true);
       } else {
         isDisconnectedRef.current = true;
-        // Only start timer if visible — if the page is hidden (phone locked),
-        // the timer will be started when the page becomes visible again
+        // Only start the timer if visible — if the page is hidden (phone locked /
+        // app backgrounded) the timer is started when the page becomes visible.
         if (document.visibilityState === 'visible') {
           startDisconnectTimer(4000);
         }
       }
     });
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && isDisconnectedRef.current && !disconnectTimerRef.current) {
-        // Page just became visible and we're still disconnected — give the socket
-        // a moment to reconnect before showing the toast
-        startDisconnectTimer(3000);
+    // Mark a foreground/resume transition: start the grace window now and re-arm
+    // the disconnect check in case we're still down after coming back.
+    const markForeground = () => {
+      lastForegroundAtRef.current = Date.now();
+      if (isDisconnectedRef.current) {
+        startDisconnectTimer(4000);
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') markForeground();
+    };
+
+    // Resume detection that does NOT rely on `visibilitychange` — that event is
+    // unreliable on Android PWAs and often doesn't fire when returning to the app,
+    // which left the grace window disengaged and let the toast flash on resume.
+    // While the page is frozen in the background, intervals stop running, so a gap
+    // between ticks much larger than the interval means we were frozen and have
+    // just resumed. That's a device-independent "we're back" signal.
+    const HEARTBEAT_MS = 2000;
+    const FREEZE_GAP_MS = 4000;
+    let lastTick = Date.now();
+    const heartbeat = setInterval(() => {
+      const now = Date.now();
+      if (now - lastTick > FREEZE_GAP_MS) {
+        // Page was frozen (backgrounded) and just resumed.
+        markForeground();
+      }
+      lastTick = now;
+    }, HEARTBEAT_MS);
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Belt-and-suspenders: these also signal a return to the app on various
+    // platforms. markForeground is cheap and idempotent, so firing on several is fine.
+    window.addEventListener('focus', markForeground);
+    window.addEventListener('pageshow', markForeground);
+    document.addEventListener('resume', markForeground);
+
     return () => {
       clearTimeout(disconnectTimerRef.current);
+      clearInterval(heartbeat);
       socketService.clearConnectionStatusCallback();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', markForeground);
+      window.removeEventListener('pageshow', markForeground);
+      document.removeEventListener('resume', markForeground);
     };
   }, [isAuthenticated]);
 
