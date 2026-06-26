@@ -2086,6 +2086,15 @@ export const NotesProvider = ({ children }) => {
     showToast(count === 1 ? 'Note hidden from view' : `${count} notes hidden from view`);
   }, [showToast]);
 
+  const handleMirrorImported = useCallback(({ created = 0, updated = 0 } = {}) => {
+    const total = created + updated;
+    if (!total) return;
+    const parts = [];
+    if (created) parts.push(`${created} added`);
+    if (updated) parts.push(`${updated} updated`);
+    showToast(`Mirror imported: ${parts.join(', ')}`);
+  }, [showToast]);
+
   const deleteNote = useCallback(async (id, suppressToast = false) => {
     // First, get the note to check if it's archived
     let isNoteArchived = false;
@@ -2394,11 +2403,12 @@ export const NotesProvider = ({ children }) => {
       'tag_updated': handleSocketTagUpdated,
       'bulk_tags_updated': handleBulkTagsUpdated, // Add the new handler
       'note_operation': (data) => console.log('[SOCKET] Note Operation:', data),
+      'mirror_imported': handleMirrorImported,
     };
   }, [handleSocketNoteCreated, handleSocketNoteUpdated, handleSocketNoteDeleted,
       handleSocketNotesBulkUpdated, handleSocketNotesBulkDeleted,
       handleSocketObjectUpdated, handleSocketNoteTagChange, handleSocketNoteImageChange,
-      handleSocketTagUpdated, handleBulkTagsUpdated]);
+      handleSocketTagUpdated, handleBulkTagsUpdated, handleMirrorImported]);
       
   // Set up effect to handle pending tag changes after getNoteTags is defined
   useEffect(() => {
@@ -2471,7 +2481,8 @@ export const NotesProvider = ({ children }) => {
     handleSocketNoteTagChange, // This handles note_tag_updated, note_tags_changes, note_tags_updated
     handleSocketNoteImageChange, // This handles note_image_added, note_image_deleted
     handleSocketTagUpdated,
-    handleBulkTagsUpdated
+    handleBulkTagsUpdated,
+    handleMirrorImported,
     // The anonymous handler for 'note_operation' is stable if defined inline without dependencies,
     // but if it were a useCallback with its own deps, it would also be listed here.
   ]);

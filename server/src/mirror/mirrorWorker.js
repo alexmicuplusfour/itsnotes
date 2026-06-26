@@ -724,6 +724,10 @@ async function autoImportTick() {
           conflict: result.conflict || 0,
         }));
         await broadcastImportResult(result);
+        if (io) io.emit('mirror_imported', {
+          created: (result.createdIds || []).length,
+          updated: (result.updatedIds || []).length,
+        });
       }
     }
   } catch (err) {
