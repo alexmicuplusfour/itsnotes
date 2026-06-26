@@ -51,6 +51,24 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
   </tr>
 </table>
 
+### On mobile
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/mobile/mobile-list.png" width="250"/></td>
+    <td><img src="docs/screenshots/mobile/mobile-grid.png" width="250"/></td>
+    <td><img src="docs/screenshots/mobile/mobile-calendar.png" width="250"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mobile/mobile-note.png" width="250"/></td>
+    <td><img src="docs/screenshots/mobile/mobile-note-search.png" width="250"/></td>
+    <td><img src="docs/screenshots/mobile/mobile-grid-dark.png" width="250"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/mobile/mobile-dark-selection.png" width="250"/></td>
+  </tr>
+</table>
+
 ## Docker Setup
 
 Save this as `docker-compose.yml`:
