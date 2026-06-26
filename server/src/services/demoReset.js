@@ -170,6 +170,10 @@ class DemoResetService {
     }
   }
 
+  async triggerReset() {
+    return this._doReset();
+  }
+
   getNextResetAt() {
     return this.nextResetAt ? this.nextResetAt.toISOString() : null;
   }

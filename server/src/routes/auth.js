@@ -199,6 +199,20 @@ router.post('/extension-token', authenticateToken, async (req, res) => {
   }
 });
 
+// Trigger an immediate demo reset (demo mode only, requires auth)
+router.post('/demo-reset', authenticateToken, async (req, res) => {
+  if (!demoReset.isEnabled()) {
+    return res.status(403).json({ message: 'Not in demo mode' });
+  }
+  try {
+    await demoReset.triggerReset();
+    res.json({ message: 'Demo reset complete' });
+  } catch (error) {
+    console.error('Error during demo reset:', error);
+    res.status(500).json({ message: 'Demo reset failed' });
+  }
+});
+
 // Get current user info
 router.get('/me', authenticateToken, async (req, res) => {
   try {
