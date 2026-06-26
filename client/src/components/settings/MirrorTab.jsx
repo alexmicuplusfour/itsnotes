@@ -357,7 +357,7 @@ const MirrorTab = ({ settings, commit, commitImmediate }) => {
         <Switch
           id="md-mirror-enabled-toggle"
           checked={enabled}
-          onChange={() => commit({ ...settings, MD_MIRROR_ENABLED: !enabled })}
+          onChange={() => commitImmediate({ ...settings, MD_MIRROR_ENABLED: !enabled })}
         />
       </EnableBanner>
 
@@ -397,7 +397,7 @@ const MirrorTab = ({ settings, commit, commitImmediate }) => {
                 <Switch
                   id="md-mirror-auto-import-toggle"
                   checked={autoImport}
-                  onChange={() => commit({ ...settings, MD_MIRROR_AUTO_IMPORT: !autoImport })}
+                  onChange={() => commitImmediate({ ...settings, MD_MIRROR_AUTO_IMPORT: !autoImport })}
                 />
               </PanelHead>
               <PanelDesc>Import · pulls file edits back into notes</PanelDesc>
