@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import styled from 'styled-components';
 import { useAuth } from '../contexts/AuthContext';
-import Icon from './Icons';
 import ThemeManager from '../utils/ThemeManager';
+import { Button } from './settings/styles';
+import { useToast } from '../contexts/ToastContext';
 
 const Container = styled.div`
   display: flex;
@@ -64,29 +65,16 @@ const ButtonGroup = styled.div`
   flex-wrap: wrap;
 `;
 
-const Button = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 6px;
-  border: 1px solid var(--foreground-color);
-  color: var(--text-color);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
+const LoadingSpinner = styled.div`
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--text-color);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 
-  &:hover:not(:disabled) {
-    background-color: var(--menu-item-hover);
-    border-color: var(--border-hover-color);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 `;
 
@@ -138,6 +126,7 @@ const ResultsList = styled.ul`
 
 const ImportExportSettings = () => {
   const { token, isDemoMode } = useAuth();
+  const { showToast, hideToast } = useToast();
   const fileInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -145,16 +134,7 @@ const ImportExportSettings = () => {
   const [importResult, setImportResult] = useState(null);
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState({ current: 0, total: 0, percent: 0 });
-  const eventSourceRef = useRef(null);
-  const [isDarkTheme, setIsDarkTheme] = useState(ThemeManager.getTheme());
-
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
+  const [isDarkTheme] = useState(ThemeManager.getTheme());
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -163,24 +143,19 @@ const ImportExportSettings = () => {
   const handleFileChange = async (e) => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
-    
-    // Reset file input for future selections
     e.target.value = '';
-    
+
     if (!selectedFile.name.endsWith('.zip')) {
       setError('Please select a valid Google Takeout zip file (.zip)');
       return;
     }
 
     if (selectedFile.size > 100 * 1024 * 1024) {
-      const confirmLargeUpload = window.confirm(
+      const ok = window.confirm(
         `You're uploading a large file (${Math.round(selectedFile.size / (1024 * 1024))}MB). ` +
         `This may take several minutes to process. Please keep the browser tab open until the import completes. Continue?`
       );
-      
-      if (!confirmLargeUpload) {
-        return;
-      }
+      if (!ok) return;
     }
 
     setUploading(true);
@@ -190,151 +165,91 @@ const ImportExportSettings = () => {
     setImportResult(null);
     setProgress({ current: 0, total: 0, percent: 0 });
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+    const TOAST_ID = 'keep-import';
+    showToast('Importing from Google Keep…', { id: TOAST_ID, loading: true });
+
+    const processServerEvent = (data) => {
+      switch (data.event) {
+        case 'status':
+          setStatus(data.data.message);
+          break;
+        case 'progress':
+          setProgress(data.data);
+          showToast(`Importing… ${data.data.percent}%`, { id: TOAST_ID, loading: true });
+          break;
+        case 'complete': {
+          const r = data.data.result;
+          const summary = r ? `${r.successful} note${r.successful !== 1 ? 's' : ''} imported` : 'Import complete';
+          showToast(summary, { id: TOAST_ID, variant: 'success', duration: 'long' });
+          setSuccess(data.data.message);
+          setImportResult(r);
+          setUploading(false);
+          setTimeout(() => window.location.reload(), 2000);
+          break;
+        }
+        case 'error':
+          showToast(data.data.message, { id: TOAST_ID, variant: 'error', duration: 'long' });
+          setError(data.data.message);
+          setUploading(false);
+          break;
+      }
+    };
+
+    const parseChunk = (chunk) => {
+      for (const eventStr of chunk.split('\n\n')) {
+        const trimmed = eventStr.trim();
+        if (trimmed.startsWith('data:')) {
+          try {
+            processServerEvent(JSON.parse(trimmed.slice(5).trim()));
+          } catch (_) {}
+        }
+      }
+    };
 
     const formData = new FormData();
     formData.append('archive', selectedFile);
 
     try {
-      const xhr = new XMLHttpRequest();
-      const uploadPromise = new Promise((resolve, reject) => {
-        xhr.timeout = 3600000; // 1 hour
+      await new Promise((resolve, reject) => {
+        let lastIndex = 0;
+        const xhr = new XMLHttpRequest();
+        xhr.timeout = 3600000;
         xhr.open('POST', '/api/import', true);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-        
-        xhr.onload = function() {
+
+        xhr.onprogress = function () {
+          const chunk = xhr.responseText.slice(lastIndex);
+          lastIndex = xhr.responseText.length;
+          parseChunk(chunk);
+        };
+
+        xhr.onload = function () {
+          const remaining = xhr.responseText.slice(lastIndex);
+          if (remaining) parseChunk(remaining);
           if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              if (xhr.responseText && xhr.responseText.includes('data:')) {
-                const lines = xhr.responseText.split('\n\n');
-                for (const line of lines) {
-                  if (line.startsWith('data:')) {
-                    try {
-                      const jsonData = JSON.parse(line.substring(5));
-                      processServerEvent(jsonData);
-                    } catch (e) {
-                      console.error('Error parsing SSE data', e);
-                    }
-                  }
-                }
-              }
-              setStatus('Processing notes...');
-              resolve();
-            } catch (err) {
-              console.error('Error processing response', err);
-              reject(new Error('Error processing server response'));
-            }
+            resolve();
           } else {
-            const errorMsg = xhr.statusText || `Server responded with status: ${xhr.status}`;
-            reject(new Error(errorMsg));
+            reject(new Error(xhr.statusText || `Server error: ${xhr.status}`));
           }
         };
-        
-        xhr.onerror = function() {
-          reject(new Error('Network error occurred'));
-        };
-        
-        xhr.ontimeout = function() {
-          reject(new Error('Request timed out. The server might still be processing the import.'));
-        };
-        
-        xhr.upload.onprogress = function(event) {
+
+        xhr.onerror = () => reject(new Error('Network error occurred'));
+        xhr.ontimeout = () => reject(new Error('Request timed out. The server might still be processing the import.'));
+
+        xhr.upload.onprogress = function (event) {
           if (event.lengthComputable) {
-            const uploadPercent = Math.round((event.loaded / event.total) * 100);
-            setStatus(`Uploading: ${uploadPercent}%`);
+            setStatus(`Uploading: ${Math.round((event.loaded / event.total) * 100)}%`);
           }
         };
-        
-        if (xhr.upload) {
-          xhr.upload.onerror = function() {
-            if (xhr.status === 413) {
-              reject(new Error('File too large for server to accept. Please contact the administrator.'));
-            }
-          };
-        }
-        
+
         xhr.send(formData);
       });
-      
-      const processServerEvent = (data) => {
-        switch(data.event) {
-          case 'status':
-            setStatus(data.data.message);
-            break;
-          case 'progress':
-            setProgress(data.data);
-            break;
-          case 'complete':
-            setSuccess(data.data.message);
-            setImportResult(data.data.result);
-            setUploading(false);
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close();
-            }
-            // Match the /restore flow: imported notes/tags live in the DB but
-            // the running app has no idea they exist. A page reload picks them
-            // all up cleanly.
-            setTimeout(() => {
-              window.location.reload();
-            }, 2000);
-            break;
-          case 'error':
-            setError(data.data.message);
-            setUploading(false);
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close();
-            }
-            break;
-          default:
-            console.log('Unknown event type:', data.event);
-        }
-      };
-      
-      await uploadPromise;
-      
-      try {
-        const es = new EventSource(`/api/import/stream?t=${Date.now()}`);
-        eventSourceRef.current = es;
-        
-        es.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            processServerEvent(data);
-          } catch (e) {
-            console.error('Error parsing SSE message', e);
-          }
-        };
-        
-        es.onerror = (err) => {
-          console.error('EventSource error:', err);
-          if (uploading) {
-            setStatus('Connection to server lost. The import may still be processing in the background.');
-          }
-        };
-      } catch (esError) {
-        console.error('Error setting up EventSource:', esError);
-        setStatus('Processing import (live updates unavailable)...');
-      }
-      
     } catch (err) {
-      console.error('Import error:', err);
-      let errorMessage = 'An error occurred during import';
-      
-      if (err.response && err.response.data && err.response.data.error) {
-        errorMessage = err.response.data.error;
-        if (err.response.data.details) {
-          errorMessage += `: ${err.response.data.details}`;
-        }
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
+      let errorMessage = err.message || 'An error occurred during import';
       if (errorMessage.includes('413') || errorMessage.includes('too large')) {
-        errorMessage += `. Try using a smaller file or contact the administrator to increase the file size limit.`;
+        errorMessage += '. Try using a smaller file or contact the administrator to increase the file size limit.';
       }
-      
+      showToast(errorMessage, { id: 'keep-import', variant: 'error', duration: 'long' });
       setError(errorMessage);
       setUploading(false);
     }
@@ -363,14 +278,21 @@ const ImportExportSettings = () => {
           onChange={handleFileChange}
           disabled={uploading}
         />
-        
+
         <ButtonGroup>
-          <Button 
+          <Button
             type="button"
             onClick={handleImportClick}
             disabled={isDemoMode || uploading}
           >
-            {uploading ? 'Importing...' : 'Import from Takeout ...'}
+            {uploading ? (
+              <>
+                <LoadingSpinner />
+                Importing...
+              </>
+            ) : (
+              'Import from Takeout ...'
+            )}
           </Button>
         </ButtonGroup>
 
@@ -383,13 +305,10 @@ const ImportExportSettings = () => {
                   <ProgressBarFill style={{ width: `${progress.percent}%` }} />
                 </ProgressBarContainer>
                 <StatusMessage>
-                  {`${progress.current} of ${progress.total} notes (${progress.percent}%)`}
+                  {progress.current} of {progress.total} notes ({progress.percent}%)
                 </StatusMessage>
               </>
             )}
-            <StatusMessage style={{ fontSize: '12px', marginTop: '5px' }}>
-              Please keep this window open until the import completes. Large imports may take several minutes.
-            </StatusMessage>
           </div>
         )}
 
@@ -403,6 +322,12 @@ const ImportExportSettings = () => {
                 <li>Total notes processed: {importResult.total}</li>
                 <li>Successfully imported: {importResult.successful}</li>
                 <li>Tags/labels imported: {importResult.labelsImported}</li>
+                {importResult.imagesImported > 0 && (
+                  <li>Images imported: {importResult.imagesImported}</li>
+                )}
+                {importResult.attachmentsImported > 0 && (
+                  <li>Other attachments imported: {importResult.attachmentsImported}</li>
+                )}
                 <li>Failed imports: {importResult.failed}</li>
               </ResultsList>
             )}
