@@ -1414,6 +1414,32 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     [openReferencedNote],
   ); // Add dependencies
 
+  // Add a single image file to the note (upload + insert inline). Shared by the
+  // file-picker path and the clipboard paste shortcut.
+  const handleAddImageFile = useCallback(async (file) => {
+    if (!file) return;
+
+    // Call the hook's addImage function
+    const result = await addImage(file, note?.id); // Pass current note ID
+
+    if (result.success) {
+      console.log("Image added/previewed successfully via hook.");
+      markAsModified();
+
+      // Insert the image inline at the cursor position. We route through
+      // the imperative ref so it handles the NodeSelection collapse and
+      // skips the keyboard-popping .focus() — this image-add path is
+      // triggered by the action-bar button.
+      if (contentInputRef.current && result.image) {
+        const success = contentInputRef.current.insertInlineImage(result.image);
+        console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
+      }
+    } else {
+      console.error("Failed to add image via hook:", result.error);
+      showToast(result.error || 'Could not add the image.', { variant: 'error' });
+    }
+  }, [note?.id, addImage, markAsModified, showToast]);
+
   // --- Update handleAddImageClick ---
   const handleAddImageClick = useCallback(async () => {
     // Make async
@@ -1426,34 +1452,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       // Make async
       const file = event.target.files[0];
       document.body.removeChild(fileInput); // Clean up input earlier
-
-      if (!file) return;
-
-      // Call the hook's addImage function
-      const result = await addImage(file, note?.id); // Pass current note ID
-
-      if (result.success) {
-        console.log("Image added/previewed successfully via hook.");
-        markAsModified();
-
-        // Insert the image inline at the cursor position. We route through
-        // the imperative ref so it handles the NodeSelection collapse and
-        // skips the keyboard-popping .focus() — this image-add path is
-        // triggered by the action-bar button.
-        if (contentInputRef.current && result.image) {
-          const success = contentInputRef.current.insertInlineImage(result.image);
-          console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
-        }
-      } else {
-        console.error("Failed to add image via hook:", result.error);
-        showToast(result.error || 'Could not add the image.', { variant: 'error' });
-      }
+      await handleAddImageFile(file);
     };
 
     document.body.appendChild(fileInput);
     fileInput.click();
     // No 'finally' needed here as input is removed earlier
-  }, [note?.id, addImage, isMobile, showToast]); // Removed adjustTextareaHeight dependency
+  }, [handleAddImageFile]);
 
   /* Redundant handlers removed (moved to useNoteContentActions) */
 
@@ -2595,6 +2600,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           clipboardUrlPreview={clipboardUrl ? getTruncatedUrl(clipboardUrl) : 'No links found in clipboard'}
           clipboardActionLabel={clipboardActionLabel}
           onAddImage={(e) => handleAddContentImageClick(e, handleAddImageClick)}
+          onAddImageFile={handleAddImageFile}
           onAddClipboardUrl={handleAddContentFromClipboard}
           onCloseAddContentDropdown={handleCloseAddContentDropdown}
           clipboardUrl={clipboardUrl}

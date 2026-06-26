@@ -198,6 +198,7 @@ const AddContentDropdown = ({
   isOpen,
   triggerRef,
   onAddImage,
+  onAddImageFile = null,
   onAddTask,
   onAddNote = null,
   onAddAttachment = null,
@@ -268,9 +269,9 @@ const AddContentDropdown = ({
   };
 
   // When the menu opens, peek at the clipboard for an image so we can surface a
-  // direct paste shortcut on the OCR row. Only relevant when AI/OCR is enabled.
+  // direct paste shortcut on the Add Image and OCR rows.
   React.useEffect(() => {
-    if (!isOpen || !aiEnabled) {
+    if (!isOpen) {
       setHasClipboardImage(false);
       return;
     }
@@ -292,19 +293,12 @@ const AddContentDropdown = ({
       });
 
     return () => { cancelled = true; };
-  }, [isOpen, aiEnabled]);
+  }, [isOpen]);
 
-  // Read the image off the clipboard and hand it straight to the OCR pipeline.
-  // Falls back to the file picker if the clipboard no longer has an image.
-  const handlePasteOcrClick = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!navigator.clipboard || !navigator.clipboard.read) {
-      ocrFileInputRef.current?.click();
-      return;
-    }
-
+  // Read an image off the clipboard and return it as a File, or null if there
+  // isn't one (or the read failed/clipboard changed since we detected it).
+  const readClipboardImage = async () => {
+    if (!navigator.clipboard || !navigator.clipboard.read) return null;
     try {
       const items = await navigator.clipboard.read();
       for (const item of items) {
@@ -312,17 +306,40 @@ const AddContentDropdown = ({
         if (imageType) {
           const blob = await item.getType(imageType);
           const ext = (blob.type.split('/')[1] || 'png').split(';')[0];
-          const file = new File([blob], `clipboard-image.${ext}`, { type: blob.type });
-          if (onInsertOCR) onInsertOCR(file);
-          if (onClose) onClose();
-          return;
+          return new File([blob], `clipboard-image.${ext}`, { type: blob.type });
         }
       }
-      // Clipboard changed since we checked — fall back to picking a file.
-      ocrFileInputRef.current?.click();
     } catch (err) {
       console.warn('[AddContentDropdown] Failed to read image from clipboard:', err);
+    }
+    return null;
+  };
+
+  // Paste the clipboard image straight into the OCR pipeline. Falls back to the
+  // file picker if the clipboard no longer has an image.
+  const handlePasteOcrClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = await readClipboardImage();
+    if (file) {
+      if (onInsertOCR) onInsertOCR(file);
+      if (onClose) onClose();
+    } else {
       ocrFileInputRef.current?.click();
+    }
+  };
+
+  // Paste the clipboard image straight in as an inline image. Falls back to the
+  // normal "Add Image" file picker if the clipboard no longer has an image.
+  const handlePasteImageClick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = await readClipboardImage();
+    if (file) {
+      if (onAddImageFile) onAddImageFile(file);
+      if (onClose) onClose();
+    } else if (onAddImage) {
+      onAddImage(e);
     }
   };
 
@@ -500,7 +517,19 @@ const AddContentDropdown = ({
             data-add-content-dropdown="item"
           >
             <Icon name="image" size={18} />
-            Add Image
+            <RowLabel>Add Image</RowLabel>
+            {hasClipboardImage && (
+              <RowTrailingAction
+                role="button"
+                tabIndex={0}
+                theme={isDarkTheme ? 'dark' : 'light'}
+                onClick={handlePasteImageClick}
+                title="Paste image from clipboard"
+                aria-label="Paste image from clipboard"
+              >
+                <Icon name="clipboard" size={16} />
+              </RowTrailingAction>
+            )}
           </DropdownItem>
           <DropdownItem
             onClick={handleAddTaskClick}
@@ -621,7 +650,19 @@ const AddContentDropdown = ({
         data-add-content-dropdown="item"
       >
           <Icon name="image" size={18} />
-          Add Image
+          <RowLabel>Add Image</RowLabel>
+          {hasClipboardImage && (
+            <RowTrailingAction
+              role="button"
+              tabIndex={0}
+              theme={isDarkTheme ? 'dark' : 'light'}
+              onClick={handlePasteImageClick}
+              title="Paste image from clipboard"
+              aria-label="Paste image from clipboard"
+            >
+              <Icon name="clipboard" size={16} />
+            </RowTrailingAction>
+          )}
         </DropdownItem>        <DropdownItem
           onClick={handleAddTaskClick}
           theme={isDarkTheme ? 'dark' : 'light'}
