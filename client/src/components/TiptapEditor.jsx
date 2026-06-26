@@ -519,6 +519,8 @@ const TiptapEditor = forwardRef(({
         .replace(/<p><p><\/p><\/p>/g, '<p></p>');
       html = html.replace(/<p class="is-empty"><\/p>/g, '<p></p>');
       html = html.replace(/<p[^>]*>\s*<br[^>]*>\s*<\/p>/gi, '<p></p>');
+      // Strip upload-in-progress placeholder nodes so they never reach the DB
+      html = html.replace(/<img\b[^>]*\bdata-placeholder-id="[^"]*"[^>]*\/?>/gi, '');
     }
     return html;
   }, []);

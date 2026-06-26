@@ -5,6 +5,28 @@ import Icon from "./Icons";
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { getInlineImageUrl } from '../services/inlineImageResolver';
 
+const ensurePlaceholderStyles = () => {
+  if (document.getElementById('inline-image-placeholder-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'inline-image-placeholder-styles';
+  style.textContent = `
+    @keyframes inline-image-shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .inline-image-placeholder {
+      background: linear-gradient(90deg, var(--fill-subtle) 25%, var(--button-bg) 50%, var(--fill-subtle) 75%);
+      background-size: 200% 100%;
+      animation: inline-image-shimmer 1.5s infinite linear;
+      border-radius: 8px;
+      min-height: 120px;
+      width: 100%;
+      display: block;
+    }
+  `;
+  document.head.appendChild(style);
+};
+
 export const TiptapImageExtension = Node.create({
   name: 'inlineImage',
 
@@ -82,6 +104,14 @@ export const TiptapImageExtension = Node.create({
           return { 'data-image-id': attributes['data-image-id'] };
         },
       },
+      'data-placeholder-id': {
+        default: null,
+        parseHTML: element => element.getAttribute('data-placeholder-id'),
+        renderHTML: attributes => {
+          if (!attributes['data-placeholder-id']) return {};
+          return { 'data-placeholder-id': attributes['data-placeholder-id'] };
+        },
+      },
     };
   },
 
@@ -132,7 +162,28 @@ export const TiptapImageExtension = Node.create({
     return ({ node, getPos, editor }) => {
       const dom = document.createElement('div');
       dom.style.cssText = 'position: relative; display: block; margin: 0.5rem 0; pointer-events: none; user-select: none;';
-      
+
+      const isPlaceholder = !!node.attrs['data-placeholder-id'];
+
+      if (isPlaceholder) {
+        ensurePlaceholderStyles();
+        const placeholderDiv = document.createElement('div');
+        placeholderDiv.className = 'inline-image-placeholder';
+        if (node.attrs.width && node.attrs.height) {
+          placeholderDiv.style.aspectRatio = `${node.attrs.width} / ${node.attrs.height}`;
+        }
+        dom.appendChild(placeholderDiv);
+        return {
+          dom,
+          update: (updatedNode) => {
+            if (updatedNode.type.name !== this.name) return false;
+            // Placeholder → real image: force NodeView recreation
+            if (!updatedNode.attrs['data-placeholder-id']) return false;
+            return true;
+          },
+        };
+      }
+
       const img = document.createElement('img');
 
       // Resolve the displayed source: prefer an inline src (legacy base64 or a
@@ -151,7 +202,7 @@ export const TiptapImageExtension = Node.create({
 
       img.alt = node.attrs.alt || '';
       img.title = node.attrs.title || '';
-      
+
       if (node.attrs.width) {
         img.width = node.attrs.width;
       }
@@ -161,9 +212,9 @@ export const TiptapImageExtension = Node.create({
       if (node.attrs['data-image-id']) {
         img.setAttribute('data-image-id', node.attrs['data-image-id']);
       }
-      
+
       img.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px; pointer-events: none; user-select: none;';
-      
+
       // Removed click handler - no action on image click/tap
 
       // Add delete button overlay (always visible)
@@ -185,7 +236,7 @@ export const TiptapImageExtension = Node.create({
         z-index: 10;
         pointer-events: auto;
       `;
-      
+
       // Create React root and render the Icon component inside the button
       const iconRoot = createRoot(deleteButton);
       iconRoot.render(React.createElement(Icon, {
@@ -193,11 +244,11 @@ export const TiptapImageExtension = Node.create({
         size: 18,
         color: 'white'
       }));
-      
+
       deleteButton.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        
+
         // Emit a custom event for image deletion
         const deleteEvent = new CustomEvent('imageDelete', {
           detail: {
@@ -218,7 +269,7 @@ export const TiptapImageExtension = Node.create({
           if (updatedNode.type.name !== this.name) {
             return false;
           }
-          
+
           // Update image attributes if they've changed
           if (updatedNode.attrs.src !== node.attrs.src ||
               updatedNode.attrs['data-image-id'] !== node.attrs['data-image-id']) {
@@ -230,7 +281,7 @@ export const TiptapImageExtension = Node.create({
           if (updatedNode.attrs.title !== node.attrs.title) {
             img.title = updatedNode.attrs.title || '';
           }
-          
+
           return true;
         },
       };

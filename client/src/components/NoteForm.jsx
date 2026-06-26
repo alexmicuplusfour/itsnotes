@@ -79,6 +79,14 @@ import {
 // "set a reminder", "set reminder".
 const REMINDER_INTENT_RE = /remind me|set (?:a )?reminder/i;
 
+const getFileDimensions = (file) => new Promise((resolve) => {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { resolve({ width: img.naturalWidth, height: img.naturalHeight }); URL.revokeObjectURL(url); };
+  img.onerror = () => { resolve({ width: null, height: null }); URL.revokeObjectURL(url); };
+  img.src = url;
+});
+
 // Wrap component with forwardRef to accept the ref from App.jsx
 // Remove handleImageUpload from props
 const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPrevNote, onNextNote, hasPrevNote = false, hasNextNote = false, 'data-source': dataSource = 'unknown' }, ref) => {
@@ -1419,23 +1427,24 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const handleAddImageFile = useCallback(async (file) => {
     if (!file) return;
 
-    // Call the hook's addImage function
-    const result = await addImage(file, note?.id); // Pass current note ID
+    const placeholderId = `ph-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const dims = await getFileDimensions(file);
+    if (contentInputRef.current) {
+      contentInputRef.current.insertImagePlaceholder(placeholderId, dims.width, dims.height);
+    }
+
+    const result = await addImage(file, note?.id);
 
     if (result.success) {
-      console.log("Image added/previewed successfully via hook.");
       markAsModified();
-
-      // Insert the image inline at the cursor position. We route through
-      // the imperative ref so it handles the NodeSelection collapse and
-      // skips the keyboard-popping .focus() — this image-add path is
-      // triggered by the action-bar button.
       if (contentInputRef.current && result.image) {
-        const success = contentInputRef.current.insertInlineImage(result.image);
-        console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
+        contentInputRef.current.replaceImagePlaceholder(placeholderId, result.image);
       }
     } else {
       console.error("Failed to add image via hook:", result.error);
+      if (contentInputRef.current) {
+        contentInputRef.current.removeImagePlaceholder(placeholderId);
+      }
       showToast(result.error || 'Could not add the image.', { variant: 'error' });
     }
   }, [note?.id, addImage, markAsModified, showToast]);
@@ -2150,22 +2159,23 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
   // Handle image paste
   const handleImagePaste = useCallback(async (file) => {
-    console.log('[NoteForm] Image paste handler called with file:', file.name);
+    const placeholderId = `ph-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const dims = await getFileDimensions(file);
+    if (contentInputRef.current) {
+      contentInputRef.current.insertImagePlaceholder(placeholderId, dims.width, dims.height);
+    }
+
     const result = await addImage(file, note?.id);
     if (result.success) {
-      console.log(`[NoteForm] Image added via paste: ${file.name}`);
       markAsModified();
-
-      // Insert the image inline at the cursor position. Route through the
-      // imperative ref so the NodeSelection left by the block-atom insert
-      // gets collapsed to a TextSelection — otherwise the bubble menu
-      // would pop up and the next keystroke would replace the image.
       if (contentInputRef.current && result.image) {
-        const success = contentInputRef.current.insertInlineImage(result.image);
-        console.log(`[NoteForm] Inline image insertion ${success ? 'successful' : 'failed'}`);
+        contentInputRef.current.replaceImagePlaceholder(placeholderId, result.image);
       }
     } else {
       console.error(`[NoteForm] Failed to add image via paste: ${file.name}`, result.error);
+      if (contentInputRef.current) {
+        contentInputRef.current.removeImagePlaceholder(placeholderId);
+      }
       showToast(result.error || 'Could not add the image.', { variant: 'error' });
     }
   }, [addImage, note?.id, markAsModified, showToast]);

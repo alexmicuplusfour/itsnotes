@@ -510,6 +510,66 @@ const TiptapNoteContent = React.memo(forwardRef(({
       }
       return false;
     },
+    // Insert a shimmer placeholder node at the cursor while an image uploads
+    insertImagePlaceholder: (placeholderId, imgWidth, imgHeight) => {
+      const editor = editorRef.current?.getEditor?.();
+      if (editor && !editor.isDestroyed) {
+        const result = editor.commands.insertImage({
+          src: '',
+          'data-placeholder-id': placeholderId,
+          width: imgWidth || null,
+          height: imgHeight || null,
+        });
+        if (editor.state.selection instanceof NodeSelection) {
+          editor.commands.setTextSelection(editor.state.selection.to);
+        }
+        scrollEditorSelectionIntoView(editor, scrollableRef?.current);
+        return result;
+      }
+      return false;
+    },
+    // Replace a placeholder with the real image once the upload finishes
+    replaceImagePlaceholder: (placeholderId, imageData) => {
+      const editor = editorRef.current?.getEditor?.();
+      if (!editor || editor.isDestroyed) return false;
+      const { src, imageId } = prepareInlineImageInsert(imageData);
+      let replaced = false;
+      editor.state.doc.descendants((node, pos) => {
+        if (replaced) return false;
+        if (node.type.name === 'inlineImage' && node.attrs['data-placeholder-id'] === placeholderId) {
+          const newNode = editor.state.schema.nodes.inlineImage.create({
+            src,
+            alt: imageData.alt || imageData.name || 'Image',
+            title: imageData.title || imageData.name || null,
+            'data-image-id': imageId,
+            'data-placeholder-id': null,
+          });
+          const tr = editor.state.tr.replaceWith(pos, pos + node.nodeSize, newNode);
+          tr.setMeta('imageRemovalHandled', true);
+          editor.view.dispatch(tr);
+          replaced = true;
+          return false;
+        }
+      });
+      return replaced;
+    },
+    // Remove a placeholder on upload failure
+    removeImagePlaceholder: (placeholderId) => {
+      const editor = editorRef.current?.getEditor?.();
+      if (!editor || editor.isDestroyed) return false;
+      let removed = false;
+      editor.state.doc.descendants((node, pos) => {
+        if (removed) return false;
+        if (node.type.name === 'inlineImage' && node.attrs['data-placeholder-id'] === placeholderId) {
+          const tr = editor.state.tr.delete(pos, pos + node.nodeSize);
+          tr.setMeta('imageRemovalHandled', true);
+          editor.view.dispatch(tr);
+          removed = true;
+          return false;
+        }
+      });
+      return removed;
+    },
     // Method to insert smart summary (parsed HTML into Details)
     insertSmartSummary: (placeholderText, summaryHtml) => {
       const editor = editorRef.current?.getEditor();
