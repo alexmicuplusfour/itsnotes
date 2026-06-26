@@ -2089,10 +2089,12 @@ export const NotesProvider = ({ children }) => {
   const handleMirrorImported = useCallback(({ created = 0, updated = 0 } = {}) => {
     const total = created + updated;
     if (!total) return;
-    const parts = [];
-    if (created) parts.push(`${created} added`);
-    if (updated) parts.push(`${updated} updated`);
-    showToast(`Mirror imported: ${parts.join(', ')}`);
+    const n = (count, noun) => count === 1 ? `1 ${noun}` : `${count} ${noun}s`;
+    let msg;
+    if (created && updated) msg = `${n(total, 'note')} synced from folder`;
+    else if (created)       msg = `${n(created, 'note')} imported from folder`;
+    else                    msg = `${n(updated, 'note')} updated from folder`;
+    showToast(msg);
   }, [showToast]);
 
   const deleteNote = useCallback(async (id, suppressToast = false) => {
