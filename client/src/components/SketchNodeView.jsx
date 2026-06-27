@@ -94,13 +94,15 @@ const drawStroke = (ctx, stroke, isDark) => {
   ctx.globalAlpha = 1.0;
 };
 
-const renderAll = (ctx, W, H, strokes, isDark) => {
+const renderAll = (ctx, W, H, strokes, isDark, pan = { x: 0, y: 0 }) => {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = canvasBg(isDark);
   ctx.fillRect(0, 0, W, H);
-  // highlights under pens
+  ctx.save();
+  ctx.translate(pan.x, pan.y);
   strokes.filter(s => s.tool === 'highlighter').forEach(s => drawStroke(ctx, s, isDark));
   strokes.filter(s => s.tool !== 'highlighter').forEach(s => drawStroke(ctx, s, isDark));
+  ctx.restore();
 };
 
 // ─── thumbnail generation ────────────────────────────────────────────────────
@@ -180,9 +182,12 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
   const currentPts     = useRef([]);
   const erasedThisDrag = useRef([]);
   const displaySize    = useRef({ w: 800, h: CANVAS_HEIGHT });
-  // Set to true before updateAttributes on a newly-saved sketch so the
-  // sketchId-change effect doesn't overwrite strokes we already have locally.
   const skipNextFetch  = useRef(false);
+  // ── pan state ──────────────────────────────────────────────────────────────
+  const panOffset      = useRef({ x: 0, y: 0 });
+  const isPanning      = useRef(false);
+  const lastMidpoint   = useRef(null);
+  const activePointers = useRef(new Map()); // pointerId → { x, y }
 
   // ── fetch existing sketch data ─────────────────────────────────────────────
   useEffect(() => {
@@ -228,18 +233,22 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
   const redrawCanvas = useCallback((livePts) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const c = canvas.getContext('2d');
+    const c   = canvas.getContext('2d');
     const { w, h } = displaySize.current;
-    renderAll(c, w, h, strokes, isDark);
+    const pan = panOffset.current;
+    renderAll(c, w, h, strokes, isDark, pan);
     if (livePts && livePts.length > 1) {
       const size    = resolveSize(sizeId, tool);
       const opts    = tool === 'highlighter' ? HL_OPTS(size) : PEN_OPTS(size);
       const outline = getStroke(livePts, opts);
       if (outline.length) {
         const path = new Path2D(toSvgPath(outline));
+        c.save();
+        c.translate(pan.x, pan.y);
         c.globalAlpha = tool === 'highlighter' ? HIGHLIGHTER_OPACITY : 1.0;
         c.fillStyle   = resolveColor(colorId, isDark);
         c.fill(path);
+        c.restore();
         c.globalAlpha = 1.0;
       }
     }
@@ -271,23 +280,74 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     const canvas = canvasRef.current;
     const rect   = canvas.getBoundingClientRect();
     const src    = e.touches ? e.touches[0] : e;
-    return [src.clientX - rect.left, src.clientY - rect.top, e.pressure ?? 0.5];
+    const pan    = panOffset.current;
+    return [src.clientX - rect.left - pan.x, src.clientY - rect.top - pan.y, e.pressure ?? 0.5];
+  }, []);
+
+  const getMidpoint = useCallback(() => {
+    const pts = [...activePointers.current.values()];
+    if (pts.length < 2) return null;
+    return { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
   }, []);
 
   const onPointerDown = useCallback((e) => {
-    if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
-    // Re-measure canvas here — guaranteed to have final layout by first touch.
+
+    // Right-click drag → pan on desktop
+    if (e.button === 2) {
+      isPanning.current = true;
+      lastMidpoint.current = { x: e.clientX, y: e.clientY };
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+      canvasRef.current?.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
+    // Track all active touch/pen pointers
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Two fingers → cancel any stroke in progress and pan instead
+    if (activePointers.current.size >= 2) {
+      isDrawing.current    = false;
+      currentPts.current   = [];
+      isPanning.current    = true;
+      lastMidpoint.current = getMidpoint();
+      if (canvasRef.current) canvasRef.current.style.cursor = 'grabbing';
+      redrawCanvas(null); // clear live stroke
+      canvasRef.current?.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
     setupEditCanvas();
     isDrawing.current      = true;
     currentPts.current     = [getCoords(e)];
     erasedThisDrag.current = [];
     canvasRef.current?.setPointerCapture?.(e.pointerId);
-  }, [getCoords, setupEditCanvas]);
+  }, [getCoords, getMidpoint, setupEditCanvas, redrawCanvas]);
 
   const onPointerMove = useCallback((e) => {
-    if (!isDrawing.current) return;
     e.preventDefault();
+
+    // Update tracked position for this pointer
+    if (activePointers.current.has(e.pointerId)) {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (isPanning.current) {
+      const cur = activePointers.current.size >= 2
+        ? getMidpoint()
+        : { x: e.clientX, y: e.clientY };
+      if (lastMidpoint.current && cur) {
+        panOffset.current = {
+          x: panOffset.current.x + cur.x - lastMidpoint.current.x,
+          y: panOffset.current.y + cur.y - lastMidpoint.current.y,
+        };
+        redrawCanvas(null);
+      }
+      lastMidpoint.current = cur;
+      return;
+    }
+
+    if (!isDrawing.current) return;
     const pt = getCoords(e);
     if (tool === 'eraser') {
       const [ex, ey] = pt;
@@ -304,12 +364,23 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
       });
     } else {
       currentPts.current = [...currentPts.current, pt];
-      // Draw live — imperative, no React re-render needed
       redrawCanvas(currentPts.current);
     }
-  }, [tool, getCoords, redrawCanvas]);
+  }, [tool, getCoords, getMidpoint, redrawCanvas]);
 
-  const onPointerUp = useCallback(() => {
+  const onPointerUp = useCallback((e) => {
+    if (e?.pointerId !== undefined) {
+      activePointers.current.delete(e.pointerId);
+    }
+
+    // Stop panning when all pan pointers lift
+    if (isPanning.current && activePointers.current.size < 2) {
+      isPanning.current    = false;
+      lastMidpoint.current = null;
+      if (canvasRef.current) canvasRef.current.style.cursor = '';
+      return;
+    }
+
     if (!isDrawing.current) return;
     isDrawing.current = false;
 
@@ -458,6 +529,8 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerLeave={onPointerUp}
+              onPointerCancel={onPointerUp}
+              onContextMenu={e => e.preventDefault()}
             />
             <SketchToolbar
               tool={tool} colorId={colorId} sizeId={sizeId}
