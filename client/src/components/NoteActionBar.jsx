@@ -1021,7 +1021,7 @@ export const NoteActionBar = ({
                   theme={isDarkTheme ? 'dark' : 'light'}
                   aria-label="Clipboard history"
                 >
-                  <Icon name="copy" size={20} />
+                  <Icon name="clipboard" size={20} />
                 </SharedActionButton>
 
                 {/* ClipboardHistoryDropdown positioned relative to button */}

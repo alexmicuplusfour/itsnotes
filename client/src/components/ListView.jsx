@@ -13,6 +13,7 @@ import CurrentTags from './CurrentTags';
 import FolderHeader from './FolderHeader';
 import EmptyTrashPills from './EmptyTrashPills';
 import MonthSearchStar from './MonthSearchStar';
+import QuickAccess from './QuickAccess';
 import Icon from './Icons';
 import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useTags } from '../contexts/TagsContext';
@@ -264,7 +265,7 @@ function ListView({ searchQuery }) {
   }, [openedNote]);
   
   const { hiddenTagIds, pickerOpenForNoteId } = useTags();
-  const { showMonthMarkers } = useUIPreferences();
+  const { showMonthMarkers, showQuickAccess } = useUIPreferences();
   
   // Get stable action handlers from context - pass to children as props
   const {
@@ -651,6 +652,9 @@ function ListView({ searchQuery }) {
           </StickyMonthLabel>
         </StickyMonthHeaderWrapper>
         <ListContent ref={listContentRef} onScroll={handleScroll}>
+          {/* Quick Access - only in main view, not search/archive/trash */}
+          {!searchMode && view === 'main' && showQuickAccess && <QuickAccess listView />}
+
           {/* Show EmptyTrashPills on trash page when not in search mode */}
           {!searchMode && view === 'trash' && <EmptyTrashPills />}
           
@@ -721,21 +725,22 @@ function ListView({ searchQuery }) {
                 // Render with month separators - each month in its own group
                 notesByMonth.map((monthGroup, index) => (
                   <React.Fragment key={monthGroup.label || index}>
-                    {monthGroup.label && (
-                      <MonthSeparator 
+                    {monthGroup.label && (index > 0 || pinnedNotes.length > 0) && (
+                      <MonthSeparator
                         ref={registerMonthSeparatorRef(monthGroup.label)}
                         $hasSection={pinnedNotes.length > 0}
                       >
                         <MonthLabel theme={isDarkTheme ? 'dark' : 'light'}>
                           {monthGroup.label}
-                          <MonthSearchStar 
-                            year={monthGroup.year} 
-                            monthShort={monthGroup.monthShort} 
-                            monthLabel={monthGroup.label} 
+                          <MonthSearchStar
+                            year={monthGroup.year}
+                            monthShort={monthGroup.monthShort}
+                            monthLabel={monthGroup.label}
                           />
                         </MonthLabel>
                       </MonthSeparator>
                     )}
+                    {pinnedNotes.length === 0 && index === 0 && <SectionHeader>Notes</SectionHeader>}
                     <SectionGroup>
                       {monthGroup.notes.map((note, index) => (
                         <ListViewItem

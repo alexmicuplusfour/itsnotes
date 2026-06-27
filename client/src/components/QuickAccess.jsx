@@ -68,7 +68,7 @@ const formatMonthSearchLabel = (searchQuery) => {
 };
 // --- End Helper Function ---
 
-const QuickAccess = () => {
+const QuickAccess = ({ listView = false }) => {
   // Get data from contexts
   const {
     searchByTag,
@@ -237,7 +237,7 @@ const QuickAccess = () => {
 
   // --- Render Logic ---
   return (
-    <QuickAccessContainer>
+    <QuickAccessContainer $listView={listView}>
       <SectionTitle>Quick Access</SectionTitle>
 
       {/* Pinned Folders + Saved Searches */}
@@ -283,15 +283,15 @@ const QuickAccess = () => {
 // --- Styled Components ---
 
 const QuickAccessContainer = styled.div`
-  width: calc(100% - 40px);
-  max-width: 1460px; /* Adjust as needed */ 
-  margin: 0 auto;
+  width: ${props => props.$listView ? 'calc(100% - 16px)' : 'calc(100% - 40px)'};
+  max-width: 1460px;
+  margin: 0 ${props => props.$listView ? '8px' : 'auto'};
   padding: 0 0px;
   margin-top: 24px;
   margin-bottom: 0px;
 
   @media (max-width: 600px) {
-    width: calc(100% - 20px);
+    width: ${props => props.$listView ? 'calc(100% - 16px)' : 'calc(100% - 20px)'};
   }
 `;
 

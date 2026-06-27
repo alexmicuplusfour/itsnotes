@@ -328,7 +328,7 @@ const ClipboardHistoryDropdown = ({
         {clipboardHistory.length === 0 ? (
           <EmptyState>
             <ClipboardIcon>
-              <Icon name="copy" size={24} />
+              <Icon name="clipboard" size={24} />
             </ClipboardIcon>
             No clipboard history yet.
           </EmptyState>
@@ -347,7 +347,7 @@ const ClipboardHistoryDropdown = ({
               data-clipboard-dropdown="item"
             >
               <ClipboardIcon>
-                <Icon name="copy" size={16} />
+                <Icon name="clipboard" size={16} />
               </ClipboardIcon>
               <ClipboardContent>
                 <ClipboardText>
