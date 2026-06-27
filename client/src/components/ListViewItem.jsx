@@ -150,6 +150,16 @@ const BookCoverThumbnail = styled.img`
   flex-shrink: 0;
 `;
 
+// Sketch / image thumbnail (shown to the left of content, same slot as book cover)
+const MediaThumbnail = styled.img`
+  width: 72px;
+  min-height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+  margin-right: 12px;
+  flex-shrink: 0;
+`;
+
 // Content area (left side)
 const ContentArea = styled.div`
   flex: 1;
@@ -193,6 +203,15 @@ const DateText = styled.div`
   align-items: center;
   gap: 6px;
   margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
+`;
+
+const DateString = styled.span`
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 `;
 
 const PinIndicator = styled.span`
@@ -382,6 +401,18 @@ const ListViewItem = memo(function ListViewItem({
     return thumbnailUrl ? getServerUrl(thumbnailUrl) : null;
   }, [bookObject]);
 
+  // Sketch or image thumbnail for notes without a book cover
+  const mediaThumbnailSrc = useMemo(() => {
+    if (bookThumbnailUrl) return null; // book cover takes the slot
+    const sketches = note.sketches || [];
+    if (sketches.length) {
+      const s = sketches[0];
+      return isDarkTheme ? (s.thumbnail_dark ?? s.thumbnail) : s.thumbnail;
+    }
+    const images = note.images || [];
+    return images[0]?.thumbnail ?? null;
+  }, [bookThumbnailUrl, note.sketches, note.images, isDarkTheme]);
+
   // Plain text content for preview
   const contentPreview = useMemo(() => {
     return getPlainTextContent(note.content);
@@ -520,7 +551,7 @@ const ListViewItem = memo(function ListViewItem({
       $isSelected={isSelected}
       $isPrevSelected={isPrevSelected}
       $isNextSelected={isNextSelected}
-      $hasBookCover={!!bookThumbnailUrl}
+      $hasBookCover={!!(bookThumbnailUrl || mediaThumbnailSrc)}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onMouseEnter={handleMouseEnter}
@@ -548,8 +579,13 @@ const ListViewItem = memo(function ListViewItem({
         />
       )}
 
+      {/* Sketch / image thumbnail (if present and no book cover) */}
+      {mediaThumbnailSrc && (
+        <MediaThumbnail src={mediaThumbnailSrc} alt="Note media" />
+      )}
+
       {/* Content area */}
-      <ContentArea $hasBookCover={!!bookThumbnailUrl}>
+      <ContentArea $hasBookCover={!!(bookThumbnailUrl || mediaThumbnailSrc)}>
         {/* Title */}
         {note.title && <Title>{note.title}</Title>}
         
@@ -570,7 +606,7 @@ const ListViewItem = memo(function ListViewItem({
                 <Icon name="pinned" size={12} />
               </PinIndicator>
             )}
-            {formattedDate}
+            <DateString>{formattedDate}</DateString>
           </DateText>
           
           {/* Hover action buttons - only render when hovered or picker open */}
