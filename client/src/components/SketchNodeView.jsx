@@ -147,10 +147,14 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
   const currentPts     = useRef([]);
   const erasedThisDrag = useRef([]);
   const displaySize    = useRef({ w: 800, h: CANVAS_HEIGHT });
+  // Set to true before updateAttributes on a newly-saved sketch so the
+  // sketchId-change effect doesn't overwrite strokes we already have locally.
+  const skipNextFetch  = useRef(false);
 
   // ── fetch existing sketch data ─────────────────────────────────────────────
   useEffect(() => {
     if (!sketchId) return;
+    if (skipNextFetch.current) { skipNextFetch.current = false; return; }
     fetch(`${env.SERVER_BASE_URL}/api/sketches/${sketchId}`, { headers: authHdr })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -342,6 +346,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
       const { w, h }  = displaySize.current;
 
       let id = sketchId;
+      let isNewSketch = false;
       if (!id) {
         if (!noteId) { setSaving(false); return; }
         const res  = await fetch(`${env.SERVER_BASE_URL}/api/notes/${noteId}/sketches`, {
@@ -351,7 +356,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
         });
         const data = await res.json();
         id = data.sketch.id;
-        updateAttributes({ 'data-sketch-id': String(id) });
+        isNewSketch = true;
       }
 
       await fetch(`${env.SERVER_BASE_URL}/api/sketches/${id}`, {
@@ -359,6 +364,13 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
         headers: authHdr,
         body: JSON.stringify({ strokes, thumbnail }),
       });
+
+      // Update the node attribute AFTER the PUT so that the sketchId-change
+      // effect doesn't fetch from the server before strokes are written.
+      if (isNewSketch) {
+        skipNextFetch.current = true;
+        updateAttributes({ 'data-sketch-id': String(id) });
+      }
 
       setSaved(strokes);
       ctx?.onSketchSaved?.(id, thumbnail);

@@ -123,10 +123,12 @@ const LongBtn = styled.button.attrs(() => ({ type: 'button' }))`
   border-radius: 19px;
   height: 38px;
   padding: 0 8px;
-  cursor: pointer;
+  cursor: ${p => p.$disabled ? 'default' : 'pointer'};
   color: var(--text-color);
   flex-shrink: 0;
-  &:hover { background: var(--button-bg); }
+  opacity: ${p => p.$disabled ? 0.25 : 1};
+  pointer-events: ${p => p.$disabled ? 'none' : 'auto'};
+  &:hover { background: ${p => p.$disabled ? 'transparent' : 'var(--button-bg)'}; }
 `;
 
 // small non-interactive circle showing current color
@@ -180,6 +182,12 @@ export default function SketchToolbar({
 
   const toggle = (panel) => setExpanded(p => p === panel ? null : panel);
   const activeColor = resolveColor(colorId ?? DEFAULT_COLOR_ID, isDark);
+  const eraserActive = tool === 'eraser';
+
+  const handleToolChange = (t) => {
+    if (t === 'eraser') setExpanded(null);
+    onToolChange(t);
+  };
 
   return (
     <Overlay>
@@ -187,28 +195,28 @@ export default function SketchToolbar({
         <Pill>
           <PillRow>
             {/* tools — outlined ring on active */}
-            <RoundBtn $outlined={tool === 'pen'} onClick={() => onToolChange('pen')} title="Pen">
+            <RoundBtn $outlined={tool === 'pen'} onClick={() => handleToolChange('pen')} title="Pen">
               <Icon name="sketch" size={20} />
             </RoundBtn>
-            <RoundBtn $outlined={tool === 'highlighter'} onClick={() => onToolChange('highlighter')} title="Highlighter">
+            <RoundBtn $outlined={tool === 'highlighter'} onClick={() => handleToolChange('highlighter')} title="Highlighter">
               <Icon name="highlighter" size={20} />
             </RoundBtn>
-            <RoundBtn $outlined={tool === 'eraser'} onClick={() => onToolChange('eraser')} title="Eraser">
+            <RoundBtn $outlined={tool === 'eraser'} onClick={() => handleToolChange('eraser')} title="Eraser">
               <Icon name="eraser" size={20} />
             </RoundBtn>
 
             <PillDivider />
 
-            {/* size — single combined button */}
-            <LongBtn $active={expanded === 'size'} onClick={() => toggle('size')}>
+            {/* size — disabled when eraser active */}
+            <LongBtn $active={expanded === 'size'} $disabled={eraserActive} onClick={() => toggle('size')}>
               <SizeDotPreview $dotSize={SIZE_DOT_PX[sizeId ?? DEFAULT_SIZE_ID]} />
               <Icon name={expanded === 'size' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} />
             </LongBtn>
 
             <PillDivider />
 
-            {/* color — single combined button */}
-            <LongBtn $active={expanded === 'color'} onClick={() => toggle('color')}>
+            {/* color — disabled when eraser active */}
+            <LongBtn $active={expanded === 'color'} $disabled={eraserActive} onClick={() => toggle('color')}>
               <ColorCircle $color={activeColor} />
               <Icon name={expanded === 'color' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} />
             </LongBtn>
