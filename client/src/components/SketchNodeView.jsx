@@ -181,6 +181,8 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
   const isDrawing      = useRef(false);
   const currentPts     = useRef([]);
   const erasedThisDrag = useRef([]);
+  const eraserStartPt  = useRef(null);
+  const eraserIsDrag   = useRef(false);
   const displaySize    = useRef({ w: 800, h: CANVAS_HEIGHT });
   const skipNextFetch  = useRef(false);
   // ── pan state ──────────────────────────────────────────────────────────────
@@ -321,6 +323,10 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     isDrawing.current      = true;
     currentPts.current     = [getCoords(e)];
     erasedThisDrag.current = [];
+    if (tool === 'eraser') {
+      eraserStartPt.current = getCoords(e);
+      eraserIsDrag.current  = false;
+    }
     canvasRef.current?.setPointerCapture?.(e.pointerId);
   }, [getCoords, getMidpoint, setupEditCanvas, redrawCanvas]);
 
@@ -351,17 +357,24 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     const pt = getCoords(e);
     if (tool === 'eraser') {
       const [ex, ey] = pt;
-      setStrokes(prev => {
-        const remaining = [];
-        for (const s of prev) {
-          if (s.points.some(([x, y]) => Math.hypot(x - ex, y - ey) < ERASER_RADIUS)) {
-            erasedThisDrag.current.push(s);
-          } else {
-            remaining.push(s);
+      // Detect drag once pointer moves past threshold
+      if (!eraserIsDrag.current && eraserStartPt.current) {
+        const [sx, sy] = eraserStartPt.current;
+        if (Math.hypot(ex - sx, ey - sy) > 8) eraserIsDrag.current = true;
+      }
+      if (eraserIsDrag.current) {
+        setStrokes(prev => {
+          const remaining = [];
+          for (const s of prev) {
+            if (s.points.some(([x, y]) => Math.hypot(x - ex, y - ey) < ERASER_RADIUS)) {
+              erasedThisDrag.current.push(s);
+            } else {
+              remaining.push(s);
+            }
           }
-        }
-        return remaining;
-      });
+          return remaining;
+        });
+      }
     } else {
       currentPts.current = [...currentPts.current, pt];
       redrawCanvas(currentPts.current);
@@ -385,7 +398,24 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     isDrawing.current = false;
 
     if (tool === 'eraser') {
-      if (erasedThisDrag.current.length) {
+      if (!eraserIsDrag.current && eraserStartPt.current) {
+        // Tap: remove only the topmost stroke at the tap point
+        const [tx, ty] = eraserStartPt.current;
+        setStrokes(prev => {
+          let toRemoveIdx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].points.some(([x, y]) => Math.hypot(x - tx, y - ty) < ERASER_RADIUS)) {
+              toRemoveIdx = i;
+              break;
+            }
+          }
+          if (toRemoveIdx === -1) return prev;
+          const removed = prev[toRemoveIdx];
+          setUndo(u => [...u, { type: 'erase', strokes: [{ stroke: removed, index: toRemoveIdx }] }]);
+          setRedo([]);
+          return prev.filter((_, i) => i !== toRemoveIdx);
+        });
+      } else if (erasedThisDrag.current.length) {
         const erased = erasedThisDrag.current.map((s, i) => ({ stroke: s, index: i }));
         setUndo(u => [...u, { type: 'erase', strokes: erased }]);
         setRedo([]);
