@@ -68,7 +68,7 @@ const ImageContainer = styled.div`
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: ${props => props.$disableModal ? 'default' : 'pointer'};
   height: ${props => props.$reducedSize ? '66px' : '88px'};
   width: ${props => props.$reducedSize ? '66px' : '88px'};
   
@@ -198,7 +198,7 @@ const CloseModalButton = styled.button`
 /**
  * Component for displaying image thumbnails in notes
  */
-const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false }) => {
+const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false, disableModal = false }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [fullImageData, setFullImageData] = useState(null);
   const [isLoadingFullImage, setIsLoadingFullImage] = useState(false);
@@ -317,24 +317,25 @@ const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = 
           className="image-modal-overlay"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent clicks from propagating to parent
-            e.preventDefault(); // Prevent default behavior
+          onClick={disableModal ? undefined : (e) => {
+            e.stopPropagation();
+            e.preventDefault();
           }}
         >
           {images.map(image => {
           const isUnsaved = unsavedImageIds.includes(image.id);
           return (
-            <ImageContainer 
-              key={image.id} 
+            <ImageContainer
+              key={image.id}
               className="image-modal-overlay"
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent event from opening the note
-                e.preventDefault(); // Prevent default behavior
+              onClick={disableModal ? undefined : (e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 openFullsize(image);
               }}
               $unsaved={isUnsaved}
               $reducedSize={reducedSize}
+              $disableModal={disableModal}
             >
               <ThumbnailImage src={image.thumbnail} alt="Note attachment" />
               {onRemoveImage && (
@@ -360,8 +361,9 @@ const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = 
             <ImageContainer
               key={`sketch-${sketch.id}`}
               className="image-modal-overlay"
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              onClick={disableModal ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); }}
               $reducedSize={reducedSize}
+              $disableModal={disableModal}
             >
               <ThumbnailImage src={sketch.thumbnail} alt="Sketch" />
             </ImageContainer>
@@ -376,7 +378,7 @@ const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = 
         )}
       </div>
       
-      {selectedImage && ReactDOM.createPortal(
+      {!disableModal && selectedImage && ReactDOM.createPortal(
         <ModalOverlay 
           className="image-modal-overlay"
           onClick={(e) => {
