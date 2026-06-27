@@ -9,6 +9,7 @@ import {
   DEFAULT_SIZE_ID,
 } from '../constants/sketchConfig';
 import ThemeManager from '../utils/ThemeManager';
+import { HIGHLIGHTER_OPACITY } from '../constants/sketchConfig';
 
 // ── round button (all interactive buttons share this) ─────────────────────────
 
@@ -49,14 +50,14 @@ const PillRow = styled.div`
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px 10px;
+  padding: 4px 6px;
 `;
 
 const PillExpandRow = styled.div`
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 10px 8px;
+  padding: 4px 6px 8px;
   border-top: 1px solid var(--border-transparent);
 `;
 
@@ -138,25 +139,21 @@ const ColorCircle = styled.div`
   border-radius: 50%;
   background: ${p => p.$color};
   flex-shrink: 0;
+  opacity: ${p => p.$dimmed ? HIGHLIGHTER_OPACITY : 1};
 `;
 
-// small non-interactive dot showing current size
-const SizeDotPreview = styled.div`
-  width: 22px;
-  height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  &::after {
-    content: '';
-    display: block;
-    border-radius: 50%;
-    background: var(--text-color);
-    width: ${p => p.$dotSize}px;
-    height: ${p => p.$dotSize}px;
-  }
-`;
+// teardrop with a sliding dot — dot x position indicates relative stroke width
+const SIZE_DOT_X = { xs: 5, s: 9, m: 13, l: 17, xl: 21 };
+
+const SizeBlobPreview = ({ sizeId }) => {
+  const id = sizeId ?? DEFAULT_SIZE_ID;
+  return (
+    <svg width="32" height="22" viewBox="0 0 32 22" style={{ flexShrink: 0 }}>
+      <path fill="var(--text-color)" fillRule="evenodd" d="M20.853,22.000 C19.550,22.000 18.299,21.778 17.137,21.373 L17.137,21.389 L4.263,16.551 L4.263,16.543 C1.831,16.019 0.000,13.737 0.000,11.000 C0.000,8.263 1.831,5.981 4.263,5.457 L4.263,5.449 L17.137,0.611 L17.137,0.627 C18.299,0.222 19.550,0.000 20.853,0.000 C27.009,0.000 32.000,4.925 32.000,11.000 C32.000,17.075 27.009,22.000 20.853,22.000 Z"/>
+      <circle cx={SIZE_DOT_X[id]} cy={11} r={3} fill="var(--background-color)" />
+    </svg>
+  );
+};
 
 // ── dot visual inside a RoundBtn (for expand panel) ───────────────────────────
 
@@ -167,7 +164,7 @@ const DotVisual = styled.div`
   height: ${p => p.$size}px;
 `;
 
-const SIZE_DOT_PX = { xs: 5, s: 8, m: 12, l: 17, xl: 22 };
+const SIZE_DOT_PX  = { xs: 5, s: 8, m: 12, l: 17, xl: 22 };
 
 // ── component ─────────────────────────────────────────────────────────────────
 
@@ -209,16 +206,16 @@ export default function SketchToolbar({
 
             {/* size — disabled when eraser active */}
             <LongBtn $active={expanded === 'size'} $disabled={eraserActive} onClick={() => toggle('size')}>
-              <SizeDotPreview $dotSize={SIZE_DOT_PX[sizeId ?? DEFAULT_SIZE_ID]} />
-              <Icon name={expanded === 'size' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} />
+              <SizeBlobPreview sizeId={sizeId} />
+              <Icon name={expanded === 'size' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} strokeWidth="2.5" />
             </LongBtn>
 
             <PillDivider />
 
             {/* color — disabled when eraser active */}
             <LongBtn $active={expanded === 'color'} $disabled={eraserActive} onClick={() => toggle('color')}>
-              <ColorCircle $color={activeColor} />
-              <Icon name={expanded === 'color' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} />
+              <ColorCircle $color={activeColor} $dimmed={tool === 'highlighter'} />
+              <Icon name={expanded === 'color' ? 'arrow_up_caret' : 'arrow_down_caret'} size={18} strokeWidth="2.5" />
             </LongBtn>
           </PillRow>
 
@@ -257,20 +254,20 @@ export default function SketchToolbar({
         <Pill>
           <PillRow>
             <RoundBtn $disabled={!canUndo} onClick={onUndo} title="Undo">
-              <Icon name="undo" size={20} />
+              <Icon name="undo" size={20} strokeWidth="2.5" />
             </RoundBtn>
             <RoundBtn $disabled={!canRedo} onClick={onRedo} title="Redo">
-              <Icon name="redo" size={20} />
+              <Icon name="redo" size={20} strokeWidth="2.5" />
             </RoundBtn>
           </PillRow>
         </Pill>
         <Pill>
           <PillRow>
             <RoundBtn onClick={onDone} title="Save">
-              <Icon name="check" size={20} />
+              <Icon name="check" size={20} strokeWidth="2.5" />
             </RoundBtn>
             <RoundBtn onClick={onCancel} title="Cancel">
-              <Icon name="close" size={20} />
+              <Icon name="close" size={20} strokeWidth="2.5" />
             </RoundBtn>
           </PillRow>
         </Pill>
