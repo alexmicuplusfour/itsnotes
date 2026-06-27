@@ -31,6 +31,9 @@ Built with React, Node.js, PostgreSQL, and Socket.io.
     <td><img src="docs/screenshots/list-view-b.png"/></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/drawing.png"/></td>
+  </tr>
+  <tr>
     <td><img src="docs/screenshots/grid-light.png"/></td>
     <td><img src="docs/screenshots/search.png"/></td>
   </tr>
