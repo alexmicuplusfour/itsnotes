@@ -1499,6 +1499,41 @@ class Note {
         }
       }
 
+      // Duplicate sketches (own table, referenced in HTML by data-sketch-id),
+      // mapping old row id -> new row id. Without this the copy would share the
+      // source's sketch rows — editing one would change both, and the copy's
+      // card would have no sketch of its own (dropped thumbnail).
+      const sketches = await trx('note_sketches').where('note_id', sourceId);
+      const sketchIdMap = {};
+      for (const sketch of sketches) {
+        const [newSketch] = await trx('note_sketches').insert({
+          note_id: copy.id,
+          // strokes is JSONB; pg returns it parsed, so re-stringify on the way
+          // back in (matching NoteSketch.create/update) to avoid array-literal
+          // misinterpretation.
+          strokes: JSON.stringify(sketch.strokes ?? []),
+          thumbnail: sketch.thumbnail,
+          thumbnail_dark: sketch.thumbnail_dark,
+          width: sketch.width,
+          height: sketch.height,
+          created_at: now,
+          updated_at: now
+        }).returning('id');
+        sketchIdMap[sketch.id] = newSketch.id;
+      }
+
+      // Rewrite data-sketch-id references to the duplicated rows.
+      if (Object.keys(sketchIdMap).length > 0 && copy.content) {
+        const newContent = copy.content.replace(
+          /data-sketch-id="([^"]+)"/g,
+          (match, oldId) => (sketchIdMap[oldId] != null ? `data-sketch-id="${sketchIdMap[oldId]}"` : match)
+        );
+        if (newContent !== copy.content) {
+          await trx('notes').where('id', copy.id).update({ content: newContent });
+          copy.content = newContent;
+        }
+      }
+
       // Copy tag links.
       const tagLinks = await trx('note_tags').where('note_id', sourceId);
       if (tagLinks.length > 0) {
