@@ -510,6 +510,13 @@ const TiptapNoteContent = React.memo(forwardRef(({
       }
       return false;
     },
+    insertSketchCanvas: () => {
+      const editor = editorRef.current?.getEditor?.();
+      if (editor && !editor.isDestroyed) {
+        return editor.commands.insertSketchCanvas();
+      }
+      return false;
+    },
     // Insert a shimmer placeholder node at the cursor while an image uploads
     insertImagePlaceholder: (placeholderId, imgWidth, imgHeight) => {
       const editor = editorRef.current?.getEditor?.();

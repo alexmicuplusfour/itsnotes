@@ -140,6 +140,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     handleSearch, // For object mention click search
     openNoteById, // Ensure openNoteById is destructured
     setNotes,
+    _updateOrRemoveNoteInState,
     notes, // Get notes array to check current state
     searchMode, // Get searchMode state
     searchQuery, // Get searchQuery state
@@ -1292,6 +1293,21 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   }, [note?.id, setNoteTags]);
 
 
+  // Registry of save handlers for sketches currently in edit mode.
+  // Each SketchNodeView registers itself on enter and deregisters on exit.
+  const sketchSaveHandlersRef = useRef(new Set());
+
+  const registerSketchSave = useCallback((fn) => {
+    sketchSaveHandlersRef.current.add(fn);
+    return () => sketchSaveHandlersRef.current.delete(fn);
+  }, []);
+
+  const runPendingSketchSaves = useCallback(async () => {
+    const handlers = [...sketchSaveHandlersRef.current];
+    if (handlers.length === 0) return;
+    await Promise.all(handlers.map(fn => fn()));
+  }, []);
+
   // --- Core Save Logic (Using useNoteSaver Hook) ---
   // Wrapper function to maintain API compatibility with existing code
   const saveNoteIfNeeded = useCallback(
@@ -1318,6 +1334,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       }
 
       try {
+        await runPendingSketchSaves();
         const result = await saveNoteFromHook({ forceSave: forceSaveOnClose });
         console.log('[saveNoteIfNeeded] Hook save result:', result);
         return result;
@@ -1326,7 +1343,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         throw error;
       }
     },
-    [saveNoteFromHook, note?.id, note?.isLoading]
+    [saveNoteFromHook, note?.id, note?.isLoading, runPendingSketchSaves]
   );
 
   useEffect(() => {
@@ -1468,6 +1485,23 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     fileInput.click();
     // No 'finally' needed here as input is removed earlier
   }, [handleAddImageFile]);
+
+  const handleSketchClick = useCallback(() => {
+    if (contentInputRef.current) {
+      contentInputRef.current.insertSketchCanvas();
+      markAsModified();
+    }
+  }, [markAsModified]);
+
+  const handleSketchSaved = useCallback((sketchId, thumbnail) => {
+    if (!note?.id) return;
+    _updateOrRemoveNoteInState(note.id, (prevNote) => ({
+      ...prevNote,
+      sketches: (prevNote.sketches || []).map(s =>
+        String(s.id) === String(sketchId) ? { ...s, thumbnail } : s
+      ),
+    }));
+  }, [note?.id, _updateOrRemoveNoteInState]);
 
   /* Redundant handlers removed (moved to useNoteContentActions) */
 
@@ -1619,12 +1653,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       _onClose,
       navigate,
       openNoteById,
-      saveNoteIfNeeded, // saveNoteIfNeeded IS a dependency now
+      saveNoteIfNeeded,
       location.pathname,
       location.search,
-      hookIsModified, // Updated to use hook value
-      setIsTyping, // Added setIsTyping dependency
-      isListView, // Added isListView dependency
+      hookIsModified,
+      setIsTyping,
+      isListView,
     ],
   );
 
@@ -2519,6 +2553,8 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
                       noteId={note?.id}
                       onAddSuggestedTag={handleAddSuggestedTag}
                       onApplyTag={handleApplyTag}
+                      onSketchSaved={handleSketchSaved}
+                      registerSketchSave={registerSketchSave}
                     >
                       <TiptapNoteContent
                         ref={contentInputRef}
@@ -2611,6 +2647,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           clipboardActionLabel={clipboardActionLabel}
           onAddImage={(e) => handleAddContentImageClick(e, handleAddImageClick)}
           onAddImageFile={handleAddImageFile}
+          onAddSketch={handleSketchClick}
           onAddClipboardUrl={handleAddContentFromClipboard}
           onCloseAddContentDropdown={handleCloseAddContentDropdown}
           clipboardUrl={clipboardUrl}

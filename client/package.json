@@ -43,6 +43,7 @@
     "mark.js": "^8.11.1",
     "marked": "^17.0.1",
     "meshgrad": "^0.0.15",
+    "perfect-freehand": "^1.2.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-highlight-words": "^0.21.0",

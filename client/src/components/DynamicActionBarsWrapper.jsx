@@ -53,6 +53,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
     onSummarizeWithAI,
     onAddImage,
     onAddImageFile,
+    onAddSketch,
     onAddAttachment,
     onAddReminder, // Add missing prop
     onInsertOCR, // New prop
@@ -251,6 +252,7 @@ const DynamicActionBarsWrapper = React.memo(forwardRef((props, ref) => {
       onSummarizeWithAI={onSummarizeWithAI}
       onAddImage={onAddImage}
       onAddImageFile={onAddImageFile}
+      onAddSketch={onAddSketch}
       onAddAttachment={onAddAttachment}
       onAddReminder={onAddReminder} // Pass missing prop
       onInsertOCR={onInsertOCR} // Pass new prop

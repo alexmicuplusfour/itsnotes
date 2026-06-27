@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS public.note_sketches (
+    id SERIAL PRIMARY KEY,
+    note_id UUID REFERENCES public.notes(id) ON DELETE CASCADE,
+    strokes JSONB NOT NULL DEFAULT '[]',
+    width INTEGER NOT NULL DEFAULT 800,
+    height INTEGER NOT NULL DEFAULT 300,
+    thumbnail TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

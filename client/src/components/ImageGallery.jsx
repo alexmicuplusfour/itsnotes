@@ -198,14 +198,15 @@ const CloseModalButton = styled.button`
 /**
  * Component for displaying image thumbnails in notes
  */
-const ImageGallery = ({ images, onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false }) => {
+const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [fullImageData, setFullImageData] = useState(null);
   const [isLoadingFullImage, setIsLoadingFullImage] = useState(false);
   const { token } = useAuth(); // Get the auth token
 
-  // Determine if we have multiple images
-  const hasMultipleImages = images && images.length > 1;
+  // Determine if we have multiple images (or sketches + images together)
+  const totalItems = (images?.length || 0) + (sketches?.length || 0);
+  const hasMultipleImages = totalItems > 1;
 
   // Compute inline style for fade overlay color - avoids styled-components class regeneration
   const fadeOverlayStyle = React.useMemo(() => {
@@ -304,7 +305,7 @@ const ImageGallery = ({ images, onRemoveImage, unsavedImageIds = [], noteColor, 
     };
   }, []);
   
-  if (!images || images.length === 0) return null;
+  if ((!images || images.length === 0) && (!sketches || sketches.length === 0)) return null;
   
   return (
     <>
@@ -355,6 +356,16 @@ const ImageGallery = ({ images, onRemoveImage, unsavedImageIds = [], noteColor, 
             </ImageContainer>
           );
         })}
+          {sketches && sketches.map(sketch => sketch.thumbnail ? (
+            <ImageContainer
+              key={`sketch-${sketch.id}`}
+              className="image-modal-overlay"
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+              $reducedSize={reducedSize}
+            >
+              <ThumbnailImage src={sketch.thumbnail} alt="Sketch" />
+            </ImageContainer>
+          ) : null)}
         </GalleryContainer>
         {/* Add fade overlay only if not disabled and has multiple images */}
         {!disableFade && hasMultipleImages && (

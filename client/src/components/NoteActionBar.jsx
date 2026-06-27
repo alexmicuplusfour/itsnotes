@@ -670,6 +670,7 @@ export const NoteActionBar = ({
   onSummarizeWithAI,
   onAddImage,
   onAddImageFile,
+  onAddSketch,
   onAddAttachment,
   onAddReminder, // Add missing prop
   onInsertOCR, // New prop
@@ -1075,6 +1076,7 @@ export const NoteActionBar = ({
                 triggerRef={addContentButtonRef}
                 onAddImage={onAddImage}
                 onAddImageFile={onAddImageFile}
+                onAddSketch={onAddSketch}
                 onAddTask={onAddTask}
                 onAddNote={onAddNote}
                 onAddAttachment={onAddAttachment}

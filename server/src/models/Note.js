@@ -1273,11 +1273,18 @@ class Note {
       imageQuery.select('*');
     }
 
-    const imageResults = await imageQuery;
+    const [imageResults, sketchResults] = await Promise.all([
+      imageQuery,
+      db('note_sketches')
+        .whereIn('note_id', noteIds)
+        .select('id', 'note_id', 'thumbnail', 'width', 'height', 'created_at')
+        .orderBy(['note_id', 'created_at']),
+    ]);
 
     // Group results by note_id
     const noteTags = {};
     const noteImages = {};
+    const noteSketches = {};
 
     tagResults.forEach(row => {
       if (!noteTags[row.note_id]) {
@@ -1293,10 +1300,14 @@ class Note {
         noteImages[row.note_id] = [];
       }
       noteImages[row.note_id].push(row);
+    }); sketchResults.forEach(row => {
+      if (!noteSketches[row.note_id]) noteSketches[row.note_id] = [];
+      noteSketches[row.note_id].push(row);
     });    // Attach tags and images to notes
     notes.forEach(note => {
       note.tags = noteTags[note.id] || [];
       note.images = noteImages[note.id] || [];
+      note.sketches = noteSketches[note.id] || [];
 
       // Metadata is already properly maintained by the database trigger
       // The database stores it as JSON with structure: {"tags": ["#tag1", "#tag2"], "color": "$color", "date": "yr:2025:jun"}

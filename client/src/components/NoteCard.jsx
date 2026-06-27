@@ -685,6 +685,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   const noteTags = useMemo(() => note?.tags || [], [note?.tags]);
   // Use images directly from the note prop, default to empty array if not present
   const images = useMemo(() => note?.images || [], [note?.images]);
+  const sketches = useMemo(() => note?.sketches || [], [note?.sketches]);
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     !document.documentElement.classList.contains('light-theme')
   );
@@ -1099,11 +1100,12 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
           </ContentWrapper>
         )}
         
-        {/* Display images if any */}
-        {images.length > 0 && (
+        {/* Display images and sketches if any */}
+        {(images.length > 0 || sketches.length > 0) && (
           <div>
             <ImageGallery
               images={images}
+              sketches={sketches}
               noteColor={note.color || 'default'}
             />
           </div>

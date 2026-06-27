@@ -199,6 +199,7 @@ const AddContentDropdown = ({
   triggerRef,
   onAddImage,
   onAddImageFile = null,
+  onAddSketch = null,
   onAddTask,
   onAddNote = null,
   onAddAttachment = null,
@@ -443,6 +444,13 @@ const AddContentDropdown = ({
     e.stopPropagation();
     onAddImage(e);
   };
+  const handleAddSketchClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onAddSketch) onAddSketch(e);
+    onClose();
+  };
+
   const handleAddTaskClick = (e) => {
     console.log('[AddContentDropdown] Add Task clicked');
     e.preventDefault();
@@ -530,6 +538,14 @@ const AddContentDropdown = ({
                 <Icon name="clipboard" size={16} />
               </RowTrailingAction>
             )}
+          </DropdownItem>
+          <DropdownItem
+            onClick={handleAddSketchClick}
+            theme={isDarkTheme ? 'dark' : 'light'}
+            data-add-content-dropdown="item"
+          >
+            <Icon name="sketch" size={18} />
+            Draw
           </DropdownItem>
           <DropdownItem
             onClick={handleAddTaskClick}
@@ -663,7 +679,16 @@ const AddContentDropdown = ({
               <Icon name="clipboard" size={16} />
             </RowTrailingAction>
           )}
-        </DropdownItem>        <DropdownItem
+        </DropdownItem>
+        <DropdownItem
+          onClick={handleAddSketchClick}
+          theme={isDarkTheme ? 'dark' : 'light'}
+          data-add-content-dropdown="item"
+        >
+          <Icon name="sketch" size={18} />
+          Draw
+        </DropdownItem>
+        <DropdownItem
           onClick={handleAddTaskClick}
           theme={isDarkTheme ? 'dark' : 'light'}
           data-add-content-dropdown="item"

@@ -23,6 +23,7 @@ import { prepareInlineImageInsert } from '../services/inlineImageResolver';
 import { NotePreviewPlugin } from './TiptapNotePreviewPlugin';
 import { NotePreviewExtension } from './TiptapNotePreviewExtension';
 import { TiptapImageExtension } from './TiptapImageExtension';
+import { TiptapSketchExtension } from './TiptapSketchExtension';
 import TiptapBubbleMenu from './TiptapBubbleMenu';
 import TiptapFixedMenu from './TiptapFixedMenu';
 import TiptapDisabledMenu from './TiptapDisabledMenu';
@@ -555,6 +556,7 @@ const TiptapEditor = forwardRef(({
   const extensions = useMemo(() => {
     const baseExtensions = [
     TiptapImageExtension,
+    TiptapSketchExtension,
     AttachmentExtension,
     BookCardExtension,
     MovieCardExtension,
@@ -1018,6 +1020,12 @@ const TiptapEditor = forwardRef(({
             title: imageData.title || imageData.name,
             'data-image-id': imageId,
           });
+        }
+        return false;
+      },
+      insertSketchCanvas: () => {
+        if (editor && !editor.isDestroyed) {
+          return editor.commands.insertSketchCanvas();
         }
         return false;
       },

@@ -16,6 +16,7 @@ const jwt = require('jsonwebtoken');
 const notesRoutes = require('./routes/notes');
 const tagsRoutes = require('./routes/tags');
 const imagesRoutes = require('./routes/images');
+const sketchesRoutes = require('./routes/sketches');
 const attachmentsRoutes = require('./routes/attachments');
 const objectsRoutes = require('./routes/objects');
 const importRoutes = require('./routes/import');
@@ -200,6 +201,7 @@ app.use('/api/foxit', foxitRoutes); // No auth - snooper needs access
 app.use('/api/backup', optionalAuth, backupRoutes);
 app.use('/api/mirror', optionalAuth, mirrorRoutes);
 app.use('/api', optionalAuth, imagesRoutes);
+app.use('/api', optionalAuth, sketchesRoutes);
 app.use('/api', optionalAuth, attachmentsRoutes);
 app.use('/api/import', optionalAuth, importRoutes);
 
