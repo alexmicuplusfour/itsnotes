@@ -107,12 +107,45 @@ const renderAll = (ctx, W, H, strokes, isDark) => {
 
 const generateThumbnail = (strokes, isDark) =>
   new Promise(resolve => {
-    const oc = document.createElement('canvas');
-    oc.width  = 400;
-    oc.height = Math.round(400 * (CANVAS_HEIGHT / 800));
+    if (!strokes.length) return resolve(null);
+
+    // Bounding box of all stroke points, padded by half the largest stroke size
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let maxSize = 0;
+    for (const stroke of strokes) {
+      const sz = resolveSize(stroke.sizeId, stroke.tool);
+      if (sz > maxSize) maxSize = sz;
+      for (const [x, y] of stroke.points) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+
+    const pad  = Math.ceil(maxSize / 2) + 12;
+    const srcX = Math.max(0, minX - pad);
+    const srcY = Math.max(0, minY - pad);
+    const srcW = Math.max(maxX - minX + pad * 2, 40);
+    const srcH = Math.max(maxY - minY + pad * 2, 40);
+
+    // Scale the cropped region to fit within 400px on the longest side
+    const scale = Math.min(400 / srcW, 400 / srcH);
+    const oc  = document.createElement('canvas');
+    oc.width  = Math.round(srcW * scale);
+    oc.height = Math.round(srcH * scale);
+
     const ctx = oc.getContext('2d');
-    ctx.scale(oc.width / 800, oc.height / CANVAS_HEIGHT);
-    renderAll(ctx, 800, CANVAS_HEIGHT, strokes, isDark);
+    // Fill background first (before any transform)
+    ctx.fillStyle = canvasBg(isDark);
+    ctx.fillRect(0, 0, oc.width, oc.height);
+    // Scale then translate so stroke coords map into the cropped region
+    ctx.scale(scale, scale);
+    ctx.translate(-srcX, -srcY);
+
+    strokes.filter(s => s.tool === 'highlighter').forEach(s => drawStroke(ctx, s, isDark));
+    strokes.filter(s => s.tool !== 'highlighter').forEach(s => drawStroke(ctx, s, isDark));
+
     oc.toBlob(blob => {
       if (!blob) return resolve(null);
       const r = new FileReader();
