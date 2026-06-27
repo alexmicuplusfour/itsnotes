@@ -1277,7 +1277,7 @@ class Note {
       imageQuery,
       db('note_sketches')
         .whereIn('note_id', noteIds)
-        .select('id', 'note_id', 'thumbnail', 'width', 'height', 'created_at')
+        .select('id', 'note_id', 'thumbnail', 'thumbnail_dark', 'width', 'height', 'created_at')
         .orderBy(['note_id', 'created_at']),
     ]);
 

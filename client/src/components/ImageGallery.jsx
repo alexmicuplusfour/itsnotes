@@ -198,7 +198,7 @@ const CloseModalButton = styled.button`
 /**
  * Component for displaying image thumbnails in notes
  */
-const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false, disableModal = false }) => {
+const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = [], noteColor, disableFade = false, reducedSize = false, disableModal = false, isDark = false }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [fullImageData, setFullImageData] = useState(null);
   const [isLoadingFullImage, setIsLoadingFullImage] = useState(false);
@@ -357,17 +357,22 @@ const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = 
             </ImageContainer>
           );
         })}
-          {sketches && sketches.map(sketch => sketch.thumbnail ? (
-            <ImageContainer
-              key={`sketch-${sketch.id}`}
-              className="image-modal-overlay"
-              onClick={disableModal ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); }}
-              $reducedSize={reducedSize}
-              $disableModal={disableModal}
-            >
-              <ThumbnailImage src={sketch.thumbnail} alt="Sketch" />
-            </ImageContainer>
-          ) : null)}
+          {sketches && sketches.map(sketch => {
+            const src = isDark
+              ? (sketch.thumbnail_dark ?? sketch.thumbnail)
+              : sketch.thumbnail;
+            return src ? (
+              <ImageContainer
+                key={`sketch-${sketch.id}`}
+                className="image-modal-overlay"
+                onClick={disableModal ? undefined : (e) => { e.stopPropagation(); e.preventDefault(); }}
+                $reducedSize={reducedSize}
+                $disableModal={disableModal}
+              >
+                <ThumbnailImage src={src} alt="Sketch" />
+              </ImageContainer>
+            ) : null;
+          })}
         </GalleryContainer>
         {/* Add fade overlay only if not disabled and has multiple images */}
         {!disableFade && hasMultipleImages && (

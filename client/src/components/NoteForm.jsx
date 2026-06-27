@@ -1493,12 +1493,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     }
   }, [markAsModified]);
 
-  const handleSketchSaved = useCallback((sketchId, thumbnail) => {
+  const handleSketchSaved = useCallback((sketchId, thumbnail, thumbnailDark) => {
     if (!note?.id) return;
     _updateOrRemoveNoteInState(note.id, (prevNote) => ({
       ...prevNote,
       sketches: (prevNote.sketches || []).map(s =>
-        String(s.id) === String(sketchId) ? { ...s, thumbnail } : s
+        String(s.id) === String(sketchId)
+          ? { ...s, thumbnail, thumbnail_dark: thumbnailDark }
+          : s
       ),
     }));
   }, [note?.id, _updateOrRemoveNoteInState]);

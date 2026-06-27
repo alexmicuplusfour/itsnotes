@@ -3,7 +3,7 @@ const db = require('../db');
 class NoteSketch {
   static async findByNoteId(noteId) {
     const result = await db.query(
-      'SELECT id, note_id, thumbnail, width, height, created_at, updated_at FROM note_sketches WHERE note_id = $1 ORDER BY created_at ASC',
+      'SELECT id, note_id, thumbnail, thumbnail_dark, width, height, created_at, updated_at FROM note_sketches WHERE note_id = $1 ORDER BY created_at ASC',
       [noteId]
     );
     return result.rows;
@@ -25,10 +25,10 @@ class NoteSketch {
     return result.rows[0];
   }
 
-  static async update(id, strokes, thumbnail) {
+  static async update(id, strokes, thumbnail, thumbnailDark) {
     const result = await db.query(
-      'UPDATE note_sketches SET strokes = $1, thumbnail = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
-      [JSON.stringify(strokes), thumbnail, id]
+      'UPDATE note_sketches SET strokes = $1, thumbnail = $2, thumbnail_dark = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
+      [JSON.stringify(strokes), thumbnail, thumbnailDark ?? null, id]
     );
     return result.rows[0];
   }

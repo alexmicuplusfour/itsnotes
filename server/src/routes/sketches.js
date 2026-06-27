@@ -46,9 +46,9 @@ router.get('/sketches/:id', async (req, res) => {
 // Save updated strokes + thumbnail
 router.put('/sketches/:id', async (req, res) => {
   try {
-    const { strokes, thumbnail } = req.body;
+    const { strokes, thumbnail, thumbnail_dark } = req.body;
     if (!Array.isArray(strokes)) return res.status(400).json({ message: 'strokes must be an array' });
-    const sketch = await NoteSketch.update(req.params.id, strokes, thumbnail || null);
+    const sketch = await NoteSketch.update(req.params.id, strokes, thumbnail || null, thumbnail_dark || null);
     if (!sketch) return res.status(404).json({ message: 'Sketch not found' });
     req.app.get('io').emit('note_sketch_updated', { noteId: sketch.note_id, sketchId: sketch.id });
     res.json({ sketch });

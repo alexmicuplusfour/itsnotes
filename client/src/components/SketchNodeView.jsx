@@ -375,8 +375,11 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     if (saving) return;
     setSaving(true);
     try {
-      const thumbnail = await generateThumbnail(strokes, isDark);
-      const { w, h }  = displaySize.current;
+      const [thumbnail, thumbnailDark] = await Promise.all([
+        generateThumbnail(strokes, false),
+        generateThumbnail(strokes, true),
+      ]);
+      const { w, h } = displaySize.current;
 
       let id = sketchId;
       let isNewSketch = false;
@@ -395,7 +398,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
       await fetch(`${env.SERVER_BASE_URL}/api/sketches/${id}`, {
         method: 'PUT',
         headers: authHdr,
-        body: JSON.stringify({ strokes, thumbnail }),
+        body: JSON.stringify({ strokes, thumbnail, thumbnail_dark: thumbnailDark }),
       });
 
       // Update the node attribute AFTER the PUT so that the sketchId-change
@@ -406,7 +409,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
       }
 
       setSaved(strokes);
-      ctx?.onSketchSaved?.(id, thumbnail);
+      ctx?.onSketchSaved?.(id, thumbnail, thumbnailDark);
       setMode('view');
     } catch (err) {
       console.error('[SketchNodeView] save failed:', err);

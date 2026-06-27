@@ -1108,6 +1108,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
               sketches={sketches}
               noteColor={note.color || 'default'}
               disableModal={true}
+              isDark={isDarkTheme}
             />
           </div>
         )}
