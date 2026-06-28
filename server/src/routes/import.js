@@ -210,63 +210,42 @@ router.post('/', blockInDemo, upload.single('archive'), async (req, res) => {
     mirrorWorker.pause('keep-import');
 
     // Process the import with progress updates
+    let importResult;
     try {
-      // Patch the processGoogleKeepImport function to send progress
-      const originalProcessNote = processGoogleKeepImport;
-      
       // Create a wrapped version that sends progress updates
       const processWithProgress = async (dirPath) => {
-        // Get file count first
-        const files = fs.readdirSync(dirPath)
-          .filter(file => file.endsWith('.json'));
-        
+        const files = fs.readdirSync(dirPath).filter(file => file.endsWith('.json'));
         sendProgress('status', { message: `Found ${files.length} notes to import` });
-        
-        // Track progress
+
         let lastProgressPercent = 0;
-        
-        // Override the console.log function temporarily to capture progress
         const originalConsoleLog = console.log;
         console.log = (message) => {
           originalConsoleLog(message);
-          
-          // Check if the message contains batch progress
           if (message.includes('Progress:')) {
             const progressMatch = message.match(/Progress: (\d+)\/(\d+)/);
             if (progressMatch) {
               const [, current, total] = progressMatch;
               const percent = Math.floor((parseInt(current) / parseInt(total)) * 100);
-              
-              // Only send updates when the percentage changes significantly
               if (percent >= lastProgressPercent + 5 || percent === 100) {
                 lastProgressPercent = percent;
-                sendProgress('progress', { 
-                  current: parseInt(current),
-                  total: parseInt(total),
-                  percent
-                });
+                sendProgress('progress', { current: parseInt(current), total: parseInt(total), percent });
               }
             }
           }
         };
-        
+
         try {
-          const result = await originalProcessNote(dirPath);
-          
-          // Restore original console.log
+          return await processGoogleKeepImport(dirPath);
+        } finally {
           console.log = originalConsoleLog;
-          
-          return result;
-        } catch (error) {
-          // Restore original console.log
-          console.log = originalConsoleLog;
-          throw error;
         }
       };
-      
-      const importResult = await processWithProgress(keepDir);
-      
-      mirrorWorker.resume();
+
+      try {
+        importResult = await processWithProgress(keepDir);
+      } finally {
+        mirrorWorker.resume();
+      }
 
       // Clean up temporary files
       cleanup(zipFilePath, extractionDir);
@@ -280,7 +259,6 @@ router.post('/', blockInDemo, upload.single('archive'), async (req, res) => {
 
       res.end();
     } catch (importError) {
-      mirrorWorker.resume();
       console.error('Import process error:', importError);
       sendProgress('error', {
         message: 'An error occurred during the import process',
