@@ -226,6 +226,14 @@ async function syncNoteTags(noteId, { tags = [], folders = [] }) {
   }
 }
 
+// Atomically drain pending_mirror_deletes, returning the rel_paths that need to
+// be removed from disk. Called by the worker after note hard-deletes so the BEFORE
+// DELETE trigger's captured paths are actually cleaned up.
+async function consumePendingDeletes() {
+  const result = await db.query('DELETE FROM pending_mirror_deletes RETURNING rel_path');
+  return result.rows.map(r => r.rel_path);
+}
+
 module.exports = {
   loadNotes,
   loadNote,
@@ -239,4 +247,5 @@ module.exports = {
   importUpdateNote,
   importCreateNote,
   syncNoteTags,
+  consumePendingDeletes,
 };

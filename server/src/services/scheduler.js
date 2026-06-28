@@ -3,7 +3,6 @@ const axios = require('axios');
 const Reminder = require('../models/Reminder');
 const Note = require('../models/Note');
 const { RRule } = require('rrule');
-const mirrorWorker = require('../mirror/mirrorWorker');
 
 class SchedulerService {
     constructor() {
@@ -55,16 +54,13 @@ class SchedulerService {
             if (process.env.TRASH_CLEANUP_ENABLED === 'false') return;
 
             const olderThanDays = parseInt(process.env.TRASH_CLEANUP_AGE_DAYS) || 30;
-            const { ids: deletedIds, relPaths } = await Note.deleteOldTrashed({ olderThanDays });
+            const deletedIds = await Note.deleteOldTrashed({ olderThanDays });
 
             if (deletedIds.length > 0) {
                 console.log(`SchedulerService: Permanently deleted ${deletedIds.length} trashed notes`);
                 if (this.io) {
                     deletedIds.forEach(id => this.io.emit('note_deleted', id));
                 }
-                if (relPaths.length) mirrorWorker.deleteFiles(relPaths).catch(err =>
-                    console.error('SchedulerService: Error deleting mirror files:', err.message)
-                );
             }
         } catch (error) {
             console.error('SchedulerService: Error cleaning up old trash:', error);

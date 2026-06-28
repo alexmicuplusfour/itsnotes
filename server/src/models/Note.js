@@ -1643,7 +1643,6 @@ class Note {
   }
 
   static async delete(id) {
-    await db('note_files').where('note_id', id).del();
     const result = await db('notes').where('id', id).del().returning('*');
     return result[0];
   }
@@ -1690,21 +1689,13 @@ class Note {
   static async deleteOldTrashed({ olderThanDays = 30 } = {}) {
     const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
 
-    const toDelete = await db('notes')
+    const deleted = await db('notes')
       .where('is_deleted', true)
       .whereRaw('COALESCE(notes.trashed_at, notes.updated_at) < ?', [cutoff])
-      .select('id');
+      .del()
+      .returning('id');
 
-    const ids = toDelete.map(r => r.id);
-    if (!ids.length) return { ids: [], relPaths: [] };
-
-    const tracked = await db('note_files').whereIn('note_id', ids).select('rel_path');
-    const relPaths = tracked.map(r => r.rel_path);
-    if (relPaths.length) await db('note_files').whereIn('note_id', ids).del();
-
-    await db('notes').whereIn('id', ids).del();
-
-    return { ids, relPaths };
+    return deleted.map(row => row.id);
   }
 
   /**
@@ -1808,11 +1799,19 @@ class Note {
     }
 
     return db.transaction(async trx => {
-      await trx('note_files').whereIn('note_id', noteIds).del();
+      // Delete all tags associations for these notes first (foreign key constraints)
       await trx('note_tags').whereIn('note_id', noteIds).del();
+
+      // Delete all images for these notes (foreign key constraints)
       await trx('note_images').whereIn('note_id', noteIds).del();
+
+      // Delete all version history for these notes
       await trx('note_versions').whereIn('note_id', noteIds).del();
-      return trx('notes').whereIn('id', noteIds).del();
+
+      // Finally delete the notes themselves
+      return trx('notes')
+        .whereIn('id', noteIds)
+        .del();
     });
   }
 }

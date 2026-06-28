@@ -553,6 +553,10 @@ async function runOnce() {
       ]);
 
       const { desired, rendered } = await buildDesired(notes, objectTitles, tracked);
+      // Drain any pending .md deletes captured by the DB trigger before we scan,
+      // so orphaned files don't show up in planReconcile as "untracked new files".
+      await processPendingDeletes(root);
+
       const onDisk = await scanOnDisk(root);
       const actions = planReconcile({ desired, tracked, onDisk });
 
@@ -650,6 +654,12 @@ async function reconcileOne(noteId) {
       const actions = planReconcile({ desired, tracked, onDisk });
       for (const action of actions) await applyAction(root, action, rendered);
       if (note) await ensureResources(root, [note]);
+
+      // After reconcile: drain any pending .md deletes from the BEFORE DELETE
+      // trigger. When a note is hard-deleted the NOTIFY fires here but the
+      // tracking row is already gone (CASCADE), so planReconcile emits nothing —
+      // the pending_mirror_deletes queue is the only way to reach the file.
+      await processPendingDeletes(root);
 
       if (actions.length) {
         console.log('[md-mirror] live:', JSON.stringify({ noteId, actions: actions.map((a) => a.type) }));
@@ -804,17 +814,19 @@ function init(options = {}) {
   }
 }
 
-// Delete specific files from the mirror folder by rel_path. Called after notes
-// are permanently deleted from the DB so their .md files don't linger as
-// untracked "changes to import". Serialized so it doesn't race with a sweep.
-async function deleteFiles(relPaths) {
-  const { enabled, root } = getConfig();
-  if (!enabled || !root || !relPaths || !relPaths.length) return;
-  return serialize(async () => {
+// Drain pending_mirror_deletes and remove the corresponding .md files from disk.
+// Called at the start of runOnce and after reconcileOne so permanently deleted
+// notes get their mirror files cleaned up without touching core note code.
+async function processPendingDeletes(root) {
+  try {
+    const relPaths = await repo.consumePendingDeletes();
     for (const relPath of relPaths) {
       try { await fs.unlink(toAbs(root, relPath)); } catch { /* already gone */ }
     }
-  });
+    if (relPaths.length) console.log('[md-mirror] deleted', relPaths.length, 'orphaned file(s)');
+  } catch (err) {
+    console.error('[md-mirror] processPendingDeletes failed:', err.message);
+  }
 }
 
-module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult, deleteFiles };
+module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult };
