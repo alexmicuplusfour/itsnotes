@@ -168,6 +168,17 @@ There's a built-in [MCP](https://modelcontextprotocol.io/) server that lets Clau
 
 It's off by default, read-only, and won't work without the token.
 
+## Importing from Obsidian
+
+If you keep your notes in Obsidian, you can bring your entire vault over:
+
+1. In Obsidian, go to **File → Export vault as zip** (or just zip the vault folder yourself).
+2. In itsnotes, open **Settings → Backup & Restore → Import from Obsidian** and select the `.zip`.
+
+Alternatively, you can select individual `.md` files if you only want to import a subset.
+
+What comes across: note titles, body text, frontmatter tags (including nested `project/sub` hierarchies), inline `#tags`, `[[wikilinks]]` (resolved to internal note links), `![[embedded images]]`, standard `![](images)`, `==highlights==`, task lists, and frontmatter fields for created/modified dates, pinned, and archived state. Obsidian comments (`%%...%%`) are stripped. A two-pass approach ensures wikilinks resolve correctly even when the linked note appears later in the import batch.
+
 ## Importing from Google Keep
 
 If you're moving over from Google Keep, you can bring your notes with you:
