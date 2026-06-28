@@ -5,6 +5,57 @@ import Icon from './Icons';
 import Switch from './Switch';
 import { Button, SectionTitle, Select as BaseSelect } from './settings/styles';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { useNotes } from '../contexts/NotesContext';
+
+// ---- Obsidian import styled components ----
+const ProgressBar = styled.div`
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--border-color);
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  border-radius: 3px;
+  background-color: var(--accent-color, #4caf50);
+  transition: width 0.3s ease;
+  width: ${props => props.$percent || 0}%;
+`;
+
+const ProgressText = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary-color);
+  margin-top: 4px;
+`;
+
+const SummaryList = styled.ul`
+  margin: 8px 0 0;
+  padding: 0 0 0 18px;
+  font-size: 13px;
+  color: var(--text-color);
+  line-height: 1.8;
+`;
+
+const FileInputRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+`;
+
+const FileChip = styled.span`
+  font-size: 13px;
+  color: var(--text-secondary-color);
+  padding: 3px 10px;
+  border-radius: 12px;
+  background-color: var(--search-bg-color);
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+`;
 
 const Container = styled.div`
   display: flex;
@@ -253,6 +304,8 @@ const formatDate = (isoString) => new Date(isoString).toLocaleString();
 
 const BackupRestore = ({ isDarkTheme }) => {
   const { isDemoMode, logout } = useAuth();
+  const { showToast, hideToast } = useToast();
+  const { loadNotes } = useNotes();
   const [restoring, setRestoring] = useState(false);
   const [restoringFile, setRestoringFile] = useState(null);
   const [resetting, setResetting] = useState(false);
@@ -264,6 +317,15 @@ const BackupRestore = ({ isDarkTheme }) => {
   const [autoBackupPath, setAutoBackupPath] = useState('');
   const [backingUpNow, setBackingUpNow] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Obsidian import state
+  const [obsidianFiles, setObsidianFiles] = useState([]);
+  const [obsidianImporting, setObsidianImporting] = useState(false);
+  const [obsidianStatusMsg, setObsidianStatusMsg] = useState('');
+  const [obsidianProgress, setObsidianProgress] = useState(null); // { current, total, percent }
+  const [obsidianResult, setObsidianResult] = useState(null); // success result
+  const [obsidianError, setObsidianError] = useState(null);
+  const obsidianInputRef = useRef(null);
 
   useEffect(() => {
     fetchSystemInfo();
@@ -505,6 +567,85 @@ const BackupRestore = ({ isDarkTheme }) => {
     }
   };
 
+  const handleObsidianFileChange = (e) => {
+    const selected = [...(e.target.files || [])];
+    setObsidianFiles(selected);
+    setObsidianResult(null);
+    setObsidianError(null);
+    e.target.value = '';
+  };
+
+  const handleObsidianImport = async () => {
+    if (!obsidianFiles.length) return;
+    setObsidianImporting(true);
+    setObsidianStatusMsg('Uploading...');
+    setObsidianProgress(null);
+    setObsidianResult(null);
+    setObsidianError(null);
+
+    const toastId = showToast('Importing from Obsidian…', { sticky: true, loading: true, id: 'obsidian-import' });
+
+    try {
+      const formData = new FormData();
+      const isZip = obsidianFiles.length === 1 && obsidianFiles[0].name.endsWith('.zip');
+      if (isZip) {
+        formData.append('archive', obsidianFiles[0]);
+      } else {
+        for (const f of obsidianFiles) formData.append('files', f);
+      }
+
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_URL}/import-obsidian`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          try {
+            const { event, data } = JSON.parse(line.slice(5));
+            if (event === 'status') {
+              setObsidianStatusMsg(data.message);
+            } else if (event === 'progress') {
+              setObsidianProgress(data);
+              showToast(`Importing… ${data.current} of ${data.total} notes`, { sticky: true, loading: true, id: toastId });
+            } else if (event === 'complete') {
+              setObsidianResult(data.result);
+              setObsidianStatusMsg('');
+              hideToast(toastId);
+              const r = data.result;
+              const summary = `${r.successful} note${r.successful !== 1 ? 's' : ''} imported from Obsidian`;
+              showToast(summary, { variant: 'success', duration: 'long' });
+              loadNotes(true);
+            } else if (event === 'error') {
+              setObsidianError(data.message);
+              setObsidianStatusMsg('');
+              hideToast(toastId);
+              showToast(`Import failed: ${data.message}`, { variant: 'error', duration: 'long' });
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      setObsidianError(e.message || 'Import failed');
+      hideToast(toastId);
+      showToast(`Import failed: ${e.message || 'unknown error'}`, { variant: 'error', duration: 'long' });
+    } finally {
+      setObsidianImporting(false);
+    }
+  };
+
   // While a backup, restore, or reset is in flight, lock down every action in
   // the backup section so the user can't kick off a conflicting operation.
   const busy = restoring || backingUpNow || resetting;
@@ -689,6 +830,95 @@ const BackupRestore = ({ isDarkTheme }) => {
               size={18}
             />
             {status.message}
+          </StatusMessage>
+        )}
+      </Section>
+
+      <Divider />
+
+      {/* Obsidian Import */}
+      <Section>
+        <SectionTitle>Import from Obsidian</SectionTitle>
+        <Description>
+          Import notes from an Obsidian vault. Upload a <code style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--search-bg-color)' }}>.zip</code> export of your vault, or select individual <code style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--search-bg-color)' }}>.md</code> files. Frontmatter tags, task lists, highlights, images, and <code style={{ padding: '1px 5px', borderRadius: 3, background: 'var(--search-bg-color)' }}>[[wikilinks]]</code> are all handled.
+        </Description>
+
+        <FileInputRow>
+          <Button
+            onClick={() => obsidianInputRef.current?.click()}
+            disabled={isDemoMode || obsidianImporting}
+            $size="small"
+          >
+            Choose files…
+          </Button>
+          {obsidianFiles.length > 0 && (
+            <FileChip title={obsidianFiles.map(f => f.name).join(', ')}>
+              {obsidianFiles.length === 1
+                ? obsidianFiles[0].name
+                : `${obsidianFiles.length} files selected`}
+            </FileChip>
+          )}
+          <HiddenFileInput
+            ref={obsidianInputRef}
+            type="file"
+            accept=".md,.zip"
+            multiple
+            onChange={handleObsidianFileChange}
+          />
+        </FileInputRow>
+
+        {obsidianFiles.length > 0 && !obsidianImporting && !obsidianResult && (
+          <ButtonGroup>
+            <Button
+              onClick={handleObsidianImport}
+              disabled={isDemoMode}
+            >
+              Import
+            </Button>
+          </ButtonGroup>
+        )}
+
+        {obsidianImporting && (
+          <>
+            {obsidianStatusMsg && (
+              <StatusMessage>
+                <LoadingSpinner />
+                {obsidianStatusMsg}
+              </StatusMessage>
+            )}
+            {obsidianProgress && obsidianProgress.total > 0 && (
+              <>
+                <ProgressBar>
+                  <ProgressFill $percent={obsidianProgress.percent} />
+                </ProgressBar>
+                <ProgressText>
+                  {obsidianProgress.current} of {obsidianProgress.total} notes ({obsidianProgress.percent}%)
+                </ProgressText>
+              </>
+            )}
+          </>
+        )}
+
+        {obsidianResult && (
+          <StatusMessage>
+            <Icon name="check" size={18} />
+            <div>
+              Import complete
+              <SummaryList>
+                <li>{obsidianResult.successful} note{obsidianResult.successful !== 1 ? 's' : ''} imported</li>
+                {obsidianResult.tagsImported > 0 && <li>{obsidianResult.tagsImported} tag{obsidianResult.tagsImported !== 1 ? 's' : ''} applied</li>}
+                {obsidianResult.imagesImported > 0 && <li>{obsidianResult.imagesImported} image{obsidianResult.imagesImported !== 1 ? 's' : ''} imported</li>}
+                {obsidianResult.wikilinksResolved > 0 && <li>{obsidianResult.wikilinksResolved} wikilink{obsidianResult.wikilinksResolved !== 1 ? 's' : ''} resolved</li>}
+                {obsidianResult.failed > 0 && <li>{obsidianResult.failed} failed</li>}
+              </SummaryList>
+            </div>
+          </StatusMessage>
+        )}
+
+        {obsidianError && (
+          <StatusMessage $error>
+            <Icon name="close" size={18} />
+            {obsidianError}
           </StatusMessage>
         )}
       </Section>

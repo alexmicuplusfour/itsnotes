@@ -20,6 +20,7 @@ const sketchesRoutes = require('./routes/sketches');
 const attachmentsRoutes = require('./routes/attachments');
 const objectsRoutes = require('./routes/objects');
 const importRoutes = require('./routes/import');
+const importObsidianRoutes = require('./routes/import-obsidian');
 const aiRoutes = require('./routes/ai');
 const authRoutes = require('./routes/auth');
 const remindersRoutes = require('./routes/reminders');
@@ -204,6 +205,7 @@ app.use('/api', optionalAuth, imagesRoutes);
 app.use('/api', optionalAuth, sketchesRoutes);
 app.use('/api', optionalAuth, attachmentsRoutes);
 app.use('/api/import', optionalAuth, importRoutes);
+app.use('/api/import-obsidian', optionalAuth, importObsidianRoutes);
 
 // Built-in MCP endpoint (Streamable HTTP). Opt-in via the MCP_ENABLED setting
 // (Settings → AI Features), and gated by the same JWT as the REST API so AI
