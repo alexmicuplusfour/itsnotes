@@ -804,4 +804,17 @@ function init(options = {}) {
   }
 }
 
-module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult };
+// Delete specific files from the mirror folder by rel_path. Called after notes
+// are permanently deleted from the DB so their .md files don't linger as
+// untracked "changes to import". Serialized so it doesn't race with a sweep.
+async function deleteFiles(relPaths) {
+  const { enabled, root } = getConfig();
+  if (!enabled || !root || !relPaths || !relPaths.length) return;
+  return serialize(async () => {
+    for (const relPath of relPaths) {
+      try { await fs.unlink(toAbs(root, relPath)); } catch { /* already gone */ }
+    }
+  });
+}
+
+module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult, deleteFiles };

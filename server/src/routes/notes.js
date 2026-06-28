@@ -3,6 +3,7 @@ const Note = require('../models/Note');
 const Tag = require('../models/Tag');
 const db = require('../db');
 const { blockInDemo, limitNoteSizeInDemo } = require('../middleware/demoGuard');
+const mirrorWorker = require('../mirror/mirrorWorker');
 const router = express.Router();
 
 // Pull unique object-card ids out of note HTML without spinning up a full DOM.
@@ -478,12 +479,17 @@ router.delete('/:id', async (req, res) => {
       await db.query('UPDATE notes SET is_archived = false WHERE id = $1', [req.params.id]);
     }
 
+    // Capture the mirror rel_path before Note.delete() removes the tracking row
+    const trackedFile = await db.query('SELECT rel_path FROM note_files WHERE note_id = $1', [req.params.id]);
+    const mirrorRelPath = trackedFile.rows[0]?.rel_path;
+
     // Now permanently delete the note
     const note = await Note.delete(req.params.id);
 
-    // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting note deleted:', note.id);
     req.app.get('io').emit('note_deleted', note.id);
+
+    if (mirrorRelPath) mirrorWorker.deleteFiles([mirrorRelPath]).catch(() => {});
 
     res.json({ message: 'Note deleted successfully', note });
   } catch (error) {
@@ -771,13 +777,21 @@ router.post('/bulk/delete-permanently', blockInDemo, async (req, res) => {
       await db.query(`UPDATE notes SET is_archived = false WHERE id IN (${placeholders})`, archivedNoteIds);
     }
 
-    // 1. Perform the bulk delete
-    // IMPORTANT: Keep a copy of the IDs before deleting, as you can't fetch them afterwards.
-    const idsToDelete = [...noteIds]; // Make a copy
+    // 1. Capture mirror rel_paths before bulkDelete removes the tracking rows
+    const idsToDelete = [...noteIds];
+    const trackedFiles = await db.query(
+      'SELECT rel_path FROM note_files WHERE note_id = ANY($1::uuid[])',
+      [idsToDelete]
+    );
+    const mirrorRelPaths = trackedFiles.rows.map(r => r.rel_path);
+
+    // 2. Perform the bulk delete
     const count = await Note.bulkDelete(idsToDelete);
 
-    // 2. Emit a single batched event so clients remove all in one render.
+    // 3. Emit a single batched event so clients remove all in one render.
     req.app.get('io').emit('notes_bulk_deleted', { noteIds: idsToDelete });
+
+    if (mirrorRelPaths.length) mirrorWorker.deleteFiles(mirrorRelPaths).catch(() => {});
 
     res.json({ message: `${count} notes permanently deleted.` });
   } catch (error) {
