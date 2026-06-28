@@ -255,6 +255,7 @@ export const NotesProvider = ({ children }) => {
   const openNoteByIdRef = useRef(null); // Ref for openNoteById to avoid circular dependency
   const resolvedTagIdsRef = useRef({}); // {tagNameLower: tagId} for tags navigated to by click
   const lastUsedTagIdsRef = useRef(''); // JSON snapshot of resolvedTagIds used in last actual search
+  const pendingSuggestedTagsRef = useRef({}); // {noteId: suggestedTags[]} — survives the openNoteById API fetch
 
   // Get current sort option for the active view/mode
   const currentSortOption = useMemo(() => {
@@ -1654,11 +1655,13 @@ export const NotesProvider = ({ children }) => {
           }
 
           if (tagsToSuggest.length > 0) {
-              newNote.suggestedTags = tagsToSuggest.map(tag => ({
+              const suggestions = tagsToSuggest.map(tag => ({
                 id: tag.id,
                 name: tag.name,
                 featureId: AUTO_TAG_FEATURES.TAG_SEARCH
               }));
+              newNote.suggestedTags = suggestions;
+              pendingSuggestedTagsRef.current[newNote.id] = suggestions;
           }
 
           if (allMatchedTags.length === 0) {
@@ -2262,6 +2265,12 @@ export const NotesProvider = ({ children }) => {
 
         // Store in cache using helper (includes LRU eviction)
         addToCache(id, fetchedNote);
+
+        const pendingSuggestions = pendingSuggestedTagsRef.current[id];
+        if (pendingSuggestions) {
+          delete pendingSuggestedTagsRef.current[id];
+          fetchedNote.suggestedTags = pendingSuggestions;
+        }
 
         setOpenedNote({ ...fetchedNote, isLoading: false });
         // setNoteDetailLoading(false); // This will be handled in finally
