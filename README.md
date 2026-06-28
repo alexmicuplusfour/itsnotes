@@ -151,6 +151,17 @@ All configuration is via the `environment:` blocks in `docker-compose.yml`. See 
 
 Optional AI features (auto-tagging, OCR, summarization) require an OpenAI or Anthropic API key set as `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`.
 
+## REST API
+
+The same API the frontend uses is available to external scripts and apps. Log in with your credentials, call `POST /api/auth/api-token` to get a long-lived token, then pass it as a Bearer header on any request:
+
+```bash
+curl https://your-instance/api/notes/search?query=yr:2024 \
+  -H "Authorization: Bearer <token>"
+```
+
+See **[docs/api.md](docs/api.md)** for the full reference: endpoints, query params, search operators, and the note object schema.
+
 ## Chatting with your notes (MCP)
 
 There's a built-in [MCP](https://modelcontextprotocol.io/) server that lets Claude (and other AI clients) search and read your notes. Turn it on under **Settings → AI → MCP Server** and generate a token. To connect, paste the URL into Claude's custom connector, or run the `claude mcp add` command it gives you for Claude Code.

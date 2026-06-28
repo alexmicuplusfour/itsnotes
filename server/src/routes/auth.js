@@ -181,6 +181,23 @@ router.post('/mcp-token', authenticateToken, async (req, res) => {
   }
 });
 
+// Mint a long-lived token for REST API access from external scripts or apps.
+// Works identically to mcp-token but is semantically separate so the two can
+// be labeled and revoked independently if token revocation is added later.
+router.post('/api-token', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByUsername(req.user.username);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    const token = generateToken(user, '3650d');
+    res.json({ token });
+  } catch (error) {
+    console.error('Error minting API token:', error);
+    res.status(500).json({ message: 'Failed to mint API token' });
+  }
+});
+
 // Mint a long-lived token for the browser extension ("itsnotes clipper").
 // Same mechanism as the MCP token above — a separate endpoint only so the UI
 // can label it distinctly. Like the MCP token, it can't be revoked individually
