@@ -1646,9 +1646,14 @@ export const NotesProvider = ({ children }) => {
             try {
               await Promise.all(tagsToAutoApply.map(tag => tagsApi.addTagToNote(newNote.id, tag.id)));
 
-              const tagNamesForToast = tagsToAutoApply.map(t => t.name);
-              const tagLabel = tagNamesForToast.length > 1 ? tagNamesForToast.join(', #') : tagNamesForToast[0];
-              showToast(`Tag #${tagLabel} added to note`, { duration: 'short' });
+              const appliedFolders = tagsToAutoApply.filter(t => t.is_folder);
+              const appliedTags = tagsToAutoApply.filter(t => !t.is_folder);
+              const toastParts = [];
+              if (appliedFolders.length > 0)
+                toastParts.push(`Note added to ${appliedFolders.map(t => t.name).join(', ')}`);
+              if (appliedTags.length > 0)
+                toastParts.push(`Tag #${appliedTags.map(t => t.name).join(', #')} added to note`);
+              showToast(toastParts.join(' · '), { duration: 'short' });
             } catch (tagError) {
               console.error("Error auto-adding tags to new note:", tagError);
             }
