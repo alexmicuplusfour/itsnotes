@@ -319,6 +319,16 @@ function extractPlainContent(md) {
     .trim();
 }
 
+// Extract inline #tag labels from rendered HTML so they can be associated as
+// real tags, not just decorative spans.
+function extractInlineTagLabels(html) {
+  if (!html || !html.includes('data-type="tag-mention"')) return [];
+  const dom = new JSDOM(`<!DOCTYPE html><body>${html}</body>`);
+  return [...dom.window.document.querySelectorAll('[data-type="tag-mention"][data-label]')]
+    .map((s) => s.getAttribute('data-label'))
+    .filter(Boolean);
+}
+
 // Extract wikilink targets from rendered HTML (for pass-2 resolution)
 function extractWikilinkTargets(html) {
   if (!html || !html.includes('data-wikilink=')) return [];
@@ -343,6 +353,10 @@ async function importMdFile(filePath, resourceMap, origNameMap = {}) {
   const plainContent = extractPlainContent(body);
   const wikilinks = extractWikilinkTargets(content);
 
+  // Union frontmatter tags with inline #tag mentions from the rendered body
+  const inlineTags = extractInlineTagLabels(content);
+  const allTags = [...new Set([...tags, ...inlineTags])];
+
   const now = new Date().toISOString();
   const createdAt = created || now;
   const updatedAt = updated || createdAt;
@@ -365,7 +379,7 @@ async function importMdFile(filePath, resourceMap, origNameMap = {}) {
 
     const id = rows[0].id;
 
-    for (const label of tags) {
+    for (const label of allTags) {
       const tagId = await findOrCreateTagPath(trx, label);
       if (tagId) {
         await trx('note_tags')
@@ -383,7 +397,7 @@ async function importMdFile(filePath, resourceMap, origNameMap = {}) {
     ? await resolveEmbeds(noteId, content, resourceMap)
     : 0;
 
-  return { noteId, title, tagsImported: tags.length, wikilinks, imagesImported };
+  return { noteId, title, tagsImported: allTags.length, wikilinks, imagesImported };
 }
 
 // Import a single image file into note_images and return the new row id.
