@@ -2089,7 +2089,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     const justCompleted = allTasksCompleted && !taskCompletionBaselineRef.current;
     taskCompletionBaselineRef.current = allTasksCompleted;
     if (!justCompleted) return;
-    taskCompletedDebounceRef.current = setTimeout(() => handleTaskCompletedAutoTagRef.current(), 3000);
+    taskCompletedDebounceRef.current = setTimeout(() => handleTaskCompletedAutoTagRef.current(), 2000);
     return () => clearTimeout(taskCompletedDebounceRef.current);
   }, [allTasksCompleted]);
 
