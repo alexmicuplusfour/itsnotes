@@ -89,7 +89,7 @@ export const TagsProvider = ({ children }) => {
       
       // Show success toast (unless the caller will show its own)
       if (!silent) {
-        showToast(`Tag #${response.tag.name} created`);
+        showToast(response.tag.is_folder ? `Folder ${response.tag.name} created` : `Tag #${response.tag.name} created`);
       }
 
       // Log successful creation
@@ -172,7 +172,7 @@ export const TagsProvider = ({ children }) => {
 
       // Show success toast (unless the caller will show its own)
       if (tagName && !silent) {
-        showToast(`Tag #${tagName} deleted`);
+        showToast(tagToDelete?.is_folder ? `Folder ${tagName} deleted` : `Tag #${tagName} deleted`);
       }
 
       return { success: true, deletedNotesCount: result?.deletedNotesCount ?? 0 };
