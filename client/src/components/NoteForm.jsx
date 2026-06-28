@@ -2065,6 +2065,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     prevNoteIdForSuggestionsRef.current = note?.id;
   }, [note?.id, note?.suggestedTags, addSuggestedTags]);
 
+  // Keep a ref to the latest callback so the detection effect below doesn't
+  // depend on it — if handleTaskCompletedAutoTag were a direct dep, React's
+  // cleanup would cancel the debounce timer every time `tags` refreshes.
+  const handleTaskCompletedAutoTagRef = useRef(handleTaskCompletedAutoTag);
+  useEffect(() => {
+    handleTaskCompletedAutoTagRef.current = handleTaskCompletedAutoTag;
+  }, [handleTaskCompletedAutoTag]);
+
   // Record the completion state at note-load time so the detection effect below
   // doesn't fire when opening a note that already has all tasks checked.
   // Must be declared BEFORE the detection effect so it runs first in the same render.
@@ -2081,9 +2089,9 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     const justCompleted = allTasksCompleted && !taskCompletionBaselineRef.current;
     taskCompletionBaselineRef.current = allTasksCompleted;
     if (!justCompleted) return;
-    taskCompletedDebounceRef.current = setTimeout(handleTaskCompletedAutoTag, 3000);
+    taskCompletedDebounceRef.current = setTimeout(() => handleTaskCompletedAutoTagRef.current(), 3000);
     return () => clearTimeout(taskCompletedDebounceRef.current);
-  }, [allTasksCompleted, handleTaskCompletedAutoTag]);
+  }, [allTasksCompleted]);
 
   // Search handlers - Custom handleSearchToggle with scroll position management
   const customHandleSearchToggle = useCallback(() => {
