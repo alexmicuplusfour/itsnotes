@@ -513,7 +513,12 @@ const TiptapNoteContent = React.memo(forwardRef(({
     insertSketchCanvas: () => {
       const editor = editorRef.current?.getEditor?.();
       if (editor && !editor.isDestroyed) {
-        return editor.commands.insertSketchCanvas();
+        const result = editor.commands.insertSketchCanvas();
+        if (editor.state.selection instanceof NodeSelection) {
+          editor.commands.setTextSelection(editor.state.selection.to);
+        }
+        scrollEditorSelectionIntoView(editor, scrollableRef?.current);
+        return result;
       }
       return false;
     },
