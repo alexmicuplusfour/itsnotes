@@ -346,11 +346,22 @@ const FoldersPill = ({ isSearchActive, isMobileView, isDarkTheme, onOpenChange }
 
     const allFolders = tags.filter(tag => tag.is_folder);
 
+    const effectiveCenter = (folder) => {
+      const childMax = allFolders
+        .filter(t => t.parent_id === folder.id && t.temporal_center !== null)
+        .reduce((max, t) => (max === null || t.temporal_center > max ? t.temporal_center : max), null);
+      if (folder.temporal_center === null) return childMax;
+      if (childMax === null) return folder.temporal_center;
+      return Math.max(folder.temporal_center, childMax);
+    };
+
     const byTemporalCenter = (a, b) => {
-      if (a.temporal_center === null && b.temporal_center === null) return a.name.localeCompare(b.name);
-      if (a.temporal_center === null) return 1;
-      if (b.temporal_center === null) return -1;
-      return b.temporal_center - a.temporal_center;
+      const aCenter = effectiveCenter(a);
+      const bCenter = effectiveCenter(b);
+      if (aCenter === null && bCenter === null) return a.name.localeCompare(b.name);
+      if (aCenter === null) return 1;
+      if (bCenter === null) return -1;
+      return bCenter - aCenter;
     };
 
     const topLevel = allFolders.filter(t => !t.parent_id).sort(byTemporalCenter);
