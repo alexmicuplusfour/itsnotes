@@ -172,7 +172,7 @@ It's off by default, read-only, and won't work without the token.
 
 If you keep your notes in Obsidian, you can bring your entire vault over:
 
-1. In Obsidian, go to **File → Export vault as zip** (or just zip the vault folder yourself).
+1. Zip your Obsidian vault folder (the folder that contains your `.md` files and the `.obsidian` config directory).
 2. In itsnotes, open **Settings → Backup & Restore → Import from Obsidian** and select the `.zip`.
 
 Alternatively, you can select individual `.md` files if you only want to import a subset.
