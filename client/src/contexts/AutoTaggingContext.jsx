@@ -14,7 +14,7 @@ export const AUTO_TAG_FEATURES = {
   AI_GENERATED: 'ai_generated',
   LINKED_NOTE: 'linked_note',
   ATTACHMENT_ADDED: 'attachment_added',
-  // Add more features here as needed
+  TASK_COMPLETED: 'task_completed',
 };
 
 // Default settings for each auto-tagging feature
@@ -60,9 +60,14 @@ const DEFAULT_AUTO_TAG_SETTINGS = {
     tagIds: [], // Empty - user should select their own tags
   },
   [AUTO_TAG_FEATURES.ATTACHMENT_ADDED]: {
-    enabled: false, // Disabled by default - user needs to configure
-    mode: 'auto', // 'auto' = directly applied, 'suggest' = suggested
-    tagIds: [], // Empty - user should select their own tags
+    enabled: false,
+    mode: 'auto',
+    tagIds: [],
+  },
+  [AUTO_TAG_FEATURES.TASK_COMPLETED]: {
+    enabled: false,
+    mode: 'suggest',
+    tagIds: [],
   },
 };
 

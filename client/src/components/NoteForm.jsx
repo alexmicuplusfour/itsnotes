@@ -102,6 +102,8 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const [isBeingTrashed, setIsBeingTrashed] = useState(false); // Track if note is being trashed
   const [isCreatingReminder, setIsCreatingReminder] = useState(false); // Track reminder creation status
   const [suggestedTags, setSuggestedTags] = useState([]); // Track suggested tags for auto-tagging
+  const taskCompletionBaselineRef = useRef(false); // allTasksCompleted value at last note load — prevents false-trigger on open
+  const taskCompletedDebounceRef = useRef(null);
 
   // Custom setter that updates both state and ref for immediate access
   const setIsBeingTrashedWithRef = useCallback((value) => {
@@ -364,6 +366,33 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     }
   }, [shouldAutoApply, shouldSuggestTag, getFeatureTags, refreshTags, tags, addSuggestedTags]);
 
+  const handleTaskCompletedAutoTag = useCallback(async () => {
+    const featureTags = getFeatureTags(AUTO_TAG_FEATURES.TASK_COMPLETED);
+    if (!featureTags.length) return;
+    if (shouldAutoApply(AUTO_TAG_FEATURES.TASK_COMPLETED)) {
+      const appliedTagNames = [];
+      for (const tagId of featureTags) {
+        try {
+          await tagsApi.addTagToNote(internalNoteIdRef.current, tagId);
+          const t = tags.find(t => t.id === tagId);
+          if (t?.name) appliedTagNames.push(t.name);
+        } catch (e) {
+          console.warn('Failed to auto-assign task-completed tag:', tagId, e);
+        }
+      }
+      if (appliedTagNames.length > 0) {
+        showToast(`Tagged with ${appliedTagNames.join(', ')}`);
+        refreshTags();
+      }
+    } else if (shouldSuggestTag(AUTO_TAG_FEATURES.TASK_COMPLETED)) {
+      addSuggestedTags(featureTags.map(tagId => ({
+        id: tagId,
+        name: tags.find(t => t.id === tagId)?.name || 'Unknown',
+        featureId: AUTO_TAG_FEATURES.TASK_COMPLETED,
+      })));
+    }
+  }, [shouldAutoApply, shouldSuggestTag, getFeatureTags, refreshTags, tags, addSuggestedTags]);
+
   // Initialize UI interactions hook with all refs including tag picker refs
   const {
     isMobile,
@@ -483,6 +512,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     () => !!content && REMINDER_INTENT_RE.test(content),
     [content]
   );
+
+  const allTasksCompleted = useMemo(() => {
+    if (!content) return false;
+    const taskCount = (content.match(/data-type="taskItem"/g) || []).length;
+    if (taskCount === 0) return false;
+    return (content.match(/data-checked="false"/g) || []).length === 0;
+  }, [content]);
 
   // Search functionality using custom hook
   const {
@@ -2028,6 +2064,26 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
     prevNoteIdForSuggestionsRef.current = note?.id;
   }, [note?.id, note?.suggestedTags, addSuggestedTags]);
+
+  // Record the completion state at note-load time so the detection effect below
+  // doesn't fire when opening a note that already has all tasks checked.
+  // Must be declared BEFORE the detection effect so it runs first in the same render.
+  useEffect(() => {
+    taskCompletionBaselineRef.current = allTasksCompleted;
+    clearTimeout(taskCompletedDebounceRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id, contentFullyLoaded]);
+
+  // Detect the false→true transition (user just checked the last task) and
+  // fire auto-tagging after a 3s debounce window.
+  useEffect(() => {
+    clearTimeout(taskCompletedDebounceRef.current);
+    const justCompleted = allTasksCompleted && !taskCompletionBaselineRef.current;
+    taskCompletionBaselineRef.current = allTasksCompleted;
+    if (!justCompleted) return;
+    taskCompletedDebounceRef.current = setTimeout(handleTaskCompletedAutoTag, 3000);
+    return () => clearTimeout(taskCompletedDebounceRef.current);
+  }, [allTasksCompleted, handleTaskCompletedAutoTag]);
 
   // Search handlers - Custom handleSearchToggle with scroll position management
   const customHandleSearchToggle = useCallback(() => {
