@@ -126,9 +126,8 @@ router.post('/', blockInDemo, upload.fields([
       fs.mkdirSync(extractDir, { recursive: true });
 
       send('status', { message: 'Extracting archive...' });
-      await fs.createReadStream(zipPath)
-        .pipe(unzipper.Extract({ path: extractDir }))
-        .promise();
+      const zipDir = await unzipper.Open.file(zipPath);
+      await zipDir.extract({ path: extractDir, concurrency: 4 });
 
       importFiles = collectMdFiles(extractDir);
       resourceMap = buildResourceMap(extractDir);

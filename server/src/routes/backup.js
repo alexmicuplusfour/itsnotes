@@ -305,9 +305,10 @@ async function streamRestoreFromZip(req, res, zipPath, displayName, { deleteSour
     console.log('[RESTORE] Extracting backup:', displayName);
 
     await fs.mkdir(extractDir, { recursive: true });
-    await require('fs').createReadStream(zipPath)
-      .pipe(unzipper.Extract({ path: extractDir }))
-      .promise();
+    // Open via central directory (more reliable for large zips than the
+    // streaming Extract().promise() which can resolve before writes flush).
+    const zipDir = await unzipper.Open.file(zipPath);
+    await zipDir.extract({ path: extractDir, concurrency: 4 });
 
     const sqlFilePath = path.join(extractDir, 'database.sql');
     const extractedUploadsPath = path.join(extractDir, 'uploads');
