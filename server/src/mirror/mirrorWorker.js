@@ -517,6 +517,23 @@ let running = false;
 let lastSweep = null; // { at, summary } of the most recent real sweep
 let lastImport = null; // { at, changed } of the most recent import that pulled anything in
 
+// Import-in-progress gate. While a Keep or Obsidian import is running, each new
+// note fires a DB NOTIFY that would queue a reconcileOne — flooding the mirror
+// queue with hundreds of single-note writes. Pausing drops those during the
+// import; resume() runs one catch-up sweep afterward to mirror the whole batch.
+let importPaused = false;
+
+function pause(label = 'import') {
+  importPaused = true;
+  console.log(`[md-mirror] paused (${label})`);
+}
+
+function resume() {
+  importPaused = false;
+  console.log('[md-mirror] resumed — scheduling catch-up sweep');
+  runOnce().catch((err) => console.error('[md-mirror] catch-up sweep failed:', err.message));
+}
+
 // Every mirror mutation — the periodic sweep and each live single-note reconcile
 // — runs through this one-at-a-time queue. They all compute a plan from a snapshot
 // of the tracking table + folder and then write both back; if two ran at once the
@@ -537,6 +554,7 @@ function serialize(task) {
 async function runOnce() {
   const { enabled, root } = getConfig();
   if (!enabled || !root) return { skipped: true, reason: 'disabled' };
+  if (importPaused) return { skipped: true, reason: 'import-in-progress' };
   // A sweep already in flight (or queued behind live reconciles) will cover
   // whatever changed, so a second full sweep would just repeat the work — skip
   // it. Live reconciles still queue normally; they each target one note.
@@ -623,6 +641,9 @@ async function rebuild() {
 async function reconcileOne(noteId) {
   const { enabled, root } = getConfig();
   if (!enabled || !root) return { skipped: true, reason: 'disabled' };
+  // Drop live reconciles during bulk imports — each imported note fires a NOTIFY
+  // that would otherwise queue a single-note write. resume() runs a catch-up sweep.
+  if (importPaused) return { skipped: true, reason: 'import-in-progress' };
   // No early-skip when busy: each reconcile targets a specific note and must run
   // to capture that note's latest state. The queue serializes it behind any
   // in-flight sweep or sibling reconcile so they never race on the same file.
@@ -717,7 +738,7 @@ let autoImporting = false;
 // `autoImporting` guard only stops overlapping *ticks*, not the queue.
 async function autoImportTick() {
   const { enabled, root, autoImport } = getConfig();
-  if (!enabled || !root || !autoImport || autoImporting) return;
+  if (!enabled || !root || !autoImport || autoImporting || importPaused) return;
   autoImporting = true;
   try {
     if (!(await exists(root))) return;
@@ -829,4 +850,4 @@ async function processPendingDeletes(root) {
   }
 }
 
-module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult };
+module.exports = { init, runOnce, rebuild, reconcileOne, getStatus, buildDesired, scanOnDisk, gatherDiskFiles, previewImport, applyImport, autoImportTick, broadcastImportResult, pause, resume };

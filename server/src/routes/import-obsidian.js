@@ -9,6 +9,7 @@ const os = require('os');
 const unzipper = require('unzipper');
 const { processObsidianImport } = require('../import-obsidian');
 const { blockInDemo } = require('../middleware/demoGuard');
+const mirrorWorker = require('../mirror/mirrorWorker');
 
 const tempDir = process.env.NODE_ENV === 'production'
   ? '/tmp/itsnotes-obsidian'
@@ -155,12 +156,18 @@ router.post('/', blockInDemo, upload.fields([
       }
     };
 
-    const onStatus = (message) => send('status', { message });
-    const result = await processObsidianImport(importFiles, resourceMap, onProgress, origNameMap, onStatus);
+    mirrorWorker.pause('obsidian-import');
+    let importResult;
+    try {
+      const onStatus = (message) => send('status', { message });
+      importResult = await processObsidianImport(importFiles, resourceMap, onProgress, origNameMap, onStatus);
+    } finally {
+      mirrorWorker.resume();
+    }
 
     cleanup(...uploadedPaths, extractDir);
 
-    send('complete', { success: true, message: 'Import complete', result });
+    send('complete', { success: true, message: 'Import complete', result: importResult });
     res.end();
   } catch (e) {
     console.error('Obsidian import route error:', e);

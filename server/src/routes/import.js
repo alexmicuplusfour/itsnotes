@@ -7,6 +7,7 @@ const os = require('os');
 const unzipper = require('unzipper');
 const { processGoogleKeepImport } = require('../import-notes');
 const { blockInDemo } = require('../middleware/demoGuard');
+const mirrorWorker = require('../mirror/mirrorWorker');
 
 // Define temp directory for Docker compatibility
 const tempDir = process.env.NODE_ENV === 'production'
@@ -206,7 +207,8 @@ router.post('/', blockInDemo, upload.single('archive'), async (req, res) => {
     
     console.log(`Found Keep directory at ${keepDir}`);
     sendProgress('status', { message: 'Found Keep notes, starting import...' });
-    
+    mirrorWorker.pause('keep-import');
+
     // Process the import with progress updates
     try {
       // Patch the processGoogleKeepImport function to send progress
@@ -264,20 +266,23 @@ router.post('/', blockInDemo, upload.single('archive'), async (req, res) => {
       
       const importResult = await processWithProgress(keepDir);
       
+      mirrorWorker.resume();
+
       // Clean up temporary files
       cleanup(zipFilePath, extractionDir);
-      
+
       // Send final success result
-      sendProgress('complete', { 
+      sendProgress('complete', {
         success: true,
         message: 'Import completed successfully',
-        result: importResult 
+        result: importResult
       });
-      
+
       res.end();
     } catch (importError) {
+      mirrorWorker.resume();
       console.error('Import process error:', importError);
-      sendProgress('error', { 
+      sendProgress('error', {
         message: 'An error occurred during the import process',
         details: importError.message
       });
