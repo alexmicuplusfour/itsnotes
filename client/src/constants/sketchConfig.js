@@ -20,7 +20,7 @@ export const SKETCH_SIZES = {
 
 export const SKETCH_SIZE_IDS = Object.keys(SKETCH_SIZES);
 
-export const CANVAS_HEIGHT = 400;
+export const CANVAS_HEIGHT = 500;
 export const DEFAULT_COLOR_ID = 'purple';
 export const DEFAULT_SIZE_ID = 'm';
 export const ERASER_RADIUS = 18;

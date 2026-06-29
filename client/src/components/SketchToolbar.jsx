@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
 import Icon from './Icons';
 import {
   SKETCH_COLOR_IDS,
@@ -40,7 +40,7 @@ const Pill = styled.div`
   flex-direction: column;
   background: var(--note-bg-color, #fff);
   border: 1px solid var(--border-transparent);
-  border-radius: 24px;
+  border-radius: ${p => p.$squareTop ? '0 0 24px 24px' : p.$squareBottom ? '24px 24px 0 0' : '24px'};
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   pointer-events: auto;
@@ -69,6 +69,18 @@ const PillDivider = styled.div`
   flex-shrink: 0;
 `;
 
+// ── toolbar entry animations ──────────────────────────────────────────────────
+
+const slideDown = keyframes`
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+`;
+
+const slideUp = keyframes`
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+`;
+
 // ── overlay layout ────────────────────────────────────────────────────────────
 
 const Overlay = styled.div`
@@ -80,22 +92,24 @@ const Overlay = styled.div`
 
 const TopSection = styled.div`
   position: absolute;
-  top: 10px;
+  top: -1px;
   left: 0;
   right: 0;
   display: flex;
   justify-content: center;
   pointer-events: none;
+  animation: ${slideDown} 0.2s ease-out both;
 `;
 
 const BottomSection = styled.div`
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  right: 10px;
+  bottom: -1px;
+  left: 0;
+  right: 0;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   pointer-events: none;
+  animation: ${slideUp} 0.2s ease-out both;
 `;
 
 // ── color swatch (expand panel only) ─────────────────────────────────────────
@@ -189,7 +203,7 @@ export default function SketchToolbar({
   return (
     <Overlay>
       <TopSection>
-        <Pill>
+        <Pill $squareTop>
           <PillRow>
             {/* tools — outlined ring on active */}
             <RoundBtn $outlined={tool === 'pen'} onClick={() => handleToolChange('pen')} title="Pen">
@@ -251,7 +265,7 @@ export default function SketchToolbar({
       </TopSection>
 
       <BottomSection>
-        <Pill>
+        <Pill $squareBottom>
           <PillRow>
             <RoundBtn $disabled={!canUndo} onClick={onUndo} title="Undo">
               <Icon name="undo" size={20} strokeWidth="2.5" />
@@ -259,10 +273,7 @@ export default function SketchToolbar({
             <RoundBtn $disabled={!canRedo} onClick={onRedo} title="Redo">
               <Icon name="redo" size={20} strokeWidth="2.5" />
             </RoundBtn>
-          </PillRow>
-        </Pill>
-        <Pill>
-          <PillRow>
+            <PillDivider />
             <RoundBtn onClick={onDone} title="Save">
               <Icon name="check" size={20} strokeWidth="2.5" />
             </RoundBtn>
