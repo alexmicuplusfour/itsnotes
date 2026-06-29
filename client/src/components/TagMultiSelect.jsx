@@ -124,16 +124,19 @@ const TagMultiSelect = ({ selectedTagIds = [], onChange, placeholder = "Type to 
     return matchesSearch && notSelected && !tag.is_folder;
   });
 
-  // Update dropdown position when opening
+  // Update dropdown position when opening and keep it anchored during scroll
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (!isOpen || !inputRef.current) return;
+
+    const updatePosition = () => {
+      if (!inputRef.current) return;
       const rect = inputRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width
-      });
-    }
+      setDropdownPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    };
+
+    updatePosition();
+    document.addEventListener('scroll', updatePosition, true);
+    return () => document.removeEventListener('scroll', updatePosition, true);
   }, [isOpen]);
 
   // Handle click outside to close dropdown
