@@ -171,6 +171,17 @@ export const createTagMentionSuggestion = (onSearch, onSelect) => ({
     let popup;
     let currentItems = []; // Store current items for keyboard navigation
     let currentCommand = null; // Store current command function
+    let latestClientRect = null;
+    let scrollHandler = null;
+
+    function repositionPopup() {
+      if (!popup || !latestClientRect) return;
+      const rect = latestClientRect();
+      if (rect) {
+        popup.style.left = `${rect.left}px`;
+        popup.style.top = `${rect.bottom + 4}px`;
+      }
+    }
 
     return {
       onStart: (props) => {
@@ -197,14 +208,12 @@ export const createTagMentionSuggestion = (onSearch, onSelect) => ({
         document.body.appendChild(popup);
 
         // Position popup
-        const { clientRect } = props;
-        if (clientRect) {
-          const rect = clientRect();
-          if (rect) {
-            popup.style.left = `${rect.left}px`;
-            popup.style.top = `${rect.bottom + 4}px`;
-          }
-        }
+        latestClientRect = props.clientRect;
+        repositionPopup();
+
+        // Keep popup anchored to cursor during scroll
+        scrollHandler = repositionPopup;
+        document.addEventListener('scroll', scrollHandler, true);
 
         // Store items and command for keyboard navigation
         currentItems = props.items || [];
@@ -222,14 +231,8 @@ export const createTagMentionSuggestion = (onSearch, onSelect) => ({
         currentCommand = props.command;
 
         // Reposition
-        const { clientRect } = props;
-        if (clientRect) {
-          const rect = clientRect();
-          if (rect) {
-            popup.style.left = `${rect.left}px`;
-            popup.style.top = `${rect.bottom + 4}px`;
-          }
-        }
+        latestClientRect = props.clientRect;
+        repositionPopup();
 
         // Re-render items
         renderItems(props.items, props.command, onSelect);
@@ -302,6 +305,10 @@ export const createTagMentionSuggestion = (onSearch, onSelect) => ({
       },
 
       onExit: () => {
+        if (scrollHandler) {
+          document.removeEventListener('scroll', scrollHandler, true);
+          scrollHandler = null;
+        }
         if (popup) {
           popup.remove();
           popup = null;
