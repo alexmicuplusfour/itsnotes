@@ -958,48 +958,45 @@ export const ResetSection = ({ isDarkTheme }) => {
 
   return (
     <>
-      <Divider />
-      <Container>
-        <Section>
-          <SectionHeader>
-            <SectionTitle>Reset</SectionTitle>
-            <Button
-              onClick={handleReset}
-              disabled={isDemoMode || resetting}
-              $color="danger"
-              style={{ width: 'auto', whiteSpace: 'nowrap' }}
-            >
-              {resetting ? (
-                <>
-                  <LoadingSpinner />
-                  Resetting...
-                </>
-              ) : (
-                'Reset Everything'
-              )}
-            </Button>
-          </SectionHeader>
-          <Description>
-            Permanently delete all data in the database and uploads folder. This cannot be undone.
-          </Description>
-          <WarningBox $isDark={isDarkTheme}>
-            <WarningIcon>
-              <Icon name="help" size={20} />
-            </WarningIcon>
-            <div>
-              <strong>Danger:</strong> This will wipe everything — all notes, tags, attachments, settings, and uploaded files.
-              Export a backup first if you want to keep your data.
-            </div>
-          </WarningBox>
-
-          {status && (
-            <StatusMessage $error={status.type === 'error'}>
-              <Icon name={status.type === 'error' ? 'close' : 'check'} size={18} />
-              {status.message}
-            </StatusMessage>
-          )}
-        </Section>
-      </Container>
+      <div style={{ height: '32px', borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }} />
+      <Section>
+        <SectionHeader>
+          <SectionTitle>Reset</SectionTitle>
+          <Button
+            onClick={handleReset}
+            disabled={isDemoMode || resetting}
+            $color="danger"
+            style={{ width: 'auto', whiteSpace: 'nowrap' }}
+          >
+            {resetting ? (
+              <>
+                <LoadingSpinner />
+                Resetting...
+              </>
+            ) : (
+              'Reset Everything'
+            )}
+          </Button>
+        </SectionHeader>
+        <Description>
+          Permanently delete all data in the database and uploads folder. This cannot be undone.
+        </Description>
+        <WarningBox $isDark={isDarkTheme}>
+          <WarningIcon>
+            <Icon name="help" size={20} />
+          </WarningIcon>
+          <div>
+            <strong>Danger:</strong> This will wipe everything — all notes, tags, attachments, settings, and uploaded files.
+            Export a backup first if you want to keep your data.
+          </div>
+        </WarningBox>
+        {status && (
+          <StatusMessage $error={status.type === 'error'}>
+            <Icon name={status.type === 'error' ? 'close' : 'check'} size={18} />
+            {status.message}
+          </StatusMessage>
+        )}
+      </Section>
     </>
   );
 };
