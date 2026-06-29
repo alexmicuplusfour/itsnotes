@@ -30,7 +30,7 @@ const RoundBtn = styled.button.attrs(() => ({ type: 'button' }))`
   pointer-events: ${p => p.$disabled ? 'none' : 'auto'};
   flex-shrink: 0;
   box-shadow: ${p => p.$outlined ? 'inset 0 0 0 2px var(--text-color)' : 'none'};
-  &:hover { background: var(--button-bg); }
+  @media (hover: hover) { &:hover { background: var(--button-bg); } }
 `;
 
 // ── pill ──────────────────────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ const ColorSwatch = styled.button.attrs(() => ({ type: 'button' }))`
   flex-shrink: 0;
   outline: none;
   box-shadow: ${p => p.$active ? '0 0 0 1px var(--note-bg-color, #fff) inset' : 'none'};
-  &:hover { transform: scale(1.1); }
+  @media (hover: hover) { &:hover { transform: scale(1.1); } }
 `;
 
 // ── combined indicator+caret button (pill-shaped, for size and color) ──────────
@@ -129,7 +129,7 @@ const LongBtn = styled.button.attrs(() => ({ type: 'button' }))`
   flex-shrink: 0;
   opacity: ${p => p.$disabled ? 0.25 : 1};
   pointer-events: ${p => p.$disabled ? 'none' : 'auto'};
-  &:hover { background: ${p => p.$disabled ? 'transparent' : 'var(--button-bg)'}; }
+  @media (hover: hover) { &:hover { background: ${p => p.$disabled ? 'transparent' : 'var(--button-bg)'}; } }
 `;
 
 // small non-interactive circle showing current color
