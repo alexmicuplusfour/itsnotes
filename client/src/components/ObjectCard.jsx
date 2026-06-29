@@ -621,6 +621,7 @@ const ObjectCard = (props) => {
     const percent = totalPages > 0 ? Math.min(100, Math.round((currentPage / totalPages) * 100)) : 0;
     const hasStarted = user.status && user.status !== 'want_to_read';
     const isFinished = user.status === 'finished';
+    const timesRead = user.reads?.filter(r => r.finished_at)?.length || 0;
 
     return (
       <>
@@ -634,6 +635,7 @@ const ObjectCard = (props) => {
               {year && <span>{year}</span>}
               {totalPages > 0 && <span>{totalPages} pages</span>}
               {rating && <span>★ {rating}</span>}
+              {(timesRead > 1 || (timesRead === 1 && user.status === 'reading')) && <span>Read {timesRead}×</span>}
             </ObjectMeta>
           </ObjectInfo>
           {thumbnailUrl && <ObjectThumbnail src={thumbnailUrl} alt={title} />}
