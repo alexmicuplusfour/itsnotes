@@ -11,9 +11,7 @@ const Container = styled.div`
   gap: 20px;
 `;
 
-const Section = styled.div`
-  margin-bottom: 20px;
-`;
+const Section = styled.div``;
 
 const SectionTitle = styled.h3`
   font-size: 18px;
