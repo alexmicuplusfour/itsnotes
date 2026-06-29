@@ -271,6 +271,8 @@ const AddContentDropdown = ({
 
   // When the menu opens, peek at the clipboard for an image so we can surface a
   // direct paste shortcut on the Add Image and OCR rows.
+  // Delayed on touch devices so the menu renders first — on iOS the system "Paste"
+  // banner appears immediately on clipboard read and would block the menu from opening.
   React.useEffect(() => {
     if (!isOpen) {
       setHasClipboardImage(false);
@@ -280,6 +282,13 @@ const AddContentDropdown = ({
     if (window.isSecureContext === false || !navigator.clipboard || !navigator.clipboard.read) {
       return;
     }
+
+    // Skip on iPad — Safari shows a blocking "Paste" tooltip on any clipboard read,
+    // which appears before the menu is visible and prevents it from opening.
+    // iPadOS 13+ reports as MacIntel with touch points, hence the dual check.
+    const isIPad = /iPad/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isIPad) return;
 
     let cancelled = false;
     navigator.clipboard.read()

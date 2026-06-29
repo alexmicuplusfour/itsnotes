@@ -100,12 +100,16 @@ export const useNoteContentActions = ({
         return 'Add Content from URL';
     }, [clipboardUrl]);
 
-    // Effect to check clipboard when dropdown opens
-    // This separates the side effect from the event handler to prevent UI blocking
+    // Effect to check clipboard when dropdown opens.
+    // Skipped on iPad — Safari shows a blocking "Paste" tooltip on any clipboard read,
+    // which appears before the menu is visible and prevents it from opening.
+    // iPadOS 13+ reports as MacIntel with touch points, hence the dual check.
     useEffect(() => {
-        if (showAddContentDropdown) {
-            checkClipboardForUrl().catch(err => console.warn('Clipboard check failed', err));
-        }
+        if (!showAddContentDropdown) return;
+        const isIPad = /iPad/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIPad) return;
+        checkClipboardForUrl().catch(err => console.warn('Clipboard check failed', err));
     }, [showAddContentDropdown, checkClipboardForUrl]);
 
 
