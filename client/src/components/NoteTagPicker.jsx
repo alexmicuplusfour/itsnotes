@@ -83,7 +83,7 @@ const TagPickerContainer = styled.div`
   box-shadow: 0 2px 10px var(--shadow-color);
   z-index: 1200; // Higher z-index
   color: var(--text-color);
-  width: 250px;
+  width: 300px;
 
   opacity: ${props => props.$isPositioned ? 1 : 0};
   transform: ${props => props.$isPositioned ? 'scale(1)' : 'scale(0.95)'};
@@ -1357,7 +1357,9 @@ export const TagPicker = ({
                     <TagPickerList ref={tagListRef} className={isDarkTheme ? 'dark-theme' : 'light-theme'}>
                       {(() => {
                         const baseFolders = filteredTagsList.filter(tag => tag.is_folder);
-                        const baseNonFolders = filteredTagsList.filter(tag => !tag.is_folder);
+                        const baseNonFolders = filteredTagsList
+                          .filter(tag => !tag.is_folder)
+                          .map(tag => tag.name.includes('/') ? { ...tag, _isSubtag: true } : tag);
 
                         // For folders view: order top-level folders with their subfolders nested below
                         const orderedList = viewMode === 'folders'
@@ -1398,7 +1400,7 @@ export const TagPicker = ({
                             <TagPickerItem
                               key={tag.id}
                               theme={isDarkTheme ? 'dark' : 'light'}
-                              style={tag._isSubfolder ? { paddingLeft: '20px' } : undefined}
+                              style={(tag._isSubfolder || tag._isSubtag) ? { paddingLeft: '20px' } : undefined}
                             >
                               <SVGCheckbox
                                 id={`tag-picker-${isBulkMode ? 'bulk' : noteId}-${tag.id}`}

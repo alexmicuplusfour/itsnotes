@@ -491,11 +491,13 @@ const TagsModal = ({ onClose }) => {
     }
 
     // 1. Create a sorted copy of the filtered tags, using the custom sort logic
-    const sortedTags = [...filteredTags].sort((a, b) => {
-      const nameA = getSortableName(a.name);
-      const nameB = getSortableName(b.name);
-      return nameA.localeCompare(nameB);
-    });
+    const sortedTags = [...filteredTags]
+      .sort((a, b) => {
+        const nameA = getSortableName(a.name);
+        const nameB = getSortableName(b.name);
+        return nameA.localeCompare(nameB);
+      })
+      .map(tag => tag.name.includes('/') ? { ...tag, _isSubtag: true } : tag);
 
     // 2. If a tag was just created in this modal session, move it to the top
     if (newlyCreatedTagId) {
@@ -607,7 +609,7 @@ const TagsModal = ({ onClose }) => {
             {!loading && !error && displayedTags.length > 0 && ( // Use displayedTags
               <TagList>
                 {displayedTags.map(tag => (
-                <TagItem key={tag.id} style={tag._isSubfolder ? { paddingLeft: '24px' } : undefined}>
+                <TagItem key={tag.id} style={(tag._isSubfolder || tag._isSubtag) ? { paddingLeft: '24px' } : undefined}>
                   {editingTagId === tag.id ? (
                     // Editing mode
                     <>
