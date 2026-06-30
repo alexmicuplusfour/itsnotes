@@ -214,9 +214,11 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr  = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const W    = rect.width  || 800;
-    const H    = rect.height || CANVAS_HEIGHT;
+    // offsetWidth/Height report the layout box size, unaffected by the
+    // CSS scale-in transition NoteForm plays on open — getBoundingClientRect
+    // would read a shrunk size while that transform is still mid-flight.
+    const W    = canvas.offsetWidth  || 800;
+    const H    = canvas.offsetHeight || CANVAS_HEIGHT;
     const bw   = Math.round(W * dpr);
     const bh   = Math.round(H * dpr);
     if (canvas.width !== bw || canvas.height !== bh) {
@@ -263,19 +265,36 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
 
   // ── view mode canvas render ────────────────────────────────────────────────
   const viewRef = useRef(null);
-  useEffect(() => {
-    if (mode !== 'view') return;
+  const renderViewCanvas = useCallback(() => {
     const canvas = viewRef.current;
     if (!canvas) return;
     const dpr  = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const W    = rect.width  || 800;
-    const H    = rect.height || CANVAS_HEIGHT;
+    // offsetWidth/Height report the layout box size, unaffected by the
+    // CSS scale-in transition NoteForm plays on open — getBoundingClientRect
+    // would read a shrunk size while that transform is still mid-flight.
+    const W    = canvas.offsetWidth  || 800;
+    const H    = canvas.offsetHeight || CANVAS_HEIGHT;
     canvas.width  = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     canvas.getContext('2d').scale(dpr, dpr);
     renderAll(canvas.getContext('2d'), W, H, strokes, isDark);
-  }, [mode, strokes, isDark]);
+  }, [strokes, isDark]);
+
+  useEffect(() => {
+    if (mode !== 'view') return;
+    renderViewCanvas();
+  }, [mode, renderViewCanvas]);
+
+  // Re-render if the canvas's actual layout size changes later — e.g. window
+  // resize or sidebar toggle while the sketch is already visible.
+  useEffect(() => {
+    if (mode !== 'view') return;
+    const canvas = viewRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => renderViewCanvas());
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [mode, renderViewCanvas]);
 
   // ── pointer helpers ────────────────────────────────────────────────────────
   const getCoords = useCallback((e) => {
