@@ -233,6 +233,15 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     if (mode === 'edit') setupEditCanvas();
   }, [mode, setupEditCanvas]);
 
+  // Reuse the same hide/show mechanism the action bar uses on scroll, so it
+  // gets out of the way while drawing on mobile.
+  useEffect(() => {
+    if (mode !== 'edit') return;
+    ctx?.hideActionsBar?.();
+    return () => ctx?.showActionsBar?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   // ── imperative redraw (used both by effect and by live pointer drawing) ────
   const redrawCanvas = useCallback((livePts) => {
     const canvas = canvasRef.current;
