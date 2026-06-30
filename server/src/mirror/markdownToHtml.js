@@ -30,6 +30,8 @@ const TAG_RE = /(^|[\s(])#([A-Za-z0-9_][A-Za-z0-9_-]*)/g;
 const IMG_RES_RE = /^_resources\/img-(\d+)(?:\.\w+)?$/;
 // _resources/att-<id>-<filename>
 const ATT_RES_RE = /^_resources\/att-(\d+)-(.+)$/;
+// _resources/sketch-<id>.svg — id is the note_sketches serial, so it's digits.
+const SKETCH_RES_RE = /^_resources\/sketch-(\d+)\.svg$/;
 
 function markdownToHtml(md, options = {}) {
   const opts = { ...DEFAULTS, ...options };
@@ -129,6 +131,14 @@ function transformImages(doc, root, opts) {
       div.setAttribute('data-type', 'object-card');
       div.setAttribute('objectid', id);
       div.setAttribute('objecttype', opts.resolveObjectType(id) || alt || 'object');
+      replaceBlock(doc, img, div);
+      continue;
+    }
+
+    const sketch = SKETCH_RES_RE.exec(src);
+    if (sketch) {
+      const div = doc.createElement('div');
+      div.setAttribute('data-sketch-id', sketch[1]);
       replaceBlock(doc, img, div);
       continue;
     }

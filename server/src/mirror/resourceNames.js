@@ -40,4 +40,10 @@ function attachmentResourceName(id, originalName) {
   return `att-${id}-${originalName || `attachment-${id}`}`;
 }
 
-module.exports = { imageExt, imageResourceName, attachmentResourceName };
+// Sketch resource basename: sketch-<id>.svg. The id (note_sketches serial) makes it
+// deterministic + round-trippable, matching htmlToMarkdown's sketch rule.
+function sketchResourceName(id) {
+  return `sketch-${id}.svg`;
+}
+
+module.exports = { imageExt, imageResourceName, attachmentResourceName, sketchResourceName };

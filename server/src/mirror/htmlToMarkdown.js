@@ -32,6 +32,14 @@ function attachmentMd(node) {
   return `\n\n[${filename}](_resources/att-${id}-${filename})\n\n`;
 }
 
+// Inline sketch: an empty <div data-sketch-id="N">. The drawing itself lives in the
+// note_sketches table; the mirror writes a rendered SVG to _resources, so the file
+// links to it as a normal image. Round-trips back to the div on import by the id.
+function sketchMd(node) {
+  const id = node.getAttribute('data-sketch-id');
+  return `\n\n![sketch](_resources/sketch-${id}.svg)\n\n`;
+}
+
 function buildTurndown(opts) {
   const td = new TurndownService({
     headingStyle: 'atx',
@@ -46,6 +54,7 @@ function buildTurndown(opts) {
         const dt = node.getAttribute('data-type');
         if (dt === 'object-card') return objectCardMd(node, opts);
         if (dt === 'attachment') return attachmentMd(node);
+        if (node.getAttribute('data-sketch-id')) return sketchMd(node);
       }
       // A bare empty <p> is an intentional blank line in the note — render it as a
       // `&nbsp;` paragraph so the vertical gap survives Markdown rendering (a plain
@@ -120,6 +129,13 @@ function buildTurndown(opts) {
     filter: (node) =>
       node.nodeName === 'DIV' && node.getAttribute('data-type') === 'attachment',
     replacement: (_content, node) => attachmentMd(node),
+  });
+
+  // --- Inline sketch (block): <div data-sketch-id="N"> -> ![sketch](_resources/sketch-N.svg) ---
+  td.addRule('sketch', {
+    filter: (node) =>
+      node.nodeName === 'DIV' && !!node.getAttribute('data-sketch-id'),
+    replacement: (_content, node) => sketchMd(node),
   });
 
   // --- Images ---

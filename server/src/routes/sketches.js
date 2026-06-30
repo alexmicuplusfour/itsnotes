@@ -1,7 +1,16 @@
 const express = require('express');
 const NoteSketch = require('../models/NoteSketch');
 const Note = require('../models/Note');
+const mirrorWorker = require('../mirror/mirrorWorker');
 const router = express.Router();
+
+// A sketch lives outside the note's HTML (only a data-sketch-id div references it),
+// so editing strokes doesn't change the note and wouldn't trip the mirror's note
+// trigger. Nudge the mirror to re-render this note's resources (its sketch SVGs).
+// Fire-and-forget; reconcileOne self-skips when the mirror is disabled.
+const nudgeMirror = (noteId) => {
+  if (noteId) mirrorWorker.reconcileOne(noteId).catch(() => {});
+};
 
 // List sketch stubs (thumbnail + metadata) for a note
 router.get('/notes/:noteId/sketches', async (req, res) => {
@@ -51,6 +60,7 @@ router.put('/sketches/:id', async (req, res) => {
     const sketch = await NoteSketch.update(req.params.id, strokes, thumbnail || null, thumbnail_dark || null);
     if (!sketch) return res.status(404).json({ message: 'Sketch not found' });
     req.app.get('io').emit('note_sketch_updated', { noteId: sketch.note_id, sketchId: sketch.id });
+    nudgeMirror(sketch.note_id);
     res.json({ sketch });
   } catch (err) {
     console.error('Error updating sketch:', err);
@@ -64,6 +74,7 @@ router.delete('/sketches/:id', async (req, res) => {
     const sketch = await NoteSketch.delete(req.params.id);
     if (!sketch) return res.status(404).json({ message: 'Sketch not found' });
     req.app.get('io').emit('note_sketch_deleted', { noteId: sketch.note_id, sketchId: sketch.id });
+    nudgeMirror(sketch.note_id);
     res.json({ message: 'Sketch deleted', sketch });
   } catch (err) {
     console.error('Error deleting sketch:', err);

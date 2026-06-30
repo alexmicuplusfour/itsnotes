@@ -14,7 +14,8 @@ const { noteFileName } = require('./slugify');
 const { planReconcile } = require('./reconcile');
 const { planImport } = require('./importPlan');
 const { fileToNoteFields } = require('./importApply');
-const { imageResourceName, attachmentResourceName } = require('./resourceNames');
+const { imageResourceName, attachmentResourceName, sketchResourceName } = require('./resourceNames');
+const { renderSketchSvg } = require('./sketchSvg');
 
 const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
 const RESOURCES_DIR = '_resources';
@@ -116,6 +117,7 @@ function isEmptyNote(note) {
     (note.tags || []).length ||
     (note.folders || []).length ||
     (note.images || []).length ||
+    (note.sketches || []).length ||
     (note.attachments || []).length ||
     (note.reminders || []).length
   );
@@ -469,8 +471,40 @@ async function ensureResources(root, notes) {
       await fs.copyFile(src, abs);
       wrote++;
     }
+    // Sketches render to an adaptive SVG. Unlike image bytes they change when the
+    // drawing is edited, so we rewrite when the file is missing or its stamped
+    // version differs from the sketch's — and only then pay to load the (potentially
+    // large) strokes.
+    for (const sk of note.sketches || []) {
+      const abs = path.join(dir, sketchResourceName(sk.id));
+      const version = sk.updatedAt ? new Date(sk.updatedAt).getTime() : 0;
+      if (await sketchSvgVersion(abs) === version) continue;
+      const data = await repo.loadSketchStrokes(sk.id);
+      if (!data) continue;
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(abs, renderSketchSvg(data.strokes, data.width, data.height, version), 'utf8');
+      wrote++;
+    }
   }
   return wrote;
+}
+
+// The version (updated_at epoch) stamped into an existing sketch SVG, or null if the
+// file is missing/unstamped. Reads only the head of the file — data-v sits in the
+// opening <svg> tag — so the check is cheap even for a sketch with lots of strokes.
+async function sketchSvgVersion(abs) {
+  let fh;
+  try {
+    fh = await fs.open(abs, 'r');
+    const buf = Buffer.alloc(256);
+    const { bytesRead } = await fh.read(buf, 0, 256, 0);
+    const m = /data-v="(\d+)"/.exec(buf.toString('utf8', 0, bytesRead));
+    return m ? Number(m[1]) : null;
+  } catch {
+    return null;
+  } finally {
+    if (fh) await fh.close().catch(() => {});
+  }
 }
 
 // --- Execution ---------------------------------------------------------------

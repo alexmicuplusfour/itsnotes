@@ -8,14 +8,17 @@ const path = require('path');
 // against a real temp folder without Postgres.
 jest.mock('./mirrorRepo', () => {
   const tracked = new Map();
+  const sketchData = new Map(); // sketchId -> { strokes, width, height }
   // 1x1 transparent PNG.
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   let notes = [];
   return {
     __setNotes: (n) => { notes = n; },
+    __setSketch: (id, data) => { sketchData.set(id, data); },
     __tracked: tracked,
     loadNotes: jest.fn(async () => notes),
     loadNote: jest.fn(async (id) => notes.find((n) => n.id === id) || null),
+    loadSketchStrokes: jest.fn(async (id) => sketchData.get(id) || null),
     loadTagIdsByName: jest.fn(async () => new Map([['work', 'tag-work-id']])),
     loadObjectTitles: jest.fn(async () => new Map()),
     loadImageData: jest.fn(async () => PNG),
@@ -187,6 +190,64 @@ describe('runOnce (end-to-end against a temp folder)', () => {
     })]);
     const summary = await runOnce();
     expect(summary.created).toBe(1);
+  });
+
+  test('a note with a sketch writes an SVG resource and links to it', async () => {
+    repo.__setSketch(7, {
+      strokes: [{ tool: 'pen', colorId: 'purple', sizeId: 'm', points: [[10, 10, 0.5], [40, 40, 0.5], [70, 20, 0.5]] }],
+      width: 800, height: 500,
+    });
+    repo.__setNotes([baseNote({
+      content: '<p>before</p><div data-sketch-id="7"></div><p>after</p>',
+      sketches: [{ id: 7, width: 800, height: 500, updatedAt: '2026-06-25T10:00:00Z' }],
+    })]);
+
+    await runOnce();
+
+    const file = await fs.readFile(path.join(dir, 'hello-world-4f3c8a2b.md'), 'utf8');
+    expect(file).toContain('![sketch](_resources/sketch-7.svg)');
+    const svg = await fs.readFile(path.join(dir, '_resources', 'sketch-7.svg'), 'utf8');
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('viewBox="0 0 800 500"');
+    expect(svg).toContain('prefers-color-scheme');
+    expect(svg).toContain('<path');
+  });
+
+  // A note that is only a drawing (no title/text) must still be mirrored — the
+  // empty-note skip has to treat a sketch as content.
+  test('a note with only a sketch is kept (not treated as empty)', async () => {
+    repo.__setSketch(9, { strokes: [{ tool: 'pen', colorId: 'black', sizeId: 'm', points: [[5, 5, 0.5], [30, 30, 0.5]] }], width: 800, height: 500 });
+    repo.__setNotes([baseNote({
+      title: '', content: '<div data-sketch-id="9"></div>', plainContent: '', tags: [],
+      sketches: [{ id: 9, width: 800, height: 500, updatedAt: '2026-06-25T10:00:00Z' }],
+    })]);
+    const summary = await runOnce();
+    expect(summary.created).toBe(1);
+    expect(await fs.readdir(path.join(dir, '_resources'))).toContain('sketch-9.svg');
+  });
+
+  // The SVG is rewritten only when the sketch actually changes (version stamp), so
+  // an unchanged sketch never churns the file an open editor is watching.
+  test('a sketch SVG is re-rendered only when the sketch changes', async () => {
+    const SK = { id: 8, width: 800, height: 500 };
+    const stroke = { tool: 'pen', colorId: 'blue', sizeId: 'm', points: [[5, 5, 0.5], [30, 30, 0.5]] };
+    repo.__setSketch(8, { strokes: [stroke], width: 800, height: 500 });
+    repo.__setNotes([baseNote({ content: '<div data-sketch-id="8"></div>', sketches: [{ ...SK, updatedAt: '2026-06-25T10:00:00Z' }] })]);
+    await runOnce();
+
+    const p = path.join(dir, '_resources', 'sketch-8.svg');
+    const mtime1 = (await fs.stat(p)).mtimeMs;
+
+    // Second sweep, nothing changed → file untouched.
+    await runOnce();
+    expect((await fs.stat(p)).mtimeMs).toBe(mtime1);
+
+    // Sketch edited (new updated_at + strokes) → rewritten with the new version.
+    repo.__setSketch(8, { strokes: [stroke, { ...stroke, colorId: 'red' }], width: 800, height: 500 });
+    repo.__setNotes([baseNote({ content: '<div data-sketch-id="8"></div>', sketches: [{ ...SK, updatedAt: '2026-06-25T12:00:00Z' }] })]);
+    await runOnce();
+    const svg = await fs.readFile(p, 'utf8');
+    expect(svg).toContain(`data-v="${new Date('2026-06-25T12:00:00Z').getTime()}"`);
   });
 
   test('externally deleted file is recreated on the next sweep', async () => {

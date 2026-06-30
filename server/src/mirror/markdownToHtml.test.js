@@ -166,6 +166,20 @@ describe('markdownToHtml unit behaviours', () => {
     expect(html).toContain('filename="report.pdf"');
   });
 
+  test('a sketch image reference becomes an inline-sketch div', () => {
+    const html = markdownToHtml('![sketch](_resources/sketch-7.svg)');
+    expect(html).toContain('data-sketch-id="7"');
+    // It's the block sketch node, not a leftover <img>.
+    expect(html).not.toContain('<img');
+  });
+
+  test('html -> md -> html keeps a sketch as a sketch div', () => {
+    const md = htmlToMarkdown('<p>x</p><div data-sketch-id="7"></div>');
+    expect(md).toContain('![sketch](_resources/sketch-7.svg)');
+    const html = markdownToHtml(md);
+    expect(html).toContain('data-sketch-id="7"');
+  });
+
   test('remote and data images keep their src verbatim', () => {
     const remote = markdownToHtml('![x](https://example.com/a.png)');
     expect(remote).toContain('src="https://example.com/a.png"');

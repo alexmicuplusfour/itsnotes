@@ -13,7 +13,7 @@ const Tag = require('../models/Tag');
 // not N+1). Returns an array shaped for noteFile.renderNoteFile, each augmented
 // with `images`/`attachments` metadata the worker needs to emit resources.
 async function loadNotes() {
-  const [notes, tags, reminders, images, attachments] = await Promise.all([
+  const [notes, tags, reminders, images, attachments, sketches] = await Promise.all([
     db.query(
       `SELECT id, title, content, plain_content, color,
               is_pinned, is_archived, is_deleted, created_at, updated_at
@@ -26,6 +26,9 @@ async function loadNotes() {
     db.query(`SELECT note_id, next_run_at, timezone, rrule FROM reminders`),
     db.query(`SELECT id, note_id, type FROM note_images ORDER BY id ASC`),
     db.query(`SELECT id, note_id, original_name, file_path FROM note_attachments ORDER BY id ASC`),
+    // Strokes are intentionally not loaded here (they can be large) — only the
+    // metadata the resource writer needs to decide whether to re-render the SVG.
+    db.query(`SELECT id, note_id, width, height, updated_at FROM note_sketches ORDER BY id ASC`),
   ]);
 
   const byId = new Map();
@@ -46,6 +49,7 @@ async function loadNotes() {
       reminders: [],
       images: [],
       attachments: [],
+      sketches: [],
     });
   }
 
@@ -66,6 +70,10 @@ async function loadNotes() {
     const note = byId.get(att.note_id);
     if (note) note.attachments.push({ id: att.id, originalName: att.original_name, filePath: att.file_path });
   }
+  for (const sk of sketches.rows) {
+    const note = byId.get(sk.note_id);
+    if (note) note.sketches.push({ id: sk.id, width: sk.width, height: sk.height, updatedAt: sk.updated_at });
+  }
 
   return [...byId.values()];
 }
@@ -82,7 +90,7 @@ async function loadNote(noteId) {
   const n = notes.rows[0];
   if (!n) return null;
 
-  const [tags, reminders, images, attachments] = await Promise.all([
+  const [tags, reminders, images, attachments, sketches] = await Promise.all([
     db.query(
       `SELECT t.name, t.is_folder
          FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
@@ -95,6 +103,7 @@ async function loadNote(noteId) {
       `SELECT id, original_name, file_path FROM note_attachments WHERE note_id = $1 ORDER BY id ASC`,
       [noteId]
     ),
+    db.query(`SELECT id, width, height, updated_at FROM note_sketches WHERE note_id = $1 ORDER BY id ASC`, [noteId]),
   ]);
 
   const note = {
@@ -113,12 +122,26 @@ async function loadNote(noteId) {
     reminders: [],
     images: [],
     attachments: [],
+    sketches: [],
   };
   for (const t of tags.rows) (t.is_folder ? note.folders : note.tags).push(t.name);
   for (const r of reminders.rows) note.reminders.push({ at: r.next_run_at, timezone: r.timezone, rrule: r.rrule });
   for (const img of images.rows) note.images.push({ id: img.id, type: img.type });
   for (const att of attachments.rows) note.attachments.push({ id: att.id, originalName: att.original_name, filePath: att.file_path });
+  for (const sk of sketches.rows) note.sketches.push({ id: sk.id, width: sk.width, height: sk.height, updatedAt: sk.updated_at });
   return note;
+}
+
+// Lazy-load a sketch's vector strokes (+ its canvas dimensions) for rendering. Kept
+// out of loadNotes/loadNote so a sweep only pays for strokes when an SVG is actually
+// (re)written. Returns null if the sketch is gone.
+async function loadSketchStrokes(sketchId) {
+  const { rows } = await db.query(
+    `SELECT strokes, width, height FROM note_sketches WHERE id = $1`,
+    [sketchId]
+  );
+  if (!rows[0]) return null;
+  return { strokes: rows[0].strokes || [], width: rows[0].width, height: rows[0].height };
 }
 
 // Tag label -> id, for restoring the data-tag-id on inline #tag mentions when
@@ -237,6 +260,7 @@ async function consumePendingDeletes() {
 module.exports = {
   loadNotes,
   loadNote,
+  loadSketchStrokes,
   loadTagIdsByName,
   loadObjectTitles,
   loadImageData,
