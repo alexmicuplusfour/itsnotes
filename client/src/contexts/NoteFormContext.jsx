@@ -12,7 +12,6 @@ export const NoteFormProvider = ({
   onSketchSaved,
   registerSketchSave,
   hideActionsBar,
-  showActionsBar,
 }) => {
   const value = {
     noteId,
@@ -21,7 +20,6 @@ export const NoteFormProvider = ({
     onSketchSaved,       // (sketchId, thumbnail) => void
     registerSketchSave,  // (saveFn) => unregisterFn — called by edit-mode sketches
     hideActionsBar,      // () => void — same mechanism as scrolling hides the action bar
-    showActionsBar,      // () => void
   };
 
   return (

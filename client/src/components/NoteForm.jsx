@@ -257,13 +257,10 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   // Hoisted above handleAddReminder so that callback can list addSuggestedTags in its deps.
   const dynamicActionBarsRef = useRef(null); // Ref for the action-bar wrapper component
 
-  // Reuse the same hide/show mechanism scroll uses on mobile — exposed via
-  // context so children (e.g. a sketch entering edit mode) can trigger it too.
+  // Reuse the same hide mechanism scroll uses on mobile — exposed via context
+  // so children (e.g. a sketch entering edit mode) can trigger it too.
   const hideActionsBar = useCallback(() => {
     dynamicActionBarsRef.current?.hideActionBar?.();
-  }, []);
-  const showActionsBar = useCallback(() => {
-    dynamicActionBarsRef.current?.showActionBar?.();
   }, []);
 
   // Live ref to noteTags so callbacks that only need to *read* the current
@@ -2631,7 +2628,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
                       onSketchSaved={handleSketchSaved}
                       registerSketchSave={registerSketchSave}
                       hideActionsBar={hideActionsBar}
-                      showActionsBar={showActionsBar}
                     >
                       <TiptapNoteContent
                         ref={contentInputRef}

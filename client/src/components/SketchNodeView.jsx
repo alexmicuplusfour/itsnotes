@@ -233,12 +233,11 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     if (mode === 'edit') setupEditCanvas();
   }, [mode, setupEditCanvas]);
 
-  // Reuse the same hide/show mechanism the action bar uses on scroll, so it
-  // gets out of the way while drawing on mobile.
+  // Reuse the same hide mechanism the action bar uses on scroll, so it gets
+  // out of the way while drawing on mobile. Stays hidden after exiting too —
+  // the user can still surface it the normal way (scroll-up / show handle).
   useEffect(() => {
-    if (mode !== 'edit') return;
-    ctx?.hideActionsBar?.();
-    return () => ctx?.showActionsBar?.();
+    if (mode === 'edit') ctx?.hideActionsBar?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
