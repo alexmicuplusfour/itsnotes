@@ -181,7 +181,7 @@ const AuthPage = () => {
         <div className="auth-footer">
           <p>
             {requiresSetup 
-              ? 'This will create the initial admin account for your Keep Clone instance.'
+              ? 'This will create the initial admin account for your itsnotes instance.'
               : ''
             }
           </p>
