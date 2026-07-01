@@ -873,7 +873,7 @@ router.post('/extract-goodreads', async (req, res) => {
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                         'Accept-Language': 'en-US,en;q=0.5'
                     },
-                    timeout: 5000 // Short timeout to not delay response too much
+                    timeout: 5000
                 });
 
                 const dom = new JSDOM(response.data);
@@ -1200,7 +1200,7 @@ async function extractImdbViaPlaywright(url) {
         browser = await chromium.launch({
             headless: true,
             executablePath: chromiumPath,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         });
         const page = await browser.newPage({
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'

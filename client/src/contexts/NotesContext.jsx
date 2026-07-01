@@ -51,6 +51,13 @@ const notesArrayEqual = (a, b) => {
     ) {
       return false;
     }
+    const xl = x.links, yl = y.links;
+    const xll = xl ? xl.length : 0;
+    const yll = yl ? yl.length : 0;
+    if (xll !== yll) return false;
+    for (let j = 0; j < xll; j++) {
+      if (xl[j].fetched_at !== yl[j].fetched_at) return false;
+    }
   }
   return true;
 };

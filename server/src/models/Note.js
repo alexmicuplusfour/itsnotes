@@ -1339,6 +1339,23 @@ class Note {
     });
   }
 
+  static async addLinks(notes) {
+    if (!notes || notes.length === 0) return;
+
+    const noteIds = notes.map(n => n.id);
+    const links = await db('note_links')
+      .whereIn('note_id', noteIds)
+      .orderBy('created_at', 'asc');
+
+    const byNote = {};
+    links.forEach(l => {
+      if (!byNote[l.note_id]) byNote[l.note_id] = [];
+      byNote[l.note_id].push(l);
+    });
+
+    notes.forEach(n => { n.links = byNote[n.id] || []; });
+  }
+
   static async addObjects(notes) {
     if (!notes || notes.length === 0) return;
 
@@ -1398,6 +1415,7 @@ class Note {
     if (includeDetails) {
       await this.addTagsAndImages([note], !fullImages);
       await this.addObjects([note]);
+      await this.addLinks([note]);
     }
 
     return note;
@@ -1418,6 +1436,7 @@ class Note {
     if (includeDetails && notes.length > 0) {
       await this.addTagsAndImages(notes);
       await this.addObjects(notes);
+      await this.addLinks(notes);
     }
 
     return notes;

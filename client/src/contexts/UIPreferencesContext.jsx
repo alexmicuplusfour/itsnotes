@@ -46,6 +46,17 @@ export const UIPreferencesProvider = ({ children }) => {
     const savedNoteTabs = localStorage.getItem('showNoteTabs');
     return savedNoteTabs !== 'false'; // Default true
   });
+
+  // Link preview cards on notes: whether to show them at all, and whether to show
+  // the preview image inside them (the image is always fetched server-side; this
+  // only controls display).
+  const [showLinkPreviews, setShowLinkPreviews] = useState(() => {
+    return localStorage.getItem('showLinkPreviews') !== 'false'; // Default true
+  });
+
+  const [showLinkPreviewImages, setShowLinkPreviewImages] = useState(() => {
+    return localStorage.getItem('showLinkPreviewImages') !== 'false'; // Default true
+  });
   
   const [fullscreenNoteForm, setFullscreenNoteForm] = useState(() => {
     const saved = localStorage.getItem('fullscreenNoteForm');
@@ -205,6 +216,22 @@ export const UIPreferencesProvider = ({ children }) => {
     });
   }, [showNoteTabs]);
 
+  const toggleLinkPreviews = useCallback(() => {
+    setShowLinkPreviews(prevShow => {
+      const newShow = !prevShow;
+      localStorage.setItem('showLinkPreviews', String(newShow));
+      return newShow;
+    });
+  }, []);
+
+  const toggleLinkPreviewImages = useCallback(() => {
+    setShowLinkPreviewImages(prevShow => {
+      const newShow = !prevShow;
+      localStorage.setItem('showLinkPreviewImages', String(newShow));
+      return newShow;
+    });
+  }, []);
+
   const toggleFullscreenNoteForm = useCallback(() => {
     setFullscreenNoteForm(prev => {
       const newValue = !prev;
@@ -306,6 +333,8 @@ export const UIPreferencesProvider = ({ children }) => {
     showQuickAccess,
     showMonthMarkers,
     showNoteTabs,
+    showLinkPreviews,
+    showLinkPreviewImages,
     fullscreenNoteForm,
     colorLabels,
     pageBackgroundEnabled,
@@ -325,6 +354,8 @@ export const UIPreferencesProvider = ({ children }) => {
     toggleQuickAccess,
     toggleMonthMarkers,
     toggleNoteTabs,
+    toggleLinkPreviews,
+    toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
     setColorLabel,
     setAllColorLabels,
@@ -342,6 +373,8 @@ export const UIPreferencesProvider = ({ children }) => {
     showQuickAccess,
     showMonthMarkers,
     showNoteTabs,
+    showLinkPreviews,
+    showLinkPreviewImages,
     fullscreenNoteForm,
     colorLabels,
     pageBackgroundEnabled,
@@ -362,6 +395,8 @@ export const UIPreferencesProvider = ({ children }) => {
     toggleQuickAccess,
     toggleMonthMarkers,
     toggleNoteTabs,
+    toggleLinkPreviews,
+    toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
     setColorLabel,
     setAllColorLabels,

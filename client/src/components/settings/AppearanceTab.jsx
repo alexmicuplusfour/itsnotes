@@ -85,11 +85,15 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
     showQuickAccess,
     showMonthMarkers,
     showNoteTabs,
+    showLinkPreviews,
+    showLinkPreviewImages,
     fullscreenNoteForm,
     layoutView,
     toggleQuickAccess,
     toggleMonthMarkers,
     toggleNoteTabs,
+    toggleLinkPreviews,
+    toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
     changeLayoutView,
     colorLabels,
@@ -314,6 +318,31 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
         </OptionRow>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
           Applies to note body in the editor and note cards.
+        </p>
+      </SectionContainer>
+
+      <SectionContainer>
+        <SectionTitle>Link Previews</SectionTitle>
+        <OptionRow>
+          <Label style={{ marginBottom: 0 }}>Show Link Previews</Label>
+          <Switch
+            id="link-previews-toggle"
+            checked={showLinkPreviews}
+            onChange={toggleLinkPreviews}
+          />
+        </OptionRow>
+        {showLinkPreviews && (
+          <OptionRow>
+            <Label style={{ marginBottom: 0 }}>Show Preview Images</Label>
+            <Switch
+              id="link-preview-images-toggle"
+              checked={showLinkPreviewImages}
+              onChange={toggleLinkPreviewImages}
+            />
+          </OptionRow>
+        )}
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
+          Preview cards for links that sit alone on their own line.
         </p>
       </SectionContainer>
 

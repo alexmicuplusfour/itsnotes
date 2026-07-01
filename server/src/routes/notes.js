@@ -3,6 +3,7 @@ const Note = require('../models/Note');
 const Tag = require('../models/Tag');
 const db = require('../db');
 const { blockInDemo, limitNoteSizeInDemo } = require('../middleware/demoGuard');
+const { extractLinkUrls } = require('../utils/extractLinkUrls');
 const router = express.Router();
 
 // Pull unique object-card ids out of note HTML without spinning up a full DOM.
@@ -20,6 +21,43 @@ function extractObjectCardIds(html) {
     }
   }
   return ids;
+}
+
+// Sync a note's URL link-preview rows to match its current content, then fetch
+// OG previews for any newly added links in the background. Passing content with no
+// URLs clears out link rows whose URLs were removed. Best-effort: never lets a link
+// failure break the note save.
+async function syncLinkPreviews(noteId, content, io) {
+  try {
+    const NoteLink = require('../models/NoteLink');
+    const urls = extractLinkUrls(content);
+    const newLinks = await NoteLink.syncNoteLinks(noteId, urls);
+    if (newLinks.length > 0) {
+      setImmediate(() => fetchAndEmitLinkPreviews(newLinks, noteId, io));
+    }
+  } catch (e) {
+    console.error(`[Link Preview] Error syncing links for note ${noteId}:`, e.message);
+  }
+}
+
+// Fetch OG metadata for newly inserted note_links rows and broadcast the updated note.
+async function fetchAndEmitLinkPreviews(newLinks, noteId, io) {
+  try {
+    const { fetchLinkPreview } = require('../utils/fetchLinkPreview');
+    const NoteLink = require('../models/NoteLink');
+
+    await Promise.all(newLinks.map(async (link) => {
+      const preview = await fetchLinkPreview(link.url, link.id);
+      await NoteLink.updatePreview(link.id, preview);
+    }));
+
+    const updatedNote = await Note.findById(noteId, true);
+    if (updatedNote) {
+      io.emit('note_updated', updatedNote);
+    }
+  } catch (e) {
+    console.error('[Link Preview] Background fetch failed:', e.message);
+  }
 }
 
 // Get all notes (with pagination)
@@ -49,9 +87,10 @@ router.get('/', async (req, res) => {
       sortCriteria: sortCriteria
     });
 
-    // Always add objects to notes
+    // Always add objects and link previews to notes
     if (notes.length > 0) {
       await Note.addObjects(notes);
+      await Note.addLinks(notes);
     }
 
     const totalCount = await Note.getCount({
@@ -117,9 +156,10 @@ router.get('/search', async (req, res) => {
           await Note.addTagsAndImages(results);
         }
 
-        // Always add objects to notes
+        // Always add objects and link previews to notes
         if (results.length > 0) {
           await Note.addObjects(results);
+          await Note.addLinks(results);
         }
 
         return results;
@@ -247,9 +287,15 @@ router.post('/', limitNoteSizeInDemo, async (req, res) => {
       }
     }
 
+    // Sync link previews for any URLs in the note content
+    const io = req.app.get('io');
+    if (content) {
+      await syncLinkPreviews(note.id, content, io);
+    }
+
     // For debugging the socket.io connection
     console.log('[SERVER] Broadcasting new note created:', note);
-    req.app.get('io').emit('note_created', note);
+    io.emit('note_created', note);
 
     res.status(201).json({ note });
   } catch (error) {
@@ -423,6 +469,9 @@ router.put('/:id', limitNoteSizeInDemo, async (req, res) => {
         console.error(`[Object Links] Error syncing object links for note ${noteId}:`, error);
         // Don't fail the whole update if object syncing fails
       }
+
+      // Sync URL link previews
+      await syncLinkPreviews(noteId, incomingContent, req.app.get('io'));
     }
 
     // *** 9. CRITICAL FIX: ALWAYS Fetch the final state WITH DETAILS ***

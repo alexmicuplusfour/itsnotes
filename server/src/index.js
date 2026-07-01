@@ -12,6 +12,7 @@ const db = require('./db');
 const { initDb } = db;
 const { runMigrations } = require('./migrate');
 const { migrate: dereferenceInlineImages } = require('./scripts/migrate-inline-image-refs');
+const { backfillLinkPreviews } = require('./scripts/backfill-link-previews');
 const jwt = require('jsonwebtoken');
 const notesRoutes = require('./routes/notes');
 const tagsRoutes = require('./routes/tags');
@@ -335,6 +336,12 @@ async function startServer(retryCount = 0, maxRetries = 10) {
       // Update log message to reflect HTTPS
       console.log(`Server listening on port ${port} (${useHttps ? 'HTTPS' : 'HTTP'})`);
     });
+    // One-time backfill of link previews for pre-feature notes. Fire-and-forget:
+    // it does network fetches, so we never block startup on it, and it's a no-op
+    // once every note has been processed.
+    backfillLinkPreviews(io).catch(err =>
+      console.error('[backfill-link-previews] Skipped (non-fatal):', err.message)
+    );
   } catch (error) {
     console.error('Failed to start server:', error);
 

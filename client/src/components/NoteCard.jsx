@@ -2,7 +2,7 @@ import React, { useState, useEffect, memo, useCallback, useRef, useMemo, useSync
 import styled, { keyframes, css } from 'styled-components';
 import { useNoteActions } from '../contexts/NoteActionsContext'; // Use stable actions context
 import { selectionModeRef } from '../contexts/NoteSelectionContext';
-import { tagsApi, getServerUrl } from '../services/api';
+import { tagsApi } from '../services/api';
 import NoteTagPicker, { TagPicker } from './NoteTagPicker';
 import { ColorPicker as SharedColorPicker } from './ColorPicker'; // Import the new ColorPicker
 import Icon from './Icons';
@@ -11,6 +11,7 @@ import ImageGallery from './ImageGallery';
 import ProgressFlyout from './ProgressFlyout';
 import CompactBookCard from './CompactBookCard';
 import CompactImdbCard from './CompactImdbCard';
+import LinkPreviewCard from './LinkPreviewCard';
 import { loadNoteImages } from '../services/imageManager';
 import { useInlineImageResolution } from '../hooks/useInlineImageResolution';
 
@@ -93,7 +94,7 @@ const Card = styled.div`
   padding: 16px;
   padding-bottom: 8px;
   height: fit-content; /* Key for masonry layout: use fit-content instead of min-height */
-  max-height: ${props => props.$hasImages ? '620px' : '460px'};
+  max-height: ${props => props.$hasImages ? '620px' : props.$hasLinks ? '600px' : '460px'};
   display: flex;
   flex-direction: column;
   transition: box-shadow 0.2s ease, transform 0.2s ease, opacity 0.3s ease;
@@ -121,7 +122,7 @@ const Card = styled.div`
   @media (max-width: 600px) {
       padding: 12px;
       font-size: 0.9em;
-      max-height: ${props => props.$hasImages ? '440px' : props.$hasTags ? '380px' :  '250px'};
+      max-height: ${props => props.$hasImages ? '440px' : props.$hasLinks ? '440px' : props.$hasTags ? '380px' :  '250px'};
       /* Use CSS variable for mobile background */
       background-color: var(--card-bg-color, var(--mobile-background-color));
       border: ${props => props.$isDirectIdMatch
@@ -526,6 +527,30 @@ const TagText = styled.span`
   min-width: 0;
 `;
 
+// Holds the stack of link preview cards. A flex column with a bounded height: when
+// several (image-heavy) previews would overflow, the cards themselves shrink to fit
+// (their images compress) rather than the card spilling or the note text getting
+// starved. flex-shrink:999 + min-height:0 makes THIS section yield first under
+// pressure. Collapses to no margin when it renders empty (previews toggled off).
+const LinkPreviewList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex-shrink: 999;
+  max-height: 300px;
+  margin: 8px 0 10px;
+
+  &:empty {
+    margin: 0;
+  }
+
+  /* When the note already has images/sketches, only the first preview is shown */
+  ${props => props.$compact && `
+    > *:nth-child(n+2) { display: none; }
+  `}
+`;
+
 const UrlLink = styled(Tag)`
 
 `;
@@ -670,7 +695,6 @@ const extractNoteReferences = (text, urlsToExclude = []) => {
 };
  
 const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPickerOpen, isSelected, onToggleSelect }) {
-  console.log('[NoteCard] Rendering note:', note.id);
   const [justEdited, setJustEdited] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -1040,6 +1064,17 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
     return noteTags.some(tag => tag.visible === false);
   }, [noteTags]);
 
+  // Renderable link previews (have a fetched title/image), capped at 3.
+  const previewLinks = useMemo(
+    () => (note.links || []).filter(l => l.title || l.image_url).slice(0, 3),
+    [note.links]
+  );
+  const hasLinkPreviews = previewLinks.length > 0;
+  // Images get cramped once there are three cards, so only show them for 1-2.
+  const showLinkImages = previewLinks.length <= 2;
+  // With more than one card, clamp each title/description to a single line.
+  const oneLinePreviewText = previewLinks.length > 1;
+
   // Compute inline style for color CSS variables - avoids styled-components class regeneration
   const cardColorStyle = useMemo(() => {
     const color = note.color || 'default';
@@ -1060,6 +1095,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         style={cardColorStyle}
         $isPinned={note.is_pinned}
         $hasImages={images.length > 0}
+        $hasLinks={hasLinkPreviews}
         $hasTags={visibleTags.length > 0} // Use visibleTags for layout check
         $justEdited={justEdited}
         $isSelected={isSelected}
@@ -1113,6 +1149,15 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
           </div>
         )}
         
+        {/* Link preview cards (max 3; images hidden once there are 3) */}
+        {hasLinkPreviews && (
+          <LinkPreviewList $compact={images.length > 0 || sketches.length > 0}>
+            {previewLinks.map(link => (
+              <LinkPreviewCard key={link.id} link={link} isDark={isDarkTheme} showImage={showLinkImages} oneLine={oneLinePreviewText} />
+            ))}
+          </LinkPreviewList>
+        )}
+
         {/* Display tags, URLs, book references, note references, and objects if any */}
         {(noteTags.length > 0 || noteUrls.length > 0 || bookReferences.length > 0 || noteReferences.length > 0 || noteObjects.length > 0) && (
           <TagsContainer style={{
@@ -1441,6 +1486,18 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
       const nextMetadata = JSON.stringify(nextObjects[i]?.metadata);
       if (prevMetadata !== nextMetadata) return false;
     }
+  }
+
+  // Check for link preview updates. Preview fetches (title/image/favicon) update
+  // the note_links table WITHOUT bumping note.updated_at, so this must be compared
+  // explicitly — otherwise a card whose preview just arrived over the socket won't
+  // re-render until a full refresh.
+  const prevLinks = prevProps.note.links || [];
+  const nextLinks = nextProps.note.links || [];
+  if (prevLinks.length !== nextLinks.length) return false;
+  for (let i = 0; i < prevLinks.length; i++) {
+    if (prevLinks[i].id !== nextLinks[i].id) return false;
+    if (prevLinks[i].fetched_at !== nextLinks[i].fetched_at) return false;
   }
 
   // For large content, only check length to avoid expensive comparison
