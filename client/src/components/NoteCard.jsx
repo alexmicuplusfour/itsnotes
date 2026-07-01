@@ -536,7 +536,6 @@ const LinkPreviewList = styled.div`
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 0;
   flex-shrink: 999;
   max-height: 300px;
   margin: 8px 0 10px;
