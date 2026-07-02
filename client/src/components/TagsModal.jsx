@@ -497,7 +497,13 @@ const TagsModal = ({ onClose }) => {
         const nameB = getSortableName(b.name);
         return nameA.localeCompare(nameB);
       })
-      .map(tag => tag.name.includes('/') ? { ...tag, _isSubtag: true } : tag);
+      .map((tag, _i, arr) => {
+        if (tag.name.includes('/')) {
+          const parentName = tag.name.slice(0, tag.name.indexOf('/'));
+          return arr.some(t => t.name === parentName) ? { ...tag, _isSubtag: true } : tag;
+        }
+        return tag;
+      });
 
     // 2. If a tag was just created in this modal session, move it to the top
     if (newlyCreatedTagId) {

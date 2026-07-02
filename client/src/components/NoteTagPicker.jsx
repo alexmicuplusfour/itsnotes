@@ -1357,9 +1357,15 @@ export const TagPicker = ({
                     <TagPickerList ref={tagListRef} className={isDarkTheme ? 'dark-theme' : 'light-theme'}>
                       {(() => {
                         const baseFolders = filteredTagsList.filter(tag => tag.is_folder);
-                        const baseNonFolders = filteredTagsList
-                          .filter(tag => !tag.is_folder)
-                          .map(tag => tag.name.includes('/') ? { ...tag, _isSubtag: true } : tag);
+                        const nonFolders = filteredTagsList.filter(tag => !tag.is_folder);
+                        const nonFolderNames = new Set(nonFolders.map(t => t.name));
+                        const baseNonFolders = nonFolders.map(tag => {
+                          if (tag.name.includes('/')) {
+                            const parentName = tag.name.slice(0, tag.name.indexOf('/'));
+                            return nonFolderNames.has(parentName) ? { ...tag, _isSubtag: true } : tag;
+                          }
+                          return tag;
+                        });
 
                         // For folders view: order top-level folders with their subfolders nested below
                         const orderedList = viewMode === 'folders'
