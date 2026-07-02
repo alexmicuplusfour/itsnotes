@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const ogs = require('open-graph-scraper');
 const { safeFetchImage } = require('./safeFetchImage');
+const proxyHub = require('../services/proxyHub');
 
 async function downloadPreviewImage(imageUrl, linkId, suffix) {
   if (!imageUrl) return null;
@@ -19,10 +20,12 @@ async function downloadPreviewImage(imageUrl, linkId, suffix) {
     const filepath = path.join(dir, filename);
 
     const requireImageContentType = suffix !== '_fav';
+    const proxyFetch = proxyHub.isConnected() ? proxyHub.fetch.bind(proxyHub) : null;
     const { buffer } = await safeFetchImage(imageUrl, {
       maxBytes: 3 * 1024 * 1024,
       timeoutMs: 8000,
       requireImageContentType,
+      proxyFetch,
     });
 
     await fs.writeFile(filepath, buffer);
@@ -35,7 +38,16 @@ async function downloadPreviewImage(imageUrl, linkId, suffix) {
 
 async function fetchLinkPreview(url, linkId) {
   try {
-    const { result } = await ogs({ url, timeout: 8000 });
+    let result;
+    if (proxyHub.isConnected()) {
+      const fetched = await proxyHub.fetch(url, { timeoutMs: 8000 });
+      const html = fetched.body.toString('utf8');
+      const ogsResult = await ogs({ html });
+      result = ogsResult.result;
+    } else {
+      const ogsResult = await ogs({ url, timeout: 8000 });
+      result = ogsResult.result;
+    }
 
     const title = result.ogTitle || result.twitterTitle || null;
     const description = result.ogDescription || result.twitterDescription || null;

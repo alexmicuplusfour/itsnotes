@@ -1,13 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import Switch from '../Switch';
 import Icon from '../Icons';
+import { notesApi } from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
 import {
   SectionContainer,
   SectionTitle,
   FormGroup,
   Label,
   Input,
+  Button,
 } from './styles';
 
 const Description = styled.p`
@@ -18,6 +21,15 @@ const Description = styled.p`
 
 const Card = styled.div`
   border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+`;
+
+const PlainCard = styled.div`
+  background-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)'};
   border-radius: 8px;
   padding: 16px;
   display: flex;
@@ -61,11 +73,23 @@ const DaysSuffix = styled.span`
   color: var(--text-color);
 `;
 
-const MaintenanceTab = ({ settings, onChange, commit }) => {
-  // Trash auto-delete is opt-out: anything other than the string 'false' is on.
+const MaintenanceTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const trashEnabled = settings.TRASH_CLEANUP_ENABLED !== 'false';
-  // Auto-archive is opt-in: off unless explicitly 'true'.
   const archiveEnabled = settings.AUTO_ARCHIVE_ENABLED === 'true';
+  const { showToast } = useToast();
+  const [refetching, setRefetching] = useState(false);
+
+  const handleRefetchLinkPreviews = async () => {
+    setRefetching(true);
+    try {
+      await notesApi.refetchLinkPreviews();
+      showToast('Refetch started — previews will update as they come in', { variant: 'success' });
+    } catch (e) {
+      showToast('Failed to start refetch', { variant: 'error' });
+    } finally {
+      setRefetching(false);
+    }
+  };
 
   return (
     <SectionContainer>
@@ -152,6 +176,24 @@ const MaintenanceTab = ({ settings, onChange, commit }) => {
           </FormGroup>
         )}
       </Card>
+      <PlainCard $isDark={isDarkTheme}>
+        <CardHeader>
+          <div>
+            <CardTitle><Icon name="link" size={18} />Refetch link previews</CardTitle>
+          </div>
+          <Button
+            $color="danger"
+            $size="small"
+            onClick={handleRefetchLinkPreviews}
+            disabled={refetching}
+          >
+            {refetching ? 'Starting…' : 'Refetch all'}
+          </Button>
+        </CardHeader>
+        <Description>
+          Clears all cached link previews and re-fetches them from scratch. Previews update in the background as they come in.
+        </Description>
+      </PlainCard>
     </SectionContainer>
   );
 };

@@ -33,6 +33,7 @@ async function syncLinkPreviews(noteId, content, io) {
     const urls = extractLinkUrls(content);
     const newLinks = await NoteLink.syncNoteLinks(noteId, urls);
     if (newLinks.length > 0) {
+      io.emit('link_preview_fetching', { noteId, count: newLinks.length });
       setImmediate(() => fetchAndEmitLinkPreviews(newLinks, noteId, io));
     }
   } catch (e) {

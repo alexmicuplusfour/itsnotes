@@ -98,6 +98,37 @@ const NOTIFICATION_TESTERS = {
   ntfy: testNtfy,
 };
 
+// Check whether a proxy agent is currently connected.
+router.get('/proxy-status', (req, res) => {
+  const proxyHub = require('../services/proxyHub');
+  res.json({ connected: proxyHub.isConnected() });
+});
+
+// Reset and re-fetch all link previews in-process (so the live proxyHub is used).
+router.post('/refetch-link-previews', blockInDemo, async (req, res) => {
+  const { backfillLinkPreviews } = require('../scripts/backfill-link-previews');
+  const db = require('../db');
+  const fs = require('fs');
+  const path = require('path');
+
+  try {
+    await db.query('DELETE FROM note_links');
+    const linksDir = path.join(__dirname, '../../uploads/links');
+    if (fs.existsSync(linksDir)) {
+      for (const file of fs.readdirSync(linksDir)) {
+        fs.unlinkSync(path.join(linksDir, file));
+      }
+    }
+    res.json({ ok: true, message: 'Reset done. Refetch running in background.' });
+    const io = req.app.get('io');
+    backfillLinkPreviews(io).catch(err =>
+      console.error('[refetch-link-previews] Failed:', err.message)
+    );
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
 // Send a test notification for a single service.
 router.post('/test-notification', blockInDemo, async (req, res) => {
   const { service, config = {} } = req.body || {};

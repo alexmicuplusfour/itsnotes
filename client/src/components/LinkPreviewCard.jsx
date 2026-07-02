@@ -25,14 +25,16 @@ const Card = styled.a`
 
 const CardImage = styled.div`
   width: 100%;
-  /* Basis of 130px but allowed to shrink to 0 (never grows), so the image is the
-     part that gives when previews need to fit a bounded area. */
   flex: 0 1 130px;
   min-height: 0;
   background-image: url(${props => props.$src});
   background-size: cover;
   background-position: center;
   background-color: ${props => props.theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'};
+
+  @media (max-width: 600px) {
+    flex-basis: 75px;
+  }
 `;
 
 const CardBody = styled.div`

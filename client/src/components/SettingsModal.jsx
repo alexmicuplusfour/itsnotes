@@ -144,6 +144,8 @@ const DEFAULT_SETTINGS = {
   FOXIT_ENABLED: false,
   FOXIT_SNOOPER_URL: '',
   FOXIT_SNOOPER_TOKEN: '',
+  PROXY_ENABLED: 'false',
+  PROXY_TOKEN: '',
   CACHE_MAX_SIZE: '1000',
   PREFETCH_BATCH_SIZE: '10',
   BATCH_DELAY_MS: '300',
@@ -335,7 +337,7 @@ const SettingsModal = ({ onClose }) => {
       case 'advanced':
         return <AdvancedTab settings={settings} onChange={handleChange} onCacheSettingChange={handleCacheSettingChange} />;
       case 'maintenance':
-        return <MaintenanceTab settings={settings} onChange={handleChange} commit={commit} />;
+        return <MaintenanceTab settings={settings} onChange={handleChange} commit={commit} isDarkTheme={isDarkTheme} />;
       case 'integrations':
         return <IntegrationsTab settings={settings} onChange={handleChange} commit={commit} isDarkTheme={isDarkTheme} />;
       case 'help':

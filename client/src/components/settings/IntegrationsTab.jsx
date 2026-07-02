@@ -13,11 +13,50 @@ import CopyableField from './CopyableField';
 
 const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const foxitEnabled = settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true';
+  const proxyEnabled = settings.PROXY_ENABLED === true || settings.PROXY_ENABLED === 'true';
   const { showToast } = useToast();
 
   const [jinaLoading, setJinaLoading] = useState(false);
   const [tmdbTesting, setTmdbTesting] = useState(false);
   const [foxitTokenCopied, setFoxitTokenCopied] = useState(false);
+  const [proxyTokenCopied, setProxyTokenCopied] = useState(false);
+  const [proxyTesting, setProxyTesting] = useState(false);
+
+  const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const generateProxyToken = useCallback(() => {
+    const bytes = new Uint8Array(24);
+    window.crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    commit({ ...settings, PROXY_TOKEN: token });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(token).then(
+        () => { setProxyTokenCopied(true); setTimeout(() => setProxyTokenCopied(false), 2500); },
+        () => {}
+      );
+    }
+  }, [settings, commit]);
+
+  const clearProxyToken = useCallback(() => {
+    setProxyTokenCopied(false);
+    commit({ ...settings, PROXY_TOKEN: '' });
+  }, [settings, commit]);
+
+  const testProxyConnection = useCallback(async () => {
+    setProxyTesting(true);
+    try {
+      const data = await notesApi.testProxyConnection();
+      if (data.connected) {
+        showToast('Proxy agent is connected', { variant: 'success' });
+      } else {
+        showToast('No proxy agent connected', { variant: 'error' });
+      }
+    } catch (e) {
+      showToast('Could not reach server', { variant: 'error' });
+    } finally {
+      setProxyTesting(false);
+    }
+  }, [showToast]);
 
   // Fill the Foxit snooper token with a fresh random secret and copy it, since
   // the same value has to be pasted into the snooper on the other machine.
@@ -44,8 +83,8 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const [extLoading, setExtLoading] = useState(false);
   const [extToken, setExtToken] = useState(null);
   const [extError, setExtError] = useState(null);
-  // The address the extension should point at — this app's own origin.
-  const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  // The address the extension (and proxy agent) should point at — this app's own origin.
+  // serverOrigin is already declared above.
 
   const generateExtensionToken = useCallback(async () => {
     setExtLoading(true);
@@ -100,6 +139,99 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
 
   return (
     <>
+      <SectionContainer>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <SectionTitle style={{ margin: 0 }}>Proxy</SectionTitle>
+          <button
+            onClick={testProxyConnection}
+            disabled={proxyTesting}
+            style={{
+              background: 'none',
+              border: '1px solid var(--border-color)',
+              borderRadius: '6px',
+              padding: '4px 10px',
+              fontSize: '12px',
+              cursor: proxyTesting ? 'not-allowed' : 'pointer',
+              color: 'var(--text-secondary-color)',
+              opacity: proxyTesting ? 0.6 : 1,
+            }}
+          >
+            {proxyTesting ? 'Testing…' : 'Test connection'}
+          </button>
+        </div>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>
+          Route URL fetches (link previews, article extraction) through a proxy instead of the server.
+          Useful when the server's IP is blocked by certain sites &mdash; YouTube thumbnails, geo-restricted content, etc.
+          The proxy connects outbound; no port forwarding needed.
+        </p>
+        <FormGroup style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Label style={{ marginBottom: 0 }}>Enable proxy</Label>
+          <Switch
+            id="proxy-enabled-toggle"
+            checked={proxyEnabled}
+            onChange={() => commit({ ...settings, PROXY_ENABLED: !proxyEnabled })}
+          />
+        </FormGroup>
+        {proxyEnabled && (
+          <>
+            <FormGroup>
+              <CopyableField
+                label="Server URL"
+                value={serverOrigin}
+                isDark={isDarkTheme}
+                copyTitle="Copy server URL"
+              />
+            </FormGroup>
+            <FormGroup>
+              {settings.PROXY_TOKEN ? (
+                <>
+                  <CopyableField
+                    label="Proxy token"
+                    value={settings.PROXY_TOKEN}
+                    isDark={isDarkTheme}
+                    copyTitle="Copy token"
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                    <button
+                      onClick={generateProxyToken}
+                      style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary-color)', cursor: 'pointer' }}
+                    >
+                      Regenerate
+                    </button>
+                    <button
+                      onClick={clearProxyToken}
+                      style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary-color)', cursor: 'pointer' }}
+                    >
+                      Clear
+                    </button>
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary-color)' }}>
+                      {proxyTokenCopied ? 'Copied!' : 'Keep this secret.'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Label>Proxy token</Label>
+                  <button
+                    onClick={generateProxyToken}
+                    style={{
+                      background: 'none',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      padding: '8px 14px',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      color: 'var(--text-secondary-color)',
+                    }}
+                  >
+                    Generate token
+                  </button>
+                </>
+              )}
+            </FormGroup>
+          </>
+        )}
+      </SectionContainer>
       <SectionContainer>
         <SectionTitle>Browser Extension (itsnotes clipper)</SectionTitle>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)' }}>

@@ -12,6 +12,7 @@ const Tag = require('../models/Tag');
 const { extractExternalId } = require('../utils/extractExternalId');
 const { extractImageUrls, processAndUploadImages } = require('../utils/imageProcessing');
 const { buildClippedNoteHtml, applyRehostedImages } = require('../utils/clipHtml');
+const proxyHub = require('../services/proxyHub');
 require('dotenv').config();
 
 // playwright-extra is patched with the puppeteer stealth plugin (it accepts both).
@@ -378,16 +379,26 @@ async function extractArticle({ url, html } = {}) {
         console.warn('PUPPETEER_EXECUTABLE_PATH not set. Skipping Playwright attempt...');
     }
 
-    // --- Tier 2: Axios fallback ---
+    // --- Tier 2: Proxy or Axios fallback ---
     if (extractedContent === null) {
-        console.log(`Attempting Axios fallback extraction for ${url}...`);
+        console.log(`Attempting ${proxyHub.isConnected() ? 'proxy' : 'Axios'} fallback extraction for ${url}...`);
         try {
-            const response = await axios.get(url, {
-                headers: BROWSER_HEADERS,
-                timeout: 15000,
-                maxRedirects: 5,
-            });
-            const article = parseHtmlToArticle(response.data, url);
+            let htmlData;
+            if (proxyHub.isConnected()) {
+                const proxyResult = await proxyHub.fetch(url, { method: 'GET', headers: BROWSER_HEADERS, timeoutMs: 15000 });
+                if (proxyResult.status < 200 || proxyResult.status >= 300) {
+                    throw new Error(`HTTP ${proxyResult.status}`);
+                }
+                htmlData = proxyResult.body.toString('utf8');
+            } else {
+                const response = await axios.get(url, {
+                    headers: BROWSER_HEADERS,
+                    timeout: 15000,
+                    maxRedirects: 5,
+                });
+                htmlData = response.data;
+            }
+            const article = parseHtmlToArticle(htmlData, url);
             const blockerAx = detectBlocker(article.title, article.content);
             if (blockerAx) {
                 console.warn(`Axios result for ${url} looks like a ${blockerAx} — discarding and falling through.`);

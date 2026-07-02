@@ -160,7 +160,24 @@ async function safeFetchImage(urlString, opts = {}) {
     maxRedirects = DEFAULT_MAX_REDIRECTS,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     requireImageContentType = true,
+    proxyFetch = null,
   } = opts;
+
+  if (proxyFetch) {
+    const parsed = new URL(urlString);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error(`Blocked URL scheme: ${parsed.protocol}`);
+    }
+    const result = await proxyFetch(urlString, { timeoutMs });
+    if (result.status !== 200) throw new Error(`HTTP ${result.status}`);
+    if (requireImageContentType) {
+      const ct = ((result.headers['content-type'] || '')).toLowerCase();
+      if (!ct.startsWith('image/')) throw new Error(`Unexpected content-type: ${ct || '(missing)'}`);
+    }
+    if (result.body.length > maxBytes) throw new Error(`Response too large (> ${maxBytes})`);
+    return { buffer: result.body, contentType: result.headers['content-type'] || null };
+  }
+
   let currentUrl = urlString;
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const result = await fetchOnce(currentUrl, { maxBytes, timeoutMs, requireImageContentType });

@@ -2427,11 +2427,15 @@ export const NotesProvider = ({ children }) => {
       'bulk_tags_updated': handleBulkTagsUpdated, // Add the new handler
       'note_operation': (data) => console.log('[SOCKET] Note Operation:', data),
       'mirror_imported': handleMirrorImported,
+      'link_preview_fetching': ({ count = 1 }) => {
+        const msg = count > 1 ? `Fetching ${count} link previews…` : 'Fetching link preview…';
+        showToast(msg, { duration: 'short' });
+      },
     };
   }, [handleSocketNoteCreated, handleSocketNoteUpdated, handleSocketNoteDeleted,
       handleSocketNotesBulkUpdated, handleSocketNotesBulkDeleted,
       handleSocketObjectUpdated, handleSocketNoteTagChange, handleSocketNoteImageChange,
-      handleSocketTagUpdated, handleBulkTagsUpdated, handleMirrorImported]);
+      handleSocketTagUpdated, handleBulkTagsUpdated, handleMirrorImported, showToast]);
       
   // Set up effect to handle pending tag changes after getNoteTags is defined
   useEffect(() => {

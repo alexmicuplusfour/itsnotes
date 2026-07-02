@@ -527,6 +527,20 @@ const TagText = styled.span`
   min-width: 0;
 `;
 
+const TagOverflow = styled.div`
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background-color: ${props => props.theme === 'dark' ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.08)'};
+  color: var(--text-color);
+  opacity: 0.85;
+  cursor: default;
+  user-select: none;
+`;
+
 // Holds the stack of link preview cards. A flex column with a bounded height: when
 // several (image-heavy) previews would overflow, the cards themselves shrink to fit
 // (their images compress) rather than the card spilling or the note text getting
@@ -1305,30 +1319,44 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
               </UrlLink>
             ))}
             
-            {/* Display all tags, sorted with folders first */}
-            {[...noteTags]
-              .sort((a, b) => {
-                // Convert to boolean to handle undefined
+            {/* Display tags: all folders, then regular tags capped at 4 */}
+            {(() => {
+              const sorted = [...noteTags].sort((a, b) => {
                 const aIsFolder = !!a.is_folder;
                 const bIsFolder = !!b.is_folder;
                 if (aIsFolder && !bIsFolder) return -1;
                 if (!aIsFolder && bIsFolder) return 1;
                 return a.name.localeCompare(b.name);
-              })
-              .map(tag => (
-                <Tag
-                  key={tag.id}
-                  theme={isDarkTheme ? 'dark' : 'light'}
-                  $isFolder={tag.is_folder}
-                  title={`${tag.name}${tag.is_folder ? ' (folder)' : ''}`}
-                  onClick={(e) => handleTagClick(e, tag)}
-                  name={tag.name}
-                >
-                  {tag.visible === false && <Icon name="eye-slash" size={10} style={{ marginRight: 4, flexShrink: 0, opacity: 0.6 }} />}
-                  {tag.is_folder && <Icon name="folder" size={11} style={{ marginRight: 4, flexShrink: 0 }} />}
-                  <TagText>{tag.name.length > 12 ? `${tag.name.substring(0, 12)}...` : tag.name}</TagText>
-                </Tag>
-              ))}
+              });
+              const folderTags = sorted.filter(t => t.is_folder);
+              const regularTags = sorted.filter(t => !t.is_folder);
+              const visibleRegular = regularTags.slice(0, 3);
+              const overflow = regularTags.length - visibleRegular.length;
+              const visible = [...folderTags, ...visibleRegular];
+              return (
+                <>
+                  {visible.map(tag => (
+                    <Tag
+                      key={tag.id}
+                      theme={isDarkTheme ? 'dark' : 'light'}
+                      $isFolder={tag.is_folder}
+                      title={`${tag.name}${tag.is_folder ? ' (folder)' : ''}`}
+                      onClick={(e) => handleTagClick(e, tag)}
+                      name={tag.name}
+                    >
+                      {tag.visible === false && <Icon name="eye-slash" size={10} style={{ marginRight: 4, flexShrink: 0, opacity: 0.6 }} />}
+                      {tag.is_folder && <Icon name="folder" size={11} style={{ marginRight: 4, flexShrink: 0 }} />}
+                      <TagText>{tag.name.length > 12 ? `${tag.name.substring(0, 12)}...` : tag.name}</TagText>
+                    </Tag>
+                  ))}
+                  {overflow > 0 && (
+                    <TagOverflow theme={isDarkTheme ? 'dark' : 'light'}>
+                      +{overflow}
+                    </TagOverflow>
+                  )}
+                </>
+              );
+            })()}
           </TagsContainer>
         )}
         

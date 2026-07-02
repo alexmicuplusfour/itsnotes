@@ -289,6 +289,16 @@ export const notesApi = {
     return response.data; // { configured, valid?, error? }
   },
 
+  testProxyConnection: async () => {
+    const response = await api.get('/settings/proxy-status');
+    return response.data; // { connected: bool }
+  },
+
+  refetchLinkPreviews: async () => {
+    const response = await api.post('/settings/refetch-link-previews');
+    return response.data; // { ok, message }
+  },
+
   // Mint a long-lived token for the "itsnotes clipper" browser extension.
   generateExtensionToken: async () => {
     const response = await api.post('/auth/extension-token');

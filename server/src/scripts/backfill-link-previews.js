@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const db = require('../db');
 const NoteLink = require('../models/NoteLink');
 const Note = require('../models/Note');
@@ -25,6 +27,7 @@ const { extractLinkUrls } = require('../utils/extractLinkUrls');
  */
 
 const DRY_RUN = process.argv.includes('--dry-run');
+const RESET = process.argv.includes('--reset');
 // Arbitrary app-wide key identifying this one-time backfill (nod to migration 0013).
 const ADVISORY_LOCK_KEY = 130013;
 
@@ -48,6 +51,18 @@ async function backfillLinkPreviews(io = null) {
 }
 
 async function runBackfill(io) {
+  if (RESET) {
+    console.log('[backfill-link-previews] --reset: clearing all link preview data');
+    await db.query('DELETE FROM note_links');
+    const linksDir = path.join(__dirname, '../../uploads/links');
+    if (fs.existsSync(linksDir)) {
+      for (const file of fs.readdirSync(linksDir)) {
+        fs.unlinkSync(path.join(linksDir, file));
+      }
+    }
+    console.log('[backfill-link-previews] Cleared. Refetching all notes...');
+  }
+
   // Candidate notes: contain an anchor and have no link rows yet. The precise
   // URL match happens in extractLinkUrls; the ILIKE is just a cheap prefilter.
   const { rows } = await db.query(`

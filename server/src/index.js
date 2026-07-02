@@ -36,6 +36,7 @@ const backupScheduler = require('./services/backupScheduler');
 const mirrorWorker = require('./mirror/mirrorWorker');
 const { optionalAuth, authenticateToken, getJwtSecret } = require('./middleware/auth');
 const { handleMcpPost, handleMcpUnsupported } = require('./mcp/httpHandler');
+const proxyHub = require('./services/proxyHub');
 
 // Load environment variables
 require('dotenv').config();
@@ -247,6 +248,24 @@ io.use((socket, next) => {
   } catch (err) {
     next(new Error('Invalid token'));
   }
+});
+
+// Proxy agent namespace — outbound-only tunnel for fetching URLs through
+// the user's local machine (bypasses datacenter IP blocks). Token is read
+// from process.env at connect time so it picks up changes made via settings
+// modal without requiring a server restart.
+const proxyNs = io.of('/proxy');
+proxyNs.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  const proxyToken = process.env.PROXY_TOKEN;
+  const proxyEnabled = process.env.PROXY_ENABLED === 'true';
+  if (!proxyEnabled || !proxyToken || !token || token !== proxyToken) {
+    return next(new Error('Proxy not configured or invalid token'));
+  }
+  next();
+});
+proxyNs.on('connection', (socket) => {
+  proxyHub.attach(socket);
 });
 
 // Socket.io events (keep as is)
