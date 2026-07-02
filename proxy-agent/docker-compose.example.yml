@@ -1,0 +1,8 @@
+services:
+  proxy-agent:
+    build: .
+    restart: unless-stopped
+    environment:
+      SERVER_URL: https://your-itsnotes-server.example.com
+      # Generate a token in itsnotes → Settings → Integrations → Proxy Agent
+      PROXY_TOKEN: your-proxy-token-here
