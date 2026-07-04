@@ -61,7 +61,7 @@ import {
   TextareaWrapper,
   TitleRow,
   TitleInputWrapper,
-  ReminderStatusText,
+
   HighlightContainer,
   FloatingActionsPill,
   ExternalActionsPill,
@@ -312,6 +312,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       // Show saving indicator or loading state?
       // Ideally we start a loading spinner.
       setIsCreatingReminder(true);
+      showToast('Generating reminder...', { loading: true, id: 'creating-reminder' });
 
       try {
         // Note ID is required. If note is new (temp id), we might need to save it first?
@@ -367,6 +368,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
         console.error("Failed to create reminder:", error);
         showToast(error.response?.data?.message || 'Could not generate a reminder.', { variant: 'error' });
       } finally {
+        hideToast('creating-reminder');
         setIsCreatingReminder(false);
       }
     }
@@ -2660,9 +2662,6 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           {/* All tags, URLs, and references are now moved to the footer for both mobile and desktop */}
         </Form>
 
-        {isCreatingReminder && (
-          <ReminderStatusText>Creating reminder...</ReminderStatusText>
-        )}
 
         {/* Replace NoteActionBar and BottomActionContainer with DynamicActionBarsWrapper */}
         <DynamicActionBarsWrapper

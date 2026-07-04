@@ -669,14 +669,6 @@ export const HighlightContainer = styled.div`
   }
 `;
 
-export const ReminderStatusText = styled.div`
-  font-style: italic;
-  color: var(--text-secondary-color);
-  font-size: 14px;
-  margin: 4px 12px;
-  padding-bottom: 8px;
-`;
-
 function convertToRGBA(color) {
   // Create a temporary element to compute the color
   const temp = document.createElement('div');
