@@ -260,8 +260,11 @@ export const TiptapImageExtension = Node.create({
         deleteButton.dispatchEvent(deleteEvent);
       });
 
-      dom.appendChild(img);
-      dom.appendChild(deleteButton);
+      const inner = document.createElement('div');
+      inner.style.cssText = 'position: relative; display: inline-block;';
+      inner.appendChild(img);
+      inner.appendChild(deleteButton);
+      dom.appendChild(inner);
 
       return {
         dom,
