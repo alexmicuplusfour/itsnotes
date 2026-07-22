@@ -249,7 +249,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     const { w, h } = displaySize.current;
     const pan = panOffset.current;
     renderAll(c, w, h, strokes, isDark, pan);
-    if (livePts && livePts.length > 1) {
+    if (livePts && livePts.length > 0) {
       const size    = resolveSize(sizeId, tool);
       const opts    = tool === 'highlighter' ? HL_OPTS(size) : PEN_OPTS(size);
       const outline = getStroke(livePts, opts);
@@ -353,6 +353,9 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
     if (tool === 'eraser') {
       eraserStartPt.current = getCoords(e);
       eraserIsDrag.current  = false;
+    } else {
+      // Show the dot right away so a tap gives feedback before release
+      redrawCanvas(currentPts.current);
     }
     canvasRef.current?.setPointerCapture?.(e.pointerId);
   }, [getCoords, getMidpoint, setupEditCanvas, redrawCanvas]);
@@ -448,7 +451,7 @@ export default function SketchNodeView({ node, updateAttributes, deleteNode, edi
         setRedo([]);
       }
       erasedThisDrag.current = [];
-    } else if (currentPts.current.length > 1) {
+    } else if (currentPts.current.length > 0) {
       const stroke = {
         id:      `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         tool,
