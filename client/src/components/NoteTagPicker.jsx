@@ -416,6 +416,7 @@ const SelectedTagChip = styled.span`
   font-size: 12px;
   white-space: nowrap;
   flex-shrink: 0;
+  max-width: 160px;
   color: ${props => {
     if (props.$isFolder) {
       // Folders: light text in light theme (dark bg), dark text in dark theme (white bg)
@@ -1327,8 +1328,8 @@ export const TagPicker = ({
                               theme={isDarkTheme ? 'dark' : 'light'}
                               $isFolder={tag.is_folder}
                             >
-                              {tag.emoji && <span style={{ marginRight: '4px' }}>{tag.emoji}</span>}
-                              {tag.name}
+                              {tag.emoji && <span style={{ marginRight: '4px', flexShrink: 0 }}>{tag.emoji}</span>}
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag.name}</span>
                             </SelectedTagChip>
                           ) : null;
                         })}
