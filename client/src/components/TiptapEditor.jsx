@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline'; // Add this line
+import Strike from '@tiptap/extension-strike';
 import Highlight from '@tiptap/extension-highlight';
 import Heading from '@tiptap/extension-heading'; // Add this line
 import TaskList from '@tiptap/extension-task-list';
@@ -569,6 +570,10 @@ const TiptapEditor = forwardRef(({
       hardBreak: {}, // Keep hardBreak extension
       heading: false, // Disable heading extension from StarterKit if you want to use custom levels
       gapcursor: true, // Explicitly enable gapcursor (though it's enabled by default)
+      strike: false, // Disabled here, added below with keepOnSplit: false
+    }),
+    Strike.extend({
+      keepOnSplit: false, // Don't carry strikethrough to the new line on Enter
     }),
     Placeholder.configure({
       placeholder,
