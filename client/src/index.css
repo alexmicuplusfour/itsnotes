@@ -344,10 +344,13 @@
   padding: 0;
 }
 
-/* Disable overscroll/elastic effect on all scrollable containers */
-* {
-  -webkit-overflow-scrolling: touch;
-}
+/* NOTE: We deliberately do NOT set `-webkit-overflow-scrolling: touch` globally.
+   Despite the old comment claiming it "disabled overscroll," it actually ENABLES
+   iOS momentum scrolling (overscroll is killed by `overscroll-behavior: none`),
+   and applying it to every element force-promotes each scroll container to its
+   own GPU layer. That caused a brief flash of the list behind a note on open:
+   the note's scroll layer showed stale backing-store pixels while it repainted.
+   Modern iOS Safari does momentum scrolling natively without this property. */
 
 
 

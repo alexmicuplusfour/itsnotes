@@ -176,6 +176,14 @@ export const ScrollableContent = styled.div`
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  /* Own opaque background in the note color. overflow-y:auto promotes this to
+     its own GPU layer; without a background of its own it is transparent, so
+     when the layer re-rasters on note open (a style/paint pass Framer Motion's
+     projection forces right after mount) the compositor briefly shows the list
+     beneath it — the "flash of the list behind the note". An opaque layer
+     checkerboards to its own background colour instead, so the flash vanishes.
+     Uses the same variable as FormContainer, so the colour always matches. */
+  background-color: var(--form-note-color, var(--note-bg-color));
   padding: ${props => props.$fullscreen ? '0' : '0 0 0 20px'};
   /* Add top padding when search bar is visible to prevent content from being hidden behind it */
   padding-top: ${props => props.$showSearch ? '56px' : '0'};
@@ -199,13 +207,23 @@ export const ScrollableContent = styled.div`
   @media (max-width: 768px) {
     padding: 0 0 10px 18px;
     padding-top: ${props => props.$showSearch ? '56px' : '0'};
-    /* Better touch scrolling */
-    -webkit-overflow-scrolling: touch;
+    /* NOTE: intentionally NOT using -webkit-overflow-scrolling: touch here.
+       It promotes this scroll container to its own GPU layer with a separate
+       backing store; right after a note mounts, the compositor can present
+       stale pixels (the note list behind) while that backing store is painted,
+       causing a brief flash of the list in the top (scroll-viewport) region.
+       Modern iOS Safari does momentum scrolling natively without it. */
     overscroll-behavior: none;
     
     /* Reset fullscreen styles on mobile */
     display: block;
     align-items: stretch;
+  }
+
+  @media (max-width: 600px) {
+    /* Match FormContainer's ≤600 fallback so the scroll layer's opaque colour
+       is identical to the container behind it (no seam on default notes). */
+    background-color: var(--form-note-color, var(--mobile-background-color));
   }
 `;
 
