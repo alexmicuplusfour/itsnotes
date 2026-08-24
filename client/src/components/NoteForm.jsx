@@ -2603,15 +2603,19 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
             )}
 
             <TextareaWrapper>
-              {/* When searching and if we have a search query, show a highlighted view of the content */}
-              {showSearch && localSearchQuery ? (
+              {/* When searching with a query, show a read-only highlighted copy of the
+                  content. The live editor below stays mounted (just hidden) — unmounting
+                  it and re-initializing from note.content on exit would drop anything
+                  typed since the note was opened (a never-closed new note came back
+                  completely blank, since its note prop has no content yet). */}
+              {showSearch && localSearchQuery && (
                 <HighlightContainer
                   ref={highlightContainerRef}
                   dangerouslySetInnerHTML={{ __html: content || '<p></p>' }}
                   onClick={customHandleSearchToggle}
                 />
-              ) : (
-                <>
+              )}
+              <div style={{ display: showSearch && localSearchQuery ? 'none' : undefined }}>
                   {/* {console.log(`[NoteForm Render] note: ${Boolean(note)}, isLoading: ${note?.isLoading}, contentFullyLoaded: ${contentFullyLoaded}`)} */}
 
                   {/* Force contentFullyLoaded to true for new, empty notes */}
@@ -2654,8 +2658,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
                       />
                     </NoteFormProvider>
                   )}
-                </>
-              )}
+              </div>
             </TextareaWrapper>
             </ContentWrapper>
           </ScrollableContent>
