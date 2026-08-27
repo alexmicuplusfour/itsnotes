@@ -20,9 +20,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const settings = req.body;
-    console.log('Settings POST received:', JSON.stringify(settings, null, 2));
     const updatedSettings = await settingsService.update(settings);
-    console.log('Settings updated, returning:', JSON.stringify(updatedSettings, null, 2));
 
     const backupKeys = ['AUTO_BACKUP_ENABLED', 'AUTO_BACKUP_INTERVAL_HOURS', 'AUTO_BACKUP_RETENTION_COUNT'];
     if (backupKeys.some(k => k in settings)) {

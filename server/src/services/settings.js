@@ -6,6 +6,7 @@ const KNOWN_KEYS = [
   'AI_PROVIDER',
   'OPENAI_API_KEY',
   'ANTHROPIC_API_KEY',
+  'OLLAMA_BASE_URL',
   'PUSHOVER_USER',
   'PUSHOVER_TOKEN',
   'PUSHBULLET_TOKEN',
@@ -77,14 +78,14 @@ class SettingsService {
   }
 
   async update(settings) {
-    console.log('SettingsService.update called with:', JSON.stringify(settings, null, 2));
-    console.log('KNOWN_KEYS:', KNOWN_KEYS);
+    // Log key names only — values include API keys and tokens, which must
+    // never end up in the server log.
+    console.log('SettingsService: updating', Object.keys(settings).join(', '));
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       for (const [key, value] of Object.entries(settings)) {
-        console.log(`Processing key: ${key}, value: ${value}, is known: ${KNOWN_KEYS.includes(key)}`);
         if (KNOWN_KEYS.includes(key)) {
           // Update process.env
           if (value) {
@@ -94,7 +95,6 @@ class SettingsService {
           }
 
           // Update DB
-          console.log(`Inserting/updating DB: ${key} = ${value}`);
           await client.query(
             `INSERT INTO settings (key, value) 
              VALUES ($1, $2) 
@@ -106,7 +106,6 @@ class SettingsService {
       }
 
       await client.query('COMMIT');
-      console.log('Transaction committed');
       return await this.getAll();
     } catch (error) {
       await client.query('ROLLBACK');

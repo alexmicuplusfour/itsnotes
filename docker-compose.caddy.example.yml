@@ -38,6 +38,10 @@ services:
       # JWT_SECRET: generate-with-openssl-rand-hex-32
       # Optional — AI features:
       # OPENAI_API_KEY: sk-...
+    # Lets the container reach services on the host machine (e.g. Ollama at
+    # http://host.docker.internal:11434). Harmless when unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - attachments_data:/app/uploads
       - backups_data:/app/backups

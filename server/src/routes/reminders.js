@@ -5,13 +5,16 @@ const SchedulerService = require('../services/scheduler'); // To trigger immedia
 const settingsService = require('../services/settings');
 const { combinePrompts } = require('../constants/aiPrompts');
 const { getAIProvider, getDefaultModel } = require('../services/aiProvider');
+const { blockInDemo } = require('../middleware/demoGuard');
+const { respondAIError } = require('../utils/aiErrorResponse');
 
-router.post('/create', async (req, res) => {
+// blockInDemo: this is the one reminder route that spends AI credits.
+router.post('/create', blockInDemo, async (req, res) => {
     try {
         const { noteId, noteContent, timezone = 'UTC' } = req.body;
 
         if (!noteId || !noteContent) {
-            return res.status(400).json({ error: 'Note ID and content are required' });
+            return res.status(400).json({ message: 'Note ID and content are required' });
         }
 
         console.log(`Reminders: Analyzing content for note ${noteId}...`);
@@ -45,11 +48,12 @@ router.post('/create', async (req, res) => {
             result = JSON.parse(content);
         } catch (e) {
             console.error("Reminders: Failed to parse AI response:", content);
-            return res.status(500).json({ error: "Invalid response from AI" });
+            return res.status(500).json({ message: 'The AI returned an unusable answer — try again or pick a different model.' });
         }
 
+        // The model's own verdict (e.g. "No reminder found") — show it as-is.
         if (result.error) {
-            return res.status(400).json({ error: result.error });
+            return res.status(400).json({ message: result.error });
         }
 
         // Create Reminder
@@ -72,10 +76,7 @@ router.post('/create', async (req, res) => {
 
     } catch (error) {
         console.error('Reminders: Error creating reminder:', error);
-        if (error.status === 401) {
-            return res.status(500).json({ error: 'Invalid API key' });
-        }
-        res.status(500).json({ error: 'Failed to create reminder' });
+        respondAIError(res, error, 'Failed to create reminder');
     }
 });
 

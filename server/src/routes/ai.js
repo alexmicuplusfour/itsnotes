@@ -4,13 +4,37 @@ const multer = require('multer');
 const { combinePrompts } = require('../constants/aiPrompts');
 const { getAIProvider, getDefaultModel } = require('../services/aiProvider');
 const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
+const { respondAIError } = require('../utils/aiErrorResponse');
+const { blockInDemo } = require('../middleware/demoGuard');
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Cap OCR uploads: both vision APIs reject images larger than this anyway,
+// so without a limit an oversized image gets fully buffered and base64'd
+// just to fail at the provider.
+const OCR_MAX_BYTES = 10 * 1024 * 1024;
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: OCR_MAX_BYTES },
+});
+
+// Run multer ourselves so a too-large file becomes a clean 413 (with a
+// `message` the client toast displays) instead of an unhandled multer error.
+const ocrUpload = (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ message: 'Image is too large (max 10MB).' });
+      }
+      return next(err);
+    }
+    next();
+  });
+};
 
 router.get('/models', async (req, res) => {
   const provider = process.env.AI_PROVIDER || 'openai';
-  const hasKey = provider === 'anthropic'
-    ? !!process.env.ANTHROPIC_API_KEY
+  // Ollama needs no API key — reachability is checked by the call itself.
+  const hasKey = provider === 'ollama' ? true
+    : provider === 'anthropic' ? !!process.env.ANTHROPIC_API_KEY
     : !!process.env.OPENAI_API_KEY;
 
   if (!hasKey) {
@@ -20,26 +44,32 @@ router.get('/models', async (req, res) => {
   try {
     const aiProvider = getAIProvider();
     const models = await aiProvider.listModels();
-    res.json({ models, provider });
+    // Recommended model per feature, keyed by settings key so the client can
+    // use them directly. The client only applies one if it's actually in
+    // `models`, so a stale default degrades gracefully.
+    const defaults = {
+      AI_MODEL_AUTO_TAG: getDefaultModel('autoTag'),
+      AI_MODEL_SUMMARIZE: getDefaultModel('summarize'),
+      AI_MODEL_OCR: getDefaultModel('ocr'),
+      AI_MODEL_REMINDER: getDefaultModel('reminder'),
+    };
+    res.json({ models, provider, defaults });
   } catch (error) {
     console.error('AI models error:', error);
-    if (error.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key' });
-    }
-    res.status(500).json({ error: 'Failed to fetch models' });
+    respondAIError(res, error, 'Failed to fetch models');
   }
 });
 
-router.post('/suggest-tags', async (req, res) => {
+router.post('/suggest-tags', blockInDemo, async (req, res) => {
   try {
     const { noteContent, availableTags } = req.body;
 
     if (!noteContent) {
-      return res.status(400).json({ error: 'Note content is required' });
+      return res.status(400).json({ message: 'Note content is required' });
     }
 
     if (!availableTags || !Array.isArray(availableTags) || availableTags.length === 0) {
-      return res.status(400).json({ error: 'No available tags to choose from' });
+      return res.status(400).json({ message: 'No available tags to choose from' });
     }
 
     // The client sends the note's stored HTML. Strip it to clean plain text so the
@@ -47,7 +77,7 @@ router.post('/suggest-tags', async (req, res) => {
     const plainContent = convertHtmlToPlainText(noteContent);
 
     if (!plainContent) {
-      return res.status(400).json({ error: 'Note content is required' });
+      return res.status(400).json({ message: 'Note content is required' });
     }
 
     const corePrompt = process.env.AI_PROMPT_AUTO_TAG || '';
@@ -77,7 +107,7 @@ router.post('/suggest-tags', async (req, res) => {
       result = JSON.parse(content);
     } catch (e) {
       console.error('Failed to parse AI response:', content);
-      return res.status(500).json({ error: 'Invalid response from AI' });
+      return res.status(500).json({ message: 'The AI returned an unusable answer — try again or pick a different model.' });
     }
 
     const suggestedTagNames = result.tags || [];
@@ -89,19 +119,16 @@ router.post('/suggest-tags', async (req, res) => {
 
   } catch (error) {
     console.error('AI Tagging error:', error);
-    if (error.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key' });
-    }
-    res.status(500).json({ error: 'Failed to suggest tags' });
+    respondAIError(res, error, 'Failed to suggest tags');
   }
 });
 
-router.post('/summarize', async (req, res) => {
+router.post('/summarize', blockInDemo, async (req, res) => {
   try {
     const { noteContent } = req.body;
 
     if (!noteContent) {
-      return res.status(400).json({ error: 'Note content is required' });
+      return res.status(400).json({ message: 'Note content is required' });
     }
 
     // The client sends the note's stored HTML. Strip it to clean plain text so the
@@ -109,7 +136,7 @@ router.post('/summarize', async (req, res) => {
     const plainContent = convertHtmlToPlainText(noteContent);
 
     if (!plainContent) {
-      return res.status(400).json({ error: 'Note content is required' });
+      return res.status(400).json({ message: 'Note content is required' });
     }
 
     const corePrompt = process.env.AI_PROMPT_SUMMARIZE || '';
@@ -128,17 +155,14 @@ router.post('/summarize', async (req, res) => {
 
   } catch (error) {
     console.error('AI Summarization error:', error);
-    if (error.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key' });
-    }
-    res.status(500).json({ error: 'Failed to summarize note' });
+    respondAIError(res, error, 'Failed to summarize note');
   }
 });
 
-router.post('/ocr', upload.single('image'), async (req, res) => {
+router.post('/ocr', blockInDemo, ocrUpload, async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'Image file is required' });
+      return res.status(400).json({ message: 'Image file is required' });
     }
 
     const base64Image = req.file.buffer.toString('base64');
@@ -161,10 +185,7 @@ router.post('/ocr', upload.single('image'), async (req, res) => {
 
   } catch (error) {
     console.error('AI OCR error:', error);
-    if (error.status === 401) {
-      return res.status(500).json({ error: 'Invalid API key' });
-    }
-    res.status(500).json({ error: 'Failed to extract text' });
+    respondAIError(res, error, 'Failed to extract text');
   }
 });
 

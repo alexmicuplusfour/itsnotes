@@ -38,11 +38,25 @@ services:
       # JWT_SECRET: generate-with-openssl-rand-hex-32
       # Optional — AI features:
       # OPENAI_API_KEY: sk-...
+    # Lets the container reach services on the host machine (e.g. Ollama at
+    # http://host.docker.internal:11434). Harmless when unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - attachments_data:/app/uploads
       - backups_data:/app/backups
       # Browsable folder for the Markdown Mirror feature (turn it on in Settings)
       - ./notes-mirror:/data/notes-mirror
+
+  # Optional — local AI with Ollama (Settings → AI → Provider → Ollama, Base
+  # URL http://ollama:11434). Uncomment to run Ollama alongside itsnotes;
+  # skip this and use host.docker.internal:11434 if Ollama already runs on
+  # the host. Note: local models want RAM (~8GB for an 8B model).
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   restart: unless-stopped
+  #   volumes:
+  #     - ollama_data:/root/.ollama
 
   itsnotes-client:
     image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
@@ -56,3 +70,5 @@ volumes:
   postgres_data:
   attachments_data:
   backups_data:
+  # Uncomment together with the ollama service above:
+  # ollama_data:

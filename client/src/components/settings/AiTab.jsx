@@ -93,12 +93,16 @@ const PROMPT_FEATURES = [
   { icon: 'tag', title: 'Auto-Tagging', modelKey: 'AI_MODEL_AUTO_TAG', coreKey: 'AI_PROMPT_AUTO_TAG', customKey: 'AI_PROMPT_AUTO_TAG_CUSTOM', placeholder: "Add any additional instructions for tag suggestions (e.g., 'Prefer more specific tags over general ones' or 'Always include project tags if mentioned')...", description: 'Your custom requirements will be appended to the core prompt when suggesting tags. This applies when you click "Auto-tag" in the tag picker.' },
 ];
 
-const ModelSelect = ({ name, value, onChange, models, loading }) => (
+const ModelSelect = ({ name, value, onChange, models, loading, provider }) => (
   <Select name={name} value={value} onChange={onChange} disabled={loading || models.length === 0}>
     {loading ? (
       <option value="">Loading models...</option>
     ) : models.length === 0 ? (
-      <option value="">No models — enter API key and refresh</option>
+      <option value="">
+        {provider === 'ollama'
+          ? 'No models — pull one in Ollama and refresh'
+          : 'No models — enter API key and refresh'}
+      </option>
     ) : (
       models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)
     )}
@@ -116,6 +120,7 @@ const PromptFeature = ({ config, settings, onChange, models, loading, isDarkThem
         onChange={onChange}
         models={models}
         loading={loading}
+        provider={settings.AI_PROVIDER || 'openai'}
       />
 
       <Label style={{ marginTop: '16px' }}>Core Prompt (Read-only)</Label>
@@ -139,6 +144,7 @@ const PromptFeature = ({ config, settings, onChange, models, loading, isDarkThem
 const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => {
   const { showToast } = useToast();
   const [availableModels, setAvailableModels] = useState([]);
+  const [modelDefaults, setModelDefaults] = useState(null);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [mcpToken, setMcpToken] = useState(null);
   const [mcpTokenLoading, setMcpTokenLoading] = useState(false);
@@ -151,14 +157,27 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
       const data = await aiApi.getModels();
       const models = data.models || [];
       setAvailableModels(models);
+      setModelDefaults(data.defaults || null);
       // Success is self-evident (the dropdowns populate) — only speak up when
-      // there's nothing to show.
+      // there's nothing to show. Ollama being reachable but empty is a
+      // different problem than a bad API key, so say so.
       if (notify && models.length === 0) {
-        showToast('No models found — check your API key', { variant: 'error' });
+        showToast(
+          data.provider === 'ollama'
+            ? 'Ollama is running but has no models — pull one first, e.g. "ollama pull llama3.2"'
+            : 'No models found — check your API key',
+          { variant: 'error' }
+        );
       }
     } catch (e) {
       setAvailableModels([]);
-      if (notify) showToast('Could not load models. Check your API key.', { variant: 'error' });
+      // Prefer the server's diagnosis (e.g. "Can't reach Ollama at ...").
+      if (notify) {
+        showToast(
+          e.response?.data?.message || 'Could not load models. Check your API key.',
+          { variant: 'error' }
+        );
+      }
     } finally {
       setModelsLoading(false);
     }
@@ -168,20 +187,29 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
     loadModels();
   }, [loadModels]);
 
-  // When models load, auto-select the first one for any feature with no selection.
+  // When models load, auto-select for any feature with no selection: the
+  // server's recommended default if the key can actually use it, otherwise
+  // the first model in the list. Without the preference, "first in the list"
+  // lands on the most expensive Anthropic model (alphabetical) or an ancient
+  // OpenAI one (id sort).
   useEffect(() => {
     if (availableModels.length === 0) return;
-    const firstId = availableModels[0].id;
+    const pick = (key) => {
+      const preferred = modelDefaults?.[key];
+      return availableModels.some(m => m.id === preferred)
+        ? preferred
+        : availableModels[0].id;
+    };
     const updates = {};
-    if (!settings.AI_MODEL_SUMMARIZE) updates.AI_MODEL_SUMMARIZE = firstId;
-    if (!settings.AI_MODEL_OCR) updates.AI_MODEL_OCR = firstId;
-    if (!settings.AI_MODEL_REMINDER) updates.AI_MODEL_REMINDER = firstId;
-    if (!settings.AI_MODEL_AUTO_TAG) updates.AI_MODEL_AUTO_TAG = firstId;
+    if (!settings.AI_MODEL_SUMMARIZE) updates.AI_MODEL_SUMMARIZE = pick('AI_MODEL_SUMMARIZE');
+    if (!settings.AI_MODEL_OCR) updates.AI_MODEL_OCR = pick('AI_MODEL_OCR');
+    if (!settings.AI_MODEL_REMINDER) updates.AI_MODEL_REMINDER = pick('AI_MODEL_REMINDER');
+    if (!settings.AI_MODEL_AUTO_TAG) updates.AI_MODEL_AUTO_TAG = pick('AI_MODEL_AUTO_TAG');
     if (Object.keys(updates).length > 0) {
       commit({ ...settings, ...updates });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [availableModels]);
+  }, [availableModels, modelDefaults]);
 
   const handleProviderChange = async (e) => {
     const newProvider = e.target.value;
@@ -299,9 +327,10 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
           >
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic (Claude)</option>
+            <option value="ollama">Ollama (local)</option>
           </Select>
         </FormGroup>
-        {(settings.AI_PROVIDER || 'openai') === 'openai' ? (
+        {(settings.AI_PROVIDER || 'openai') === 'openai' && (
           <FormGroup>
             <Label>OpenAI API Key</Label>
             <Input
@@ -312,7 +341,8 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
               placeholder="sk-..."
             />
           </FormGroup>
-        ) : (
+        )}
+        {settings.AI_PROVIDER === 'anthropic' && (
           <FormGroup>
             <Label>Anthropic API Key</Label>
             <Input
@@ -322,6 +352,23 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
               onChange={onChange}
               placeholder="sk-ant-..."
             />
+          </FormGroup>
+        )}
+        {settings.AI_PROVIDER === 'ollama' && (
+          <FormGroup>
+            <Label>Ollama Base URL</Label>
+            <Input
+              type="text"
+              name="OLLAMA_BASE_URL"
+              value={settings.OLLAMA_BASE_URL}
+              onChange={onChange}
+              placeholder="http://localhost:11434"
+            />
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '6px 0 0' }}>
+              No API key needed — notes never leave your server. If itsnotes runs
+              in Docker and Ollama on the host, use http://host.docker.internal:11434.
+              OCR needs a vision model (e.g. llama3.2-vision, qwen3-vl, gemma3).
+            </p>
           </FormGroup>
         )}
       </SectionContainer>
