@@ -1,9 +1,11 @@
 // Service Worker for itsnotes PWA
 // Increment version after each build to force cache invalidation
-const SW_VERSION = 'v3';
+const SW_VERSION = 'v4';
 const CACHE_NAME = `itsnotes-${SW_VERSION}`;
+// Note: no '/manifest.json' here — the real manifest lives at a hashed
+// /assets/ URL; the bare path only exists via the SPA fallback, so caching it
+// would store index.html under the manifest's name.
 const ASSETS_TO_CACHE = [
-  '/manifest.json',
   '/pwa/icon-144.png',
   '/pwa/icon-192.png',
   '/pwa/icon-512.png'
