@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "itsnotes",
   "short_name": "itsnotes",
   "description": "A modern note-taking application",
@@ -6,6 +7,15 @@
   "display": "standalone",
   "background_color": "#1d1d1d",
   "theme_color": "#14140b",
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/favicon/192.png",

@@ -7,6 +7,7 @@ import NoteForm from './components/NoteForm';
 import TagsModal from './components/TagsModal';
 import QuickAccess from './components/QuickAccess';
 import ImportPage from './components/ImportPage';
+import SharePage from './components/SharePage';
 import FixedStarredNotesTabs from './components/FixedStarredNotesTabs';
 import ProtectedRoute from './components/ProtectedRoute';
 import { NotesProvider } from './contexts/NotesContext';
@@ -30,6 +31,19 @@ import DemoBanner from './components/DemoBanner';
 import ColorPreloader from './components/ColorPreloader'; // Import color preloader for performance
 
 function App() {
+  const location = useLocation();
+
+  // Web Share Target landing (/share?title=&text=&url=): only needs auth + the
+  // API client, so it renders instead of the full provider tree. Saving
+  // navigates to /?note=<id>, which mounts the app normally.
+  if (location.pathname === '/share') {
+    return (
+      <ProtectedRoute>
+        <SharePage />
+      </ProtectedRoute>
+    );
+  }
+
   return (
     <ProtectedRoute>
       <ToastProvider>
