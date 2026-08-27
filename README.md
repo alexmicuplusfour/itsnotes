@@ -156,19 +156,13 @@ Optional AI features (auto-tagging, OCR, summarization, reminder parsing) work w
 
 ### Local AI with Ollama
 
-Pick **Ollama** as the provider in Settings → AI and set the base URL:
+Pick **Ollama** in Settings → AI, set the base URL, hit **↻ Refresh models**, and assign a model per feature:
 
-- itsnotes and Ollama on the same machine, itsnotes in Docker: `http://host.docker.internal:11434` (the compose files already include the `extra_hosts` entry that makes this work on Linux).
-- Ollama as a compose service (see the commented-out block in [`docker-compose.example.yml`](docker-compose.example.yml)): `http://ollama:11434`.
-- Ollama elsewhere on your network: `http://<that-machine>:11434`.
+- itsnotes in Docker, Ollama on the host: `http://host.docker.internal:11434`
+- Ollama as a compose service (commented-out block in [`docker-compose.example.yml`](docker-compose.example.yml)): `http://ollama:11434`
+- Elsewhere on your network: `http://<that-machine>:11434`
 
-Then hit **↻ Refresh models** and assign models per feature. What to expect:
-
-- **Auto-tagging & summarization** work well on any ~8B chat model (`llama3.1:8b`, `qwen2.5:7b`, `gemma3`).
-- **OCR** needs a *vision* model — `llama3.2-vision`, `qwen3-vl`, or `gemma3`.
-- **Reminder parsing** (dates, recurrence rules) is the hardest task — use the largest model you can run.
-
-Two Ollama quirks to know: the first request after idle is slow (the model loads into memory), and Ollama's default context window is small (~4K tokens) — long notes get silently truncated, so summaries may miss the end of the note. Raise it by setting `OLLAMA_CONTEXT_LENGTH=8192` (or higher) in Ollama's environment.
+OCR requires a model with vision support. Quality depends entirely on the models you run — and if summaries seem to ignore the end of long notes, raise Ollama's context window setting.
 
 ## REST API
 

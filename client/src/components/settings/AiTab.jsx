@@ -367,7 +367,7 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
             <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '6px 0 0' }}>
               No API key needed — notes never leave your server. If itsnotes runs
               in Docker and Ollama on the host, use http://host.docker.internal:11434.
-              OCR needs a vision model (e.g. llama3.2-vision, qwen3-vl, gemma3).
+              OCR needs a model with vision support.
             </p>
           </FormGroup>
         )}
