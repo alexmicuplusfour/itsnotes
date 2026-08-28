@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { usecToIso, resolveAttachmentPath } = require('./import-notes');
+const { usecToIso, resolveAttachmentPath, appendInlineImageRefs } = require('./import-notes');
 
 // import-notes pulls in the shared Knex instance on require; close its pool so
 // Jest exits cleanly. (No queries run in these tests, so no connection opens.)
@@ -54,5 +54,30 @@ describe('resolveAttachmentPath', () => {
 
   it('returns null when nothing matches', () => {
     expect(resolveAttachmentPath(dir, 'nope.png')).toBeNull();
+  });
+});
+
+describe('appendInlineImageRefs', () => {
+  it('appends one data-image-id reference per imported image', () => {
+    expect(appendInlineImageRefs('<p>hello</p>', [7, 8]))
+      .toBe('<p>hello</p><img data-image-id="7"><img data-image-id="8">');
+  });
+
+  it('matches the shape Note.reconcileInlineImages scans for', () => {
+    // The reconcile pass deletes any note_images row whose id is not matched
+    // by this exact pattern in the body — the appended refs must satisfy it.
+    const html = appendInlineImageRefs('<p>x</p>', [42]);
+    const referenced = [...html.matchAll(/data-image-id="([^"]+)"/g)].map(m => m[1]);
+    expect(referenced).toEqual(['42']);
+  });
+
+  it('returns the body unchanged when there are no images', () => {
+    expect(appendInlineImageRefs('<p>hello</p>', [])).toBe('<p>hello</p>');
+    expect(appendInlineImageRefs('<p>hello</p>', undefined)).toBe('<p>hello</p>');
+  });
+
+  it('tolerates an empty body', () => {
+    expect(appendInlineImageRefs('', [3])).toBe('<img data-image-id="3">');
+    expect(appendInlineImageRefs(null, [3])).toBe('<img data-image-id="3">');
   });
 });

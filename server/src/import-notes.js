@@ -74,6 +74,18 @@ function usecToIso(usec, fallbackIso) {
   return fallbackIso || new Date().toISOString();
 }
 
+// The app maintains an invariant that every note_images row is referenced by a
+// data-image-id in the note body (Note.reconcileInlineImages deletes
+// unreferenced rows whenever content is saved). Keep attachments arrive with no
+// such references, so append one per imported image — that makes them render
+// inline (editor, cards, lightbox) and survive later edits. Appended at the
+// end so card previews stay text-first.
+function appendInlineImageRefs(html, imageIds) {
+  if (!Array.isArray(imageIds) || imageIds.length === 0) return html;
+  const refs = imageIds.map(id => `<img data-image-id="${id}">`).join('');
+  return (html || '') + refs;
+}
+
 // Keep occasionally records a filePath whose extension differs from the actual
 // exported file (e.g. .jpeg vs .jpg). Fall back to matching any sibling file
 // with the same basename — the numeric id Keep uses is unique within the folder.
@@ -97,7 +109,7 @@ function resolveAttachmentPath(keepDir, rel) {
 // Failures are per-attachment and non-fatal so one bad file can't sink the note.
 async function importNoteAttachments(trx, note, keepDir, noteId) {
   const attachments = Array.isArray(note.attachments) ? note.attachments : [];
-  const counts = { images: 0, files: 0, skipped: 0 };
+  const counts = { images: 0, files: 0, skipped: 0, imageIds: [] };
 
   for (const att of attachments) {
     const rel = att && att.filePath;
@@ -114,14 +126,15 @@ async function importNoteAttachments(trx, note, keepDir, noteId) {
     try {
       if (mime.startsWith('image/')) {
         const processed = await processNoteImage(fs.readFileSync(srcPath));
-        await trx('note_images').insert({
+        const inserted = await trx('note_images').insert({
           note_id: noteId,
           data: processed.data,
           thumbnail: processed.thumbnail,
           name: path.basename(rel),
           type: processed.type,
           size: processed.size
-        });
+        }).returning('id');
+        counts.imageIds.push(inserted[0].id);
         counts.images++;
       } else {
         if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -237,6 +250,17 @@ async function processNoteFile(filePath) {
       // Import images/attachments into the same transaction so a note and its
       // media commit (or roll back) together.
       const attachments = await importNoteAttachments(trx, note, path.dirname(filePath), noteId);
+
+      // Inline the imported images into the body (see appendInlineImageRefs).
+      // Re-assert updated_at so Keep's timestamp stays authoritative.
+      if (attachments.imageIds.length > 0) {
+        await trx('notes')
+          .where('id', noteId)
+          .update({
+            content: appendInlineImageRefs(mappedNote.content, attachments.imageIds),
+            updated_at: mappedNote.updated_at
+          });
+      }
 
       return { id: noteId, labelsImported: associated, attachments };
     });
@@ -354,5 +378,6 @@ if (require.main === module) {
 module.exports = {
   processGoogleKeepImport,
   usecToIso,
-  resolveAttachmentPath
+  resolveAttachmentPath,
+  appendInlineImageRefs
 };
