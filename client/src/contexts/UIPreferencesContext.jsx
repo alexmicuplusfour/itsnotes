@@ -121,7 +121,7 @@ export const UIPreferencesProvider = ({ children }) => {
     const sizeMap = {
       s: { form: '14px', card: '13px' },
       m: { form: '16px', card: '15px' },
-      l: { form: '18px', card: '17px' },
+      l: { form: '18px', card: '18px' },
     };
     const sizes = sizeMap[notesBodyFontSize] || sizeMap.m;
     root.style.setProperty('--note-body-font-size', sizes.form);
