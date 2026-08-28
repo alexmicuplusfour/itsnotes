@@ -213,9 +213,26 @@ export const TiptapImageExtension = Node.create({
         img.setAttribute('data-image-id', node.attrs['data-image-id']);
       }
 
-      img.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px; pointer-events: none; user-select: none;';
+      // The image itself takes clicks (fullsize view); the wrapper around it
+      // stays pointer-events: none so clicks beside the image still reach the
+      // editor for cursor placement.
+      img.style.cssText = 'max-width: 100%; height: auto; border-radius: 8px; pointer-events: auto; user-select: none; cursor: zoom-in;';
+      img.draggable = false;
 
-      // Removed click handler - no action on image click/tap
+      img.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const clickEvent = new CustomEvent('imageClick', {
+          detail: {
+            imageId: node.attrs['data-image-id'],
+            src: img.src,
+            nodePos: getPos(),
+          },
+          bubbles: true,
+        });
+        img.dispatchEvent(clickEvent);
+      });
 
       // Add delete button overlay (always visible)
       const deleteButton = document.createElement('button');

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import styled, { keyframes } from 'styled-components';
 import Icon from './Icons';
+import ImageLightbox from './ImageLightbox';
 import env from '../../env.js';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -143,56 +143,6 @@ const LoadingIndicator = styled.div`
   border-top: 2px solid var(--accent-color);
   border-radius: 50%;
   animation: ${spin} 0.8s linear infinite;
-`;
-
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000; /* Higher z-index to ensure it appears over everything */
-  isolation: isolate; /* Create a new stacking context for events */
-`;
-
-const ModalContent = styled.div`
-  position: relative;
-  max-width: 90%;
-  max-height: 90%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const FullsizeImage = styled.img`
-  max-width: 100%;
-  max-height: 90vh;
-  object-fit: contain;
-  cursor: zoom-out;
-`;
-
-const CloseModalButton = styled.button`
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  cursor: pointer;
-  
-  &:hover {
-    background: rgba(0, 0, 0, 0.7);
-  }
 `;
 
 /**
@@ -383,39 +333,12 @@ const ImageGallery = ({ images, sketches = [], onRemoveImage, unsavedImageIds = 
         )}
       </div>
       
-      {!disableModal && selectedImage && ReactDOM.createPortal(
-        <ModalOverlay 
-          className="image-modal-overlay"
-          onClick={(e) => {
-            // Stop propagation to prevent document click handlers from firing
-            e.stopPropagation();
-            closeFullsize(e);
-          }}
-        >
-          <ModalContent onClick={e => e.stopPropagation()}>
-            {isLoadingFullImage ? (
-              <LoadingIndicator style={{ width: '32px', height: '32px' }} />
-            ) : (
-              <FullsizeImage 
-                src={selectedImage.data || selectedImage.thumbnail} 
-                alt="Full size" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeFullsize(e);
-                }}
-              />
-            )}
-            <CloseModalButton 
-              onClick={(e) => {
-                e.stopPropagation();
-                closeFullsize(e);
-              }}
-            >
-              <Icon name="close" size={24} color="white" />
-            </CloseModalButton>
-          </ModalContent>
-        </ModalOverlay>,
-        document.body
+      {!disableModal && selectedImage && (
+        <ImageLightbox
+          src={selectedImage.data || selectedImage.thumbnail}
+          isLoading={isLoadingFullImage}
+          onClose={closeFullsize}
+        />
       )}
     </>
   );

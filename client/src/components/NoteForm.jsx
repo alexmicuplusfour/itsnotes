@@ -35,6 +35,7 @@ import { useUrlExtraction } from "../hooks/useUrlExtraction"; // Import the URL 
 import { TagPicker } from "./NoteTagPicker"; // Import TagPicker here
 import { useNoteTagsModal } from "../hooks/useNoteTagsModal"; // Import the tags modal hook
 import NoteHistoryModal from "./NoteHistoryModal"; // Import the new history modal
+import ImageLightbox from "./ImageLightbox"; // Full-size viewer for inline images
 import { formatDistanceToNow } from "date-fns"; // Import date-fns for the modal
 import { ColorPicker as SharedColorPicker } from "./ColorPicker";
 import { formatPlainTextPasteToHtml } from '../utils/textToHtml.js';
@@ -102,6 +103,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const [isBeingTrashed, setIsBeingTrashed] = useState(false); // Track if note is being trashed
   const [isCreatingReminder, setIsCreatingReminder] = useState(false); // Track reminder creation status
   const [suggestedTags, setSuggestedTags] = useState([]); // Track suggested tags for auto-tagging
+  const [lightboxSrc, setLightboxSrc] = useState(null); // Full-size viewer for inline images (src already resolved by the editor)
   const taskCompletionBaselineRef = useRef(false); // allTasksCompleted value at last note load — prevents false-trigger on open
   const taskCompletedDebounceRef = useRef(null);
 
@@ -439,6 +441,10 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   useKeyboardShortcut(
     'escape',
     useCallback(() => {
+      if (lightboxSrc) {
+        setLightboxSrc(null);
+        return;
+      }
       if (showTagsModal) {
         setShowTagsModal(false);
         return;
@@ -450,13 +456,13 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
       if (_onClose) {
         _onClose();
       }
-    }, [_onClose, showTagsModal, setShowTagsModal, showColorPicker, setShowColorPicker]),
+    }, [_onClose, lightboxSrc, showTagsModal, setShowTagsModal, showColorPicker, setShowColorPicker]),
     {
       description: 'Close note form',
       preventDefault: true,
       condition: () => !isMobile // Only enable on desktop
     },
-    [_onClose, isMobile, showTagsModal, showColorPicker]
+    [_onClose, isMobile, lightboxSrc, showTagsModal, showColorPicker]
   );
 
   // URL extraction functionality using custom hook
@@ -2288,16 +2294,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     }
   }, [addImage, note?.id, markAsModified, showToast]);
 
-  // Handle image click
+  // Handle image click: open the inline image full-size. The editor already
+  // holds the full-resolution bytes (object URL or legacy base64 src), so we
+  // show that directly; the gallery thumbnail is only a fallback.
   const handleImageClick = useCallback((imageData) => {
-    console.log('[NoteForm] Inline image clicked:', imageData);
-    // Find the image in our images array and open it fullsize
-    const image = images.find(img => img.id === imageData.imageId);
-    if (image) {
-      // We can either trigger the ImageGallery's fullsize view or 
-      // create a custom modal here. For now, let's log it.
-      // TODO: Implement fullsize image viewing for inline images
-      console.log('TODO: Open fullsize view for inline image:', image);
+    const src = imageData?.src
+      || images.find(img => String(img.id) === String(imageData?.imageId))?.thumbnail;
+    if (src) {
+      setLightboxSrc(src);
     }
   }, [images]);
 
@@ -2785,6 +2789,14 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
           targetRef={colorButtonRef} // Pass the button ref
           mobileBottomSheet={isMobile} // Pass mobile setting
           position="top-right"
+        />
+      )}
+
+      {/* Full-size viewer for inline images */}
+      {lightboxSrc && (
+        <ImageLightbox
+          src={lightboxSrc}
+          onClose={() => setLightboxSrc(null)}
         />
       )}
     </FormOverlay>
