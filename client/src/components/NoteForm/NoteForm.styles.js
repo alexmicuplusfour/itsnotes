@@ -257,6 +257,14 @@ export const TitleInput = styled.input`
   text-overflow: ellipsis;
   white-space: nowrap;
 
+  /* Safari keeps the ellipsis active while the input is focused and then
+     stops scrolling horizontally — the caret moves but the visible text
+     doesn't, making long titles uneditable. Dropping the ellipsis during
+     focus restores normal scrolling; Chrome already behaves this way. */
+  &:focus {
+    text-overflow: clip;
+  }
+
   &::placeholder {
     color: var(--text-color);
     opacity: 0.5;
@@ -366,24 +374,19 @@ export const TitleRow = styled.div`
   align-items: center;
   width: 100%;
   position: relative;
-  /* Add right padding to make room for floating actions pill */
-  padding-right: 160px;
+  /* Make room for the floating actions pill. --pill-clearance is measured
+     from the real pill (set on FormContainer by NoteForm's ResizeObserver),
+     so it tracks the pill's actual width per note state and is 0 when the
+     pill doesn't overlap the title (new note, fullscreen on wide screens). */
+  padding-right: var(--pill-clearance, 160px);
+  transition: padding-right 0.15s ease;
   /* Don't shrink - maintain natural height */
   flex-shrink: 0;
-
-  @media (max-width: 768px) {
-    padding-right: 140px;
-  }
 `;
 
 export const TitleInputWrapper = styled.div`
   flex: 1;
   min-width: 0; /* Important for text-overflow to work */
-  margin-right: 0;
-
-  @media (max-width: 768px) {
-    margin-right: 0;
-  }
 `;
 
 export const SearchBar = styled.div`
@@ -744,6 +747,13 @@ export const FloatingActionsPill = styled.div`
 
   /* Transition for smooth appearance */
   transition: opacity 0.2s ease, transform 0.2s ease;
+
+  /* Declutter the chrome while the title is being edited. (The measured
+     --pill-clearance already keeps the pill off the text — this is purely
+     cosmetic.) Fades rather than unmounts, keeping its layout size so the
+     title doesn't reflow mid-typing. */
+  opacity: ${props => props.$titleFocused ? 0 : 1};
+  pointer-events: ${props => props.$titleFocused ? 'none' : 'auto'};
 
   @media (max-width: 768px) {
     top: 12px;

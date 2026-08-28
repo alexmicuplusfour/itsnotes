@@ -211,7 +211,6 @@ const NoteTitleActions = ({
   note,
   currentContent,
   isMobile,
-  titleFocused,
   view,
   isPinned,
   isDarkTheme,

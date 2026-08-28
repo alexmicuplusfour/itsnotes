@@ -2,6 +2,7 @@ import React, {
   useState,
   useRef,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useMemo,
   forwardRef,
@@ -177,6 +178,8 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
   const prevNoteRef = useRef(null); // For tracking changes in note loading state
   const handleClickOutsideRef = useRef(null); // For the click-outside handler function
   const isBeingTrashedRef = useRef(false); // Ref to track trash state for immediate access
+  const contentWrapperRef = useRef(null); // For measuring the title area's right edge
+  const floatingPillRef = useRef(null); // Current floating actions pill DOM node
 
   // Stable function to get the current editor - always fresh from the ref
   const getEditor = useCallback(() => {
@@ -563,6 +566,59 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
     editorInstance,
     showSearch
   });
+
+  // Measure how far the floating actions pill intrudes into the title area and
+  // expose it as --pill-clearance on the form container. TitleRow pads itself
+  // by exactly this much, so the reserved space always matches the real pill —
+  // which grows and shrinks with note state (pin/star/trash buttons, mobile
+  // search) — instead of a hardcoded guess. When they don't overlap at all
+  // (fullscreen on a wide screen, or no pill on a new note) the title gets the
+  // full width.
+  const updatePillClearance = useCallback(() => {
+    const form = formRef.current;
+    if (!form) return;
+    const pill = floatingPillRef.current;
+    const wrapper = contentWrapperRef.current;
+    let clearance = 0;
+    if (pill && wrapper) {
+      // Offset geometry, not getBoundingClientRect: client rects measured
+      // during the form's opening scale animation are ~5% off, and nothing
+      // re-fires the observer once it settles — offsets ignore transforms.
+      // wrapper.offsetLeft alone locates the wrapper in the form: its offset
+      // ancestors up to the form (Form is position:relative on mobile) all
+      // sit at x=0.
+      const overlap = (wrapper.offsetLeft + wrapper.offsetWidth) - pill.offsetLeft;
+      clearance = Math.max(0, Math.ceil(overlap) + 12); // 12px gap before the pill
+    }
+    const next = `${clearance}px`;
+    // Skip no-op writes: the observers fire on every content height change
+    // while typing, and rewriting the same value would restart TitleRow's
+    // padding transition and re-dirty layout each time.
+    if (form.style.getPropertyValue('--pill-clearance') === next) return;
+    form.style.setProperty('--pill-clearance', next);
+  }, []);
+
+  // The pill mounts/unmounts with note state and search mode; flipping this
+  // re-runs the layout effect below so the observer re-attaches to the live
+  // node (refs are updated before layout effects run).
+  const pillMounted = Boolean(note) && !showSearch;
+
+  // Layout effect so the clearance lands before first paint — a plain effect
+  // runs after paint, and long titles would visibly slide from the fallback
+  // padding to the measured value on every note open.
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver(updatePillClearance);
+    if (formRef.current) observer.observe(formRef.current);
+    // The wrapper is observed in addition to the form: its width also changes
+    // when ScrollableContent's scrollbar (8px) appears or disappears, which
+    // doesn't resize the form itself.
+    if (contentWrapperRef.current) observer.observe(contentWrapperRef.current);
+    if (floatingPillRef.current) observer.observe(floatingPillRef.current);
+    updatePillClearance();
+    return () => observer.disconnect();
+    // contentFullyLoaded gates the FormWrapper subtree, so the refs are only
+    // populated once it flips true — re-attach then.
+  }, [contentFullyLoaded, pillMounted, updatePillClearance]);
 
   // Ref to track content for internal logic without triggering re-renders.
   // The keystroke handler writes here synchronously so derived consumers
@@ -2491,13 +2547,12 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
 
         {/* Floating Actions Pill - positioned on top of content */}
         {note && !showSearch && (
-          <FloatingActionsPill $isDarkTheme={isDarkTheme}>
+          <FloatingActionsPill ref={floatingPillRef} $isDarkTheme={isDarkTheme} $titleFocused={titleFocused}>
             <NoteTitleActions
               note={note}
               currentContent={content}
               color={color}
               isMobile={isMobile}
-              titleFocused={titleFocused}
               view={view}
               isPinned={isPinned}
               isDarkTheme={isDarkTheme}
@@ -2570,11 +2625,11 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
             </InNoteSearchPill>
           )}
           <ScrollableContent ref={scrollableFormRef} className="note-scrollable-content" $showSearch={showSearch} $fullscreen={effectiveFullscreen}>
-            <ContentWrapper $fullscreen={effectiveFullscreen}>
+            <ContentWrapper ref={contentWrapperRef} $fullscreen={effectiveFullscreen}>
             {/* Title Row with Input - now scrolls with content */}
             {!showSearch && (
               <TitleRow>
-                <TitleInputWrapper $titleFocused={isMobile && titleFocused}>
+                <TitleInputWrapper>
                   <TitleInput
                     ref={titleInputRef}
                     type="text"
