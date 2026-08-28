@@ -88,6 +88,8 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
     showLinkPreviews,
     showLinkPreviewImages,
     fullscreenNoteForm,
+    showNoteFormGallery,
+    showNoteCardGallery,
     layoutView,
     toggleQuickAccess,
     toggleMonthMarkers,
@@ -95,6 +97,8 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
     toggleLinkPreviews,
     toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
+    toggleNoteFormGallery,
+    toggleNoteCardGallery,
     changeLayoutView,
     colorLabels,
     setColorLabel,
@@ -262,6 +266,17 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
             onChange={toggleFullscreenNoteForm}
           />
         </OptionRow>
+        <OptionRow>
+          <Label style={{ marginBottom: 0 }}>Show Image Strip</Label>
+          <Switch
+            id="noteform-gallery-toggle"
+            checked={showNoteFormGallery}
+            onChange={toggleNoteFormGallery}
+          />
+        </OptionRow>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
+          Thumbnails at the bottom of the note editor. Images still show inside the note and on cards.
+        </p>
       </SectionContainer>
 
       <SectionContainer>
@@ -322,7 +337,18 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
       </SectionContainer>
 
       <SectionContainer>
-        <SectionTitle>Link Previews</SectionTitle>
+        <SectionTitle>Note Card</SectionTitle>
+        <OptionRow>
+          <Label style={{ marginBottom: 0 }}>Show Card Images</Label>
+          <Switch
+            id="notecard-gallery-toggle"
+            checked={showNoteCardGallery}
+            onChange={toggleNoteCardGallery}
+          />
+        </OptionRow>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary-color)', margin: 0 }}>
+          Thumbnail strip at the bottom of note cards in Grid and Stacked views.
+        </p>
         <OptionRow>
           <Label style={{ marginBottom: 0 }}>Show Link Previews</Label>
           <Switch
@@ -333,7 +359,7 @@ const AppearanceTab = ({ settings, commit, isDarkTheme, toggleTheme }) => {
         </OptionRow>
         {showLinkPreviews && (
           <OptionRow>
-            <Label style={{ marginBottom: 0 }}>Show Preview Images</Label>
+            <Label style={{ marginBottom: 0 }}>Show Link Preview Images</Label>
             <Switch
               id="link-preview-images-toggle"
               checked={showLinkPreviewImages}

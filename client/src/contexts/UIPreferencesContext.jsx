@@ -63,6 +63,16 @@ export const UIPreferencesProvider = ({ children }) => {
     return saved === 'true'; // Default false
   });
 
+  // Thumbnail strip at the bottom of the note editor
+  const [showNoteFormGallery, setShowNoteFormGallery] = useState(() => {
+    return localStorage.getItem('showNoteFormGallery') !== 'false'; // Default true
+  });
+
+  // Thumbnail strip on note cards (grid/stacked views)
+  const [showNoteCardGallery, setShowNoteCardGallery] = useState(() => {
+    return localStorage.getItem('showNoteCardGallery') !== 'false'; // Default true
+  });
+
   const [pinnedFolderIds, setPinnedFolderIds] = useState(() => {
     const saved = localStorage.getItem('pinnedFolderIds');
     return saved ? JSON.parse(saved) : [];
@@ -240,6 +250,22 @@ export const UIPreferencesProvider = ({ children }) => {
     });
   }, []);
 
+  const toggleNoteFormGallery = useCallback(() => {
+    setShowNoteFormGallery(prev => {
+      const newValue = !prev;
+      localStorage.setItem('showNoteFormGallery', String(newValue));
+      return newValue;
+    });
+  }, []);
+
+  const toggleNoteCardGallery = useCallback(() => {
+    setShowNoteCardGallery(prev => {
+      const newValue = !prev;
+      localStorage.setItem('showNoteCardGallery', String(newValue));
+      return newValue;
+    });
+  }, []);
+
   // --- Pinned Folders Functions ---
 
   const pinFolder = useCallback((id) => {
@@ -336,6 +362,8 @@ export const UIPreferencesProvider = ({ children }) => {
     showLinkPreviews,
     showLinkPreviewImages,
     fullscreenNoteForm,
+    showNoteFormGallery,
+    showNoteCardGallery,
     colorLabels,
     pageBackgroundEnabled,
     pageBgPreview: pageBgBase ? adaptBackgroundForTheme(pageBgBase, isDarkTheme) : null,
@@ -357,6 +385,8 @@ export const UIPreferencesProvider = ({ children }) => {
     toggleLinkPreviews,
     toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
+    toggleNoteFormGallery,
+    toggleNoteCardGallery,
     setColorLabel,
     setAllColorLabels,
     getColorLabel,
@@ -376,6 +406,8 @@ export const UIPreferencesProvider = ({ children }) => {
     showLinkPreviews,
     showLinkPreviewImages,
     fullscreenNoteForm,
+    showNoteFormGallery,
+    showNoteCardGallery,
     colorLabels,
     pageBackgroundEnabled,
     pageBgBase,
@@ -398,6 +430,8 @@ export const UIPreferencesProvider = ({ children }) => {
     toggleLinkPreviews,
     toggleLinkPreviewImages,
     toggleFullscreenNoteForm,
+    toggleNoteFormGallery,
+    toggleNoteCardGallery,
     setColorLabel,
     setAllColorLabels,
     getColorLabel,

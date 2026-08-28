@@ -699,8 +699,8 @@ export const NoteActionBar = ({
   const addContentButtonRef = useRef(null); // Ref for the add content button
   const tagsContainerRef = useRef(null); // Ref for scrolling tags container to start
   
-  // Get fullscreen setting from context
-  const { fullscreenNoteForm } = useUIPreferences();
+  // Get fullscreen and image strip settings from context
+  const { fullscreenNoteForm, showNoteFormGallery } = useUIPreferences();
 
   // Scroll tags container to start when suggestedTags change (on mobile)
   useEffect(() => {
@@ -813,7 +813,7 @@ export const NoteActionBar = ({
     >
       <FooterContent>
         {/* Display images */}
-        {images.length > 0 && (
+        {showNoteFormGallery && images.length > 0 && (
           <ImageGallery
             images={images}
             onRemoveImage={onRemoveImage}

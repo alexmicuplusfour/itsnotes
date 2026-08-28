@@ -14,6 +14,7 @@ import CompactImdbCard from './CompactImdbCard';
 import LinkPreviewCard from './LinkPreviewCard';
 import { loadNoteImages } from '../services/imageManager';
 import { useInlineImageResolution } from '../hooks/useInlineImageResolution';
+import { useUIPreferences } from '../contexts/UIPreferencesContext';
 
 
 // Define highlight animation - simpler scale effect without glow
@@ -723,6 +724,10 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   // Use images directly from the note prop, default to empty array if not present
   const images = useMemo(() => note?.images || [], [note?.images]);
   const sketches = useMemo(() => note?.sketches || [], [note?.sketches]);
+  const { showNoteCardGallery } = useUIPreferences();
+  // The thumbnail strip and the spacing that depends on it key off this, so
+  // hiding the strip also releases the extra card height and margins.
+  const stripVisible = showNoteCardGallery && (images.length > 0 || sketches.length > 0);
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     !document.documentElement.classList.contains('light-theme')
   );
@@ -1107,7 +1112,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         ref={cardRef}
         style={cardColorStyle}
         $isPinned={note.is_pinned}
-        $hasImages={images.length > 0}
+        $hasImages={stripVisible}
         $hasLinks={hasLinkPreviews}
         $hasTags={visibleTags.length > 0} // Use visibleTags for layout check
         $justEdited={justEdited}
@@ -1150,7 +1155,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         )}
         
         {/* Display images and sketches if any */}
-        {(images.length > 0 || sketches.length > 0) && (
+        {stripVisible && (
           <div>
             <ImageGallery
               images={images}
@@ -1164,7 +1169,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         
         {/* Link preview cards (max 3; images hidden once there are 3) */}
         {hasLinkPreviews && (
-          <LinkPreviewList $compact={images.length > 0 || sketches.length > 0}>
+          <LinkPreviewList $compact={stripVisible}>
             {previewLinks.map(link => (
               <LinkPreviewCard key={link.id} link={link} isDark={isDarkTheme} showImage={showLinkImages} oneLine={oneLinePreviewText} />
             ))}
@@ -1174,7 +1179,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         {/* Display tags, URLs, book references, note references, and objects if any */}
         {(noteTags.length > 0 || noteUrls.length > 0 || bookReferences.length > 0 || noteReferences.length > 0 || noteObjects.length > 0) && (
           <TagsContainer style={{
-            marginTop: images.length > 0 ?
+            marginTop: stripVisible ?
               (isMobile ? '2px' : '4px') : '0'
           }}>
         {/* Display object chips */}
