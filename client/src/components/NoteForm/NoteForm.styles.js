@@ -377,8 +377,10 @@ export const TitleRow = styled.div`
   /* Make room for the floating actions pill. --pill-clearance is measured
      from the real pill (set on FormContainer by NoteForm's ResizeObserver),
      so it tracks the pill's actual width per note state and is 0 when the
-     pill doesn't overlap the title (new note, fullscreen on wide screens). */
-  padding-right: var(--pill-clearance, 160px);
+     pill doesn't overlap the title (new note, fullscreen on wide screens).
+     While the title is focused the pill fades out, so the title claims the
+     vacated space; the transition below slides it in and out. */
+  padding-right: ${props => props.$titleFocused ? '0' : 'var(--pill-clearance, 160px)'};
   transition: padding-right 0.15s ease;
   /* Don't shrink - maintain natural height */
   flex-shrink: 0;

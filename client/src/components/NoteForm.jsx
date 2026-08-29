@@ -2628,7 +2628,7 @@ const NoteForm = forwardRef(({ note, onClose: _onClose, isListView = false, onPr
             <ContentWrapper ref={contentWrapperRef} $fullscreen={effectiveFullscreen}>
             {/* Title Row with Input - now scrolls with content */}
             {!showSearch && (
-              <TitleRow>
+              <TitleRow $titleFocused={titleFocused}>
                 <TitleInputWrapper>
                   <TitleInput
                     ref={titleInputRef}
