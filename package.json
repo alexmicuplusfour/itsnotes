@@ -1,7 +1,7 @@
 {
   "name": "itsnotes",
   "version": "1.0.0",
-  "description": "itsnotes — a personal notes app built with Node.js and PostgreSQL",
+  "description": "itsnotes \u2014 a personal notes app built with Node.js and PostgreSQL",
   "license": "MIT",
   "main": "index.js",
   "scripts": {
@@ -18,5 +18,8 @@
     "html-to-text": "^9.0.5",
     "react-textarea-autosize": "^8.5.7",
     "uuid": "^11.1.0"
+  },
+  "overrides": {
+    "shell-quote": "1.9.0"
   }
 }
