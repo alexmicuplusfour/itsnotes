@@ -15,6 +15,9 @@ import LinkPreviewCard from './LinkPreviewCard';
 import { loadNoteImages } from '../services/imageManager';
 import { useInlineImageResolution } from '../hooks/useInlineImageResolution';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
+import { buildNoteStateActions } from '../utils/noteCardActions';
+import { useMobileActionStrip } from '../hooks/useMobileActionStrip';
+import MobileNoteActionStrip from './MobileNoteActionStrip';
 
 
 // Define highlight animation - simpler scale effect without glow
@@ -710,7 +713,6 @@ const extractNoteReferences = (text, urlsToExclude = []) => {
  
 const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPickerOpen, isSelected, onToggleSelect }) {
   const [justEdited, setJustEdited] = useState(false);
-  const [showActions, setShowActions] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTagsModal, setShowTagsModal] = useState(false);
   const [openProgressFlyout, setOpenProgressFlyout] = useState(null); // Track which object's flyout is open
@@ -731,8 +733,8 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   const [isDarkTheme, setIsDarkTheme] = useState(() =>
     !document.documentElement.classList.contains('light-theme')
   );
-  //const isMobile = useState(() => window.innerWidth <= 768)[0];
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  // 600 matches both the resize handler below and the card's own CSS breakpoint.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 600);
   const [isHovered, setIsHovered] = useState(false); // Hover state
 
   // Extract URLs from note content
@@ -768,15 +770,11 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   useEffect(() => { noteIdRef.current = note.id; }, [note.id]);
   
   // Use NoteActionsContext for stable action references (prevents re-renders when openedNote changes)
+  // The whole (memoized) value is kept too - buildNoteStateActions takes it as its handler bag,
+  // so the archive/pin/trash handlers don't need destructuring here.
+  const noteActions = useNoteActions();
   const {
-    togglePin,
-    archiveNote,
-    unarchiveNote,
-    trashNote,
-    restoreNote,
-    deleteNote,
     changeNoteColor,
-    updateNote,
     openNoteById,
     view,
     searchByTag,
@@ -790,7 +788,7 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
     getNoteCacheStatus,
     prefetchNoteToCache,
     getViewportPrefetchDelay,
-  } = useNoteActions();
+  } = noteActions;
 
   // Subscribe to this note's prefetch-status; only re-renders when it flips.
   const subscribeCacheStatus = useCallback(
@@ -808,6 +806,13 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   // requests. Cancelled when scrolling away before the timer elapses.
   const cardRef = useRef(null);
   const contentRef = useRef(null);
+  // Mobile long-press action strip (archive / pin / trash), floating over this card.
+  const {
+    isOpen: showMobileActions,
+    open: openMobileActions,
+    close: closeMobileActions,
+    dismissOnTap: dismissStripOnTap,
+  } = useMobileActionStrip(cardRef);
   // Resolve inline body images that reference a note_images row by id.
   useInlineImageResolution(contentRef, [note.content]);
   useEffect(() => {
@@ -907,9 +912,6 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
   // NOTE: useNavigate intentionally removed - navigateToNote from context uses ref pattern
   // to prevent NoteCard from re-rendering when URL changes
 
-  const isNoteDeleted = useMemo(() => note?.is_deleted === true, [note]);
-  const isNoteArchived = useMemo(() => note?.is_archived === true, [note]);
-
   // Updated click handler - MIGRATED to new navigation system
   const handleCardClick = useCallback((e) => {
     // Prevent click from propagating if clicking on interactive elements inside
@@ -918,23 +920,26 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
       return;
     }
 
+    // Checked before the strip so bulk selection always wins: the strip is hidden during
+    // selection mode, so a tap must not be swallowed by strip state left over from before.
     if (selectionModeRef.current) {
-      // If in selection mode, toggle selection
       onToggleSelect(note.id);
-    } else {
-      // Otherwise, open the note
-      if (note?.id && !note.id.toString().startsWith('temp-')) {
-        console.log("Opening note:", note.id, "Search mode:", searchMode);
-
-        // NEW: Use centralized navigation system
-        openNote(note.id, 'card');
-
-      } else if (note) {
-        // For temporary notes, just open directly (no URL change)
-        openNoteById(note.id);
-      }
+      return;
     }
-  }, [note, openNoteById, onToggleSelect, searchMode, openNote]);
+
+    if (dismissStripOnTap()) return;
+
+    if (note?.id && !note.id.toString().startsWith('temp-')) {
+      console.log("Opening note:", note.id, "Search mode:", searchMode);
+
+      // NEW: Use centralized navigation system
+      openNote(note.id, 'card');
+
+    } else if (note) {
+      // For temporary notes, just open directly (no URL change)
+      openNoteById(note.id);
+    }
+  }, [note, openNoteById, onToggleSelect, searchMode, openNote, dismissStripOnTap]);
   
   const handleCloseEdit = useCallback(() => {
     triggerAnimation();
@@ -945,16 +950,22 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
     onPickerOpen(null);
   }, [onPickerOpen]);
   
+  // Long-press (touch) / right-click (desktop). On mobile this opens the card's own action
+  // strip instead of selecting, so single-note actions land on the card you pressed rather
+  // than in the bulk pill at the bottom of the screen. Once selection mode is already
+  // running, long-press keeps its old meaning so you can go on adding notes to it.
   const handleLongPress = useCallback((e) => {
     e.stopPropagation();
     e.preventDefault();
-    setShowActions(true);
-    /*if ('vibrate' in navigator) {
-      navigator.vibrate(30);
-    }*/
+
+    if (isMobile && !selectionModeRef.current) {
+      openMobileActions();
+      return;
+    }
+
     // *** Immediately select the note that was long-pressed ***
     onToggleSelect(note.id);
-  }, [note?.id, onToggleSelect]);
+  }, [note?.id, onToggleSelect, isMobile, openMobileActions]);
 
   const handleColorSelect = useCallback(async (color) => {
     await changeNoteColor(note.id, color);
@@ -1122,15 +1133,15 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
         onMouseEnter={handleMouseEnter} // Use memoized handler
         onMouseLeave={handleMouseLeave} // Use memoized handler
         onContextMenu={handleLongPress}
-        className={showActions && !isMobile ? 'active' : ''}
       >
         {/* Selection Checkbox */}
         <SelectionCheckbox
           className="selection-checkbox-class" // Add class name
-          $visible={(isHovered && !isMobile) || isSelected}
+          $visible={(isHovered && !isMobile) || isSelected || showMobileActions}
           $isSelected={isSelected}
           onClick={(e) => {
             e.stopPropagation(); // Prevent card click when clicking checkbox
+            closeMobileActions();
             onToggleSelect(note.id);
           }}
         >
@@ -1365,15 +1376,12 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
           </TagsContainer>
         )}
         
-        {/* Conditionally render ActionBar on non-mobile: show on hover OR if a picker/modal is open */}
-      {/* Conditionally render ActionBar or Placeholder on non-mobile */}
+        {/* Non-mobile: the hover bar, or a placeholder holding its height */}
       { !isMobile && (
           (isHovered || showColorPicker || showTagsModal) ? (
-            // Render the actual ActionBar when hovered or pickers are open
             <ActionBar
               onClick={(e) => e.stopPropagation()}
             >
-              <>
                 <ActionButton
                   ref={colorButtonRef}
                   className="palette-button"
@@ -1393,65 +1401,29 @@ const NoteCard = memo(function NoteCard({ note, searchQuery, layoutView, onPicke
                   <Icon name="tag" size={18} />
                 </ActionButton>
 
-                {/* ... rest of the ActionButtons based on view ... */}
-                {!isNoteArchived && !isNoteDeleted && (
+                {buildNoteStateActions({ note, view, actions: noteActions }).map(action => (
                   <ActionButton
-                    title="Archive"
-                    onClick={() => archiveNote(note.id)}
+                    key={action.key}
+                    title={action.title}
+                    onClick={action.run}
                     theme={isDarkTheme ? 'dark' : 'light'}
                   >
-                    <Icon name="archive" size={18} />
+                    <Icon name={action.icon} size={18} />
                   </ActionButton>
-                )}
-                {isNoteArchived && (
-                  <ActionButton
-                    title="Unarchive"
-                    onClick={() => unarchiveNote(note.id)}
-                    theme={isDarkTheme ? 'dark' : 'light'}
-                  >
-                    <Icon name="unarchive" size={18} />
-                  </ActionButton>
-                )}
-                <ActionButton
-                  title={note.is_pinned ? "Unpin" : "Pin"}
-                  onClick={() => togglePin(note.id)}
-                  theme={isDarkTheme ? 'dark' : 'light'}
-                >
-                  <Icon name={note.is_pinned ? "pinned" : "pin"} size={18} />
-                </ActionButton>
-                {(view === 'main' || view === 'archive') && (
-                  <ActionButton
-                    title="Move to trash"
-                    onClick={() => trashNote(note.id)}
-                    theme={isDarkTheme ? 'dark' : 'light'}
-                  >
-                    <Icon name="trash" size={18} />
-                  </ActionButton>
-                )}
-                {view === 'trash' && (
-                  <>
-                    <ActionButton
-                      title="Restore"
-                      onClick={() => restoreNote(note.id)}
-                      theme={isDarkTheme ? 'dark' : 'light'}
-                    >
-                      <Icon name="restore" size={18} />
-                    </ActionButton>
-                    <ActionButton
-                      title="Delete permanently"
-                      onClick={() => deleteNote(note.id)}
-                      theme={isDarkTheme ? 'dark' : 'light'}
-                    >
-                      <Icon name="deleteForever" size={18} />
-                    </ActionButton>
-                  </>
-                )}
-              </>
+                ))}
             </ActionBar>
           ) : (
-            // Render the Placeholder when not hovered and pickers are closed
             <ActionBarPlaceholder />
           )
+      )}
+
+      {isMobile && showMobileActions && (
+        <MobileNoteActionStrip
+          note={note}
+          view={view}
+          actions={noteActions}
+          onDismiss={closeMobileActions}
+        />
       )}
       </Card>
 

@@ -270,14 +270,10 @@ function ListView({ searchQuery }) {
   const { hiddenTagIds, pickerOpenForNoteId } = useTags();
   const { showMonthMarkers, showQuickAccess } = useUIPreferences();
   
-  // Get stable action handlers from context - pass to children as props
+  // Get stable action handlers from context - pass to children as props.
+  // Archive/pin/trash and friends aren't here: rows read those from the context themselves,
+  // in the shape buildNoteStateActions wants.
   const {
-    togglePin,
-    archiveNote,
-    unarchiveNote,
-    trashNote,
-    restoreNote,
-    deleteNote,
     changeNoteColor,
     openNote, // NEW: Use new navigation system
     closeNote, // NEW: Use new navigation system for closing
@@ -622,7 +618,9 @@ function ListView({ searchQuery }) {
   }, [showMonthMarkers, searchMode, notesByMonth, view]);
   
   return (
-    <ListViewContainer>
+    // `selection-mode` is what the shared mobile action strip keys off to hide itself while
+    // bulk selection is running - same class NotesList sets on the grid container.
+    <ListViewContainer className={selectedNoteIds.size > 0 ? 'selection-mode' : ''}>
       {/* Left Panel - Notes List */}
       <ListPanel $hasOpenNote={!!openedNoteId}>
         {/* Sticky Month Header - centered on list panel */}
@@ -688,14 +686,9 @@ function ListView({ searchQuery }) {
                     isPrevSelected={index > 0 && selectedNoteIds.has(pinnedNotes[index - 1].id)}
                     isNextSelected={index < pinnedNotes.length - 1 && selectedNoteIds.has(pinnedNotes[index + 1].id)}
                     isSelectionMode={selectedNoteIds.size > 0}
+                    isMobile={isMobile}
                     onSelect={handleNoteSelect}
                     onToggleSelection={toggleNoteSelection}
-                    onTogglePin={togglePin}
-                    onArchive={archiveNote}
-                    onUnarchive={unarchiveNote}
-                    onTrash={trashNote}
-                    onRestore={restoreNote}
-                    onDelete={deleteNote}
                     onChangeColor={changeNoteColor}
                     view={view}
                     searchQuery={searchQuery}
@@ -738,14 +731,9 @@ function ListView({ searchQuery }) {
                           isPrevSelected={index > 0 && selectedNoteIds.has(monthGroup.notes[index - 1].id)}
                           isNextSelected={index < monthGroup.notes.length - 1 && selectedNoteIds.has(monthGroup.notes[index + 1].id)}
                           isSelectionMode={selectedNoteIds.size > 0}
+                          isMobile={isMobile}
                           onSelect={handleNoteSelect}
                           onToggleSelection={toggleNoteSelection}
-                          onTogglePin={togglePin}
-                          onArchive={archiveNote}
-                          onUnarchive={unarchiveNote}
-                          onTrash={trashNote}
-                          onRestore={restoreNote}
-                          onDelete={deleteNote}
                           onChangeColor={changeNoteColor}
                           view={view}
                           searchQuery={searchQuery}
@@ -768,14 +756,9 @@ function ListView({ searchQuery }) {
                         isPrevSelected={index > 0 && selectedNoteIds.has(notesToRender[index - 1].id)}
                         isNextSelected={index < notesToRender.length - 1 && selectedNoteIds.has(notesToRender[index + 1].id)}
                         isSelectionMode={selectedNoteIds.size > 0}
+                        isMobile={isMobile}
                         onSelect={handleNoteSelect}
                         onToggleSelection={toggleNoteSelection}
-                        onTogglePin={togglePin}
-                        onArchive={archiveNote}
-                        onUnarchive={unarchiveNote}
-                        onTrash={trashNote}
-                        onRestore={restoreNote}
-                        onDelete={deleteNote}
                         onChangeColor={changeNoteColor}
                         view={view}
                         searchQuery={searchQuery}

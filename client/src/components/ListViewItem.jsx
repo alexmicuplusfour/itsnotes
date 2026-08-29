@@ -6,6 +6,9 @@ import { TagPicker } from './NoteTagPicker';
 import { formatDistanceToNow } from 'date-fns';
 import { getServerUrl } from '../services/api';
 import { useNoteActions } from '../contexts/NoteActionsContext';
+import { useMobileActionStrip } from '../hooks/useMobileActionStrip';
+import MobileNoteActionStrip from './MobileNoteActionStrip';
+import { buildNoteStateActions } from '../utils/noteCardActions';
 
 // Container for the list item
 const ItemContainer = styled.div`
@@ -316,15 +319,10 @@ const ListViewItem = memo(function ListViewItem({
   isSelectionMode = false,
   onSelect,
   onToggleSelection,
-  onTogglePin,
-  onArchive,
-  onUnarchive,
-  onTrash,
-  onRestore,
-  onDelete,
   onChangeColor,
   view,
-  searchQuery
+  searchQuery,
+  isMobile = false
 }) {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTagPicker, setShowTagPicker] = useState(false);
@@ -337,12 +335,23 @@ const ListViewItem = memo(function ListViewItem({
   const tagPickerRef = useRef(null);
   const itemRef = useRef(null);
 
+  // Mobile long-press action strip. Rows hide their hover actions on mobile, so this is the
+  // only per-note route to archive / pin / trash there - same mechanism the grid's cards use.
+  const {
+    isOpen: showMobileActions,
+    open: openMobileActions,
+    close: closeMobileActions,
+    dismissOnTap: dismissStripOnTap,
+  } = useMobileActionStrip(itemRef);
+
+  // The whole (memoized) context value doubles as buildNoteStateActions' handler bag.
+  const noteActions = useNoteActions();
   const {
     subscribeToCacheStatus,
     getNoteCacheStatus,
     prefetchNoteToCache,
     getViewportPrefetchDelay,
-  } = useNoteActions();
+  } = noteActions;
 
   const subscribeCacheStatus = useCallback(
     (cb) => subscribeToCacheStatus(note.id, cb),
@@ -385,9 +394,6 @@ const ListViewItem = memo(function ListViewItem({
   // Memoize hover handlers to prevent recreating on each render
   const handleMouseEnter = useCallback(() => setIsHovered(true), []);
   const handleMouseLeave = useCallback(() => setIsHovered(false), []);
-  
-  const isNoteDeleted = note?.is_deleted === true;
-  const isNoteArchived = note?.is_archived === true;
 
   // Extract book object if present
   const bookObject = useMemo(() => {
@@ -445,47 +451,28 @@ const ListViewItem = memo(function ListViewItem({
 
     if (isSelectionMode) {
       onToggleSelection(note.id);
-    } else if (onSelect) {
+      return;
+    }
+
+    if (dismissStripOnTap()) return;
+
+    if (onSelect) {
       onSelect(note);
     }
-  }, [note, onSelect, isSelectionMode, onToggleSelection]);
+  }, [note, onSelect, isSelectionMode, onToggleSelection, dismissStripOnTap]);
 
-  // Handle context menu (right-click on desktop, long-press on mobile)
+  // Right-click on desktop, long press on mobile - see useMobileActionStrip.
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
-    onToggleSelection(note.id);
-  }, [note.id, onToggleSelection]);
-  
-  // Action handlers
-  const handlePin = useCallback((e) => {
-    e.stopPropagation();
-    onTogglePin(note.id);
-  }, [note.id, onTogglePin]);
-  
-  const handleArchive = useCallback((e) => {
-    e.stopPropagation();
-    if (isNoteArchived) {
-      onUnarchive(note.id);
-    } else {
-      onArchive(note.id);
+
+    if (isMobile && !isSelectionMode) {
+      openMobileActions();
+      return;
     }
-  }, [note.id, isNoteArchived, onArchive, onUnarchive]);
-  
-  const handleTrash = useCallback((e) => {
-    e.stopPropagation();
-    onTrash(note.id);
-  }, [note.id, onTrash]);
-  
-  const handleRestore = useCallback((e) => {
-    e.stopPropagation();
-    onRestore(note.id);
-  }, [note.id, onRestore]);
-  
-  const handleDelete = useCallback((e) => {
-    e.stopPropagation();
-    onDelete(note.id);
-  }, [note.id, onDelete]);
+
+    onToggleSelection(note.id);
+  }, [note.id, onToggleSelection, isMobile, isSelectionMode, openMobileActions]);
   
   // Color picker handlers
   const handleColorClick = useCallback((e) => {
@@ -515,7 +502,7 @@ const ListViewItem = memo(function ListViewItem({
   }, []);
   
   const pickerOpen = showColorPicker || showTagPicker;
-  const showActions = isHovered || pickerOpen;
+  const showHoverActions = isHovered || pickerOpen;
 
   // Compute inline style for color CSS variables - avoids styled-components class regeneration
   const itemColorStyle = useMemo(() => {
@@ -539,8 +526,10 @@ const ListViewItem = memo(function ListViewItem({
   }, [note.color, isActive]);
 
   // Determine if checkbox should be visible
-  // Show on hover, when selected, or when in selection mode (any note selected)
-  const showCheckbox = isHovered || isSelected || isSelectionMode;
+  // Show on hover, when selected, or when in selection mode (any note selected). Also shown
+  // with the mobile action strip: it's how you get from one note to many, and the only thing
+  // that advertises selection on touch.
+  const showCheckbox = isHovered || isSelected || isSelectionMode || showMobileActions;
 
   return (
     <ItemContainer
@@ -565,6 +554,7 @@ const ListViewItem = memo(function ListViewItem({
         $isSelected={isSelected}
         onClick={(e) => {
           e.stopPropagation();
+          closeMobileActions();
           onToggleSelection(note.id);
         }}
       >
@@ -610,7 +600,7 @@ const ListViewItem = memo(function ListViewItem({
           </DateText>
           
           {/* Hover action buttons - only render when hovered or picker open */}
-          {showActions && !isSelectionMode && (
+          {showHoverActions && !isSelectionMode && (
             <HoverActions className="hover-actions" $forceVisible={pickerOpen}>
               <ActionButton
                 ref={colorButtonRef}
@@ -628,56 +618,15 @@ const ListViewItem = memo(function ListViewItem({
                 <Icon name="tag" size={18} />
               </ActionButton>
               
-              <ActionButton
-                title={note.is_pinned ? "Unpin" : "Pin"}
-                onClick={handlePin}
-              >
-                <Icon name={note.is_pinned ? "pinned" : "pin"} size={18} />
-              </ActionButton>
-              
-              {!isNoteArchived && !isNoteDeleted && (
+              {buildNoteStateActions({ note, view, actions: noteActions }).map(action => (
                 <ActionButton
-                  title="Archive"
-                  onClick={handleArchive}
+                  key={action.key}
+                  title={action.title}
+                  onClick={(e) => { e.stopPropagation(); action.run(); }}
                 >
-                  <Icon name="archive" size={18} />
+                  <Icon name={action.icon} size={18} />
                 </ActionButton>
-              )}
-              
-              {isNoteArchived && (
-                <ActionButton
-                  title="Unarchive"
-                  onClick={handleArchive}
-                >
-                  <Icon name="unarchive" size={18} />
-                </ActionButton>
-              )}
-              
-              {(view === 'main' || view === 'archive') && (
-                <ActionButton
-                  title="Move to trash"
-                  onClick={handleTrash}
-                >
-                  <Icon name="trash" size={18} />
-                </ActionButton>
-              )}
-              
-              {view === 'trash' && (
-                <>
-                  <ActionButton
-                    title="Restore"
-                    onClick={handleRestore}
-                  >
-                    <Icon name="restore" size={18} />
-                  </ActionButton>
-                  <ActionButton
-                    title="Delete permanently"
-                    onClick={handleDelete}
-                  >
-                    <Icon name="deleteForever" size={18} />
-                  </ActionButton>
-                </>
-              )}
+              ))}
             </HoverActions>
           )}
         </BottomRow>
@@ -705,6 +654,15 @@ const ListViewItem = memo(function ListViewItem({
           forceAutoApply={true}
         />
       )}
+
+      {isMobile && showMobileActions && (
+        <MobileNoteActionStrip
+          note={note}
+          view={view}
+          actions={noteActions}
+          onDismiss={closeMobileActions}
+        />
+      )}
     </ItemContainer>
   );
 }, (prevProps, nextProps) => {
@@ -715,6 +673,7 @@ const ListViewItem = memo(function ListViewItem({
   if (prevProps.isPrevSelected !== nextProps.isPrevSelected) return false;
   if (prevProps.isNextSelected !== nextProps.isNextSelected) return false;
   if (prevProps.isSelectionMode !== nextProps.isSelectionMode) return false;
+  if (prevProps.isMobile !== nextProps.isMobile) return false;
   if (prevProps.view !== nextProps.view) return false;
   if (prevProps.searchQuery !== nextProps.searchQuery) return false;
   if (prevProps.note.title !== nextProps.note.title) return false;
