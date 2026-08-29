@@ -14,7 +14,9 @@ const stripFadeIn = keyframes`
 
 const Strip = styled.div`
   position: absolute;
-  right: 6px;
+  /* Hosts whose own controls sit in the bottom-right corner raise this to clear them -
+     see ItemContainer, whose selection checkbox is right-aligned. */
+  right: var(--strip-inset-right, 6px);
   bottom: 6px;
   z-index: 12;
   display: flex;

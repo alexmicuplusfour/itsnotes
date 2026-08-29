@@ -24,6 +24,11 @@ const ItemContainer = styled.div`
   min-height: 72px;
   overflow: hidden;
 
+  /* Rows put their selection checkbox at the top right (right: 10px, 20px wide, so its left
+     edge is 30px in) and a 72px row is too short for the action strip to clear it vertically.
+     Push the strip left of it instead. Cards don't need this - their checkbox is top left. */
+  --strip-inset-right: 40px;
+
   /* Active/selected state - darken the background */
   filter: ${props => (props.$isActive || props.$isSelected) ? 'brightness(0.9)' : 'none'};
 
