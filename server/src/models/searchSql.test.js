@@ -97,10 +97,16 @@ beforeAll(async () => {
   db = require('../knex').db;
   Note = require('./Note');
 
-  // 3. Apply the real production schema, then seed.
-  const schema = fs.readFileSync(
-    path.join(__dirname, '..', '..', 'migrations', '0001_baseline.sql'), 'utf8');
-  await db.raw(schema);
+  // 3. Apply the real production schema — every migration in order, same as a
+  // fresh install — then seed. (Baseline alone is not enough: the search path
+  // reads tables added by later migrations, e.g. note_sketches from 0009.)
+  const migrationsDir = path.join(__dirname, '..', '..', 'migrations');
+  const migrationFiles = fs.readdirSync(migrationsDir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
+  for (const file of migrationFiles) {
+    await db.raw(fs.readFileSync(path.join(migrationsDir, file), 'utf8'));
+  }
   await seed();
 }, 60000);
 
