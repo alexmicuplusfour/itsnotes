@@ -22,6 +22,7 @@ import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useNoteActions } from '../contexts/NoteActionsContext';
 import { useNoteSelection } from '../contexts/NoteSelectionContext';
 import { useSelectionKeyboardShortcuts } from '../hooks/useSelectionKeyboardShortcuts';
+import { groupNotesByMonth } from '../utils/groupNotesByMonth';
 
 // Main container for the list view layout
 const ListViewContainer = styled.div`
@@ -382,31 +383,7 @@ function ListView({ searchQuery }) {
       return [{ notes: unpinnedNotes, label: null }];
     }
 
-    const monthShortNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-    const grouped = {};
-    unpinnedNotes.forEach(note => {
-      const date = new Date(note.created_at);
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const monthYearKey = `${year}-${month}`;
-
-      if (!grouped[monthYearKey]) {
-        grouped[monthYearKey] = {
-          label: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          year,
-          month,
-          monthShort: monthShortNames[month - 1],
-          notes: [],
-          timestamp: date.getTime()
-        };
-      }
-      grouped[monthYearKey].notes.push(note);
-    });
-
-    // Month groups follow the list direction (newest or oldest first)
-    return Object.values(grouped).sort((a, b) =>
-      sortOldestFirst ? a.timestamp - b.timestamp : b.timestamp - a.timestamp
-    );
+    return groupNotesByMonth(unpinnedNotes, { oldestFirst: sortOldestFirst });
   }, [unpinnedNotes, searchMode, showMonthMarkers, createdSortActive, sortOldestFirst, view]);
   
   // Handle window resize

@@ -70,18 +70,13 @@ const loadStoredSorts = () => {
 export const SortingProvider = ({ children }) => {
   const [currentSort, setCurrentSort] = useState(loadStoredSorts);
 
-  // Get current sort for a view
-  const getSortForView = useCallback((view) => {
-    const currentSortForView = currentSort[view] || VIEW_DEFAULT_SORTS[view];
-    const availableSorts = VIEW_AVAILABLE_SORTS[view] || [];
-
-    // If the current sort is not available for this view, use the default
-    if (!availableSorts.includes(currentSortForView)) {
-      return VIEW_DEFAULT_SORTS[view];
-    }
-
-    return currentSortForView;
-  }, [currentSort]);
+  // Get current sort for a view. Both writers — loadStoredSorts and
+  // setSortForView — reject options a view doesn't offer, so whatever is in
+  // state is already valid for its view.
+  const getSortForView = useCallback(
+    (view) => currentSort[view] || VIEW_DEFAULT_SORTS[view],
+    [currentSort]
+  );
 
   // Set sort for a specific view (persisted)
   const setSortForView = useCallback((view, sortOption) => {
@@ -108,16 +103,8 @@ export const SortingProvider = ({ children }) => {
   }, []);
 
   const contextValue = {
-    // Constants
     SORT_OPTIONS,
     SORT_LABELS,
-    VIEW_DEFAULT_SORTS,
-    VIEW_AVAILABLE_SORTS,
-
-    // State
-    currentSort,
-
-    // Functions
     getSortForView,
     setSortForView,
     getAvailableSortsForView,
@@ -131,4 +118,4 @@ export const SortingProvider = ({ children }) => {
   );
 };
 
-export { SORT_OPTIONS, isCreatedSort };
+export { SORT_OPTIONS };

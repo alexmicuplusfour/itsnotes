@@ -4,6 +4,35 @@ const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
 const { ORDER_SPECS, normalizeSearchSort, defaultListSort } = require('./noteSort');
 
 /**
+ * The note-card projection shared by the list and search queries: every column a
+ * card needs, with content truncated in SQL when the caller asks. Columns are
+ * `notes.`-qualified so the same projection works with or without joins.
+ * Mutates the query in place.
+ */
+const selectNoteCardFields = (query, truncateContent = true, contentLimit = 300) => {
+  if (truncateContent) {
+    query.select([
+      'notes.id',
+      'notes.title',
+      db.raw(`CASE
+        WHEN length(notes.content) > ? THEN substring(notes.content, 1, ?) || '...'
+        ELSE notes.content
+      END as content`, [contentLimit, contentLimit]),
+      'notes.color',
+      'notes.is_pinned',
+      'notes.is_archived',
+      'notes.is_deleted',
+      'notes.created_at',
+      'notes.updated_at',
+      'notes.version',
+      'notes.metadata'
+    ]);
+  } else {
+    query.select('notes.*', 'notes.version');
+  }
+};
+
+/**
  * SearchQueryBuilder - A unified query builder for all note search operations
  * Provides consistent operator support across all search types
  */
@@ -377,26 +406,7 @@ class SearchQueryBuilder {
    * Apply field selection with optional content truncation
    */
   applyFieldSelection(truncateContent = true, contentLimit = 300) {
-    if (truncateContent) {
-      this.query.select([
-        'notes.id',
-        'notes.title',
-        db.raw(`CASE 
-          WHEN length(notes.content) > ? THEN substring(notes.content, 1, ?) || '...'
-          ELSE notes.content
-        END as content`, [contentLimit, contentLimit]),
-        'notes.color',
-        'notes.is_pinned',
-        'notes.is_archived',
-        'notes.is_deleted',
-        'notes.created_at',
-        'notes.updated_at',
-        'notes.version',
-        'notes.metadata'
-      ]);
-    } else {
-      this.query.select('notes.*', 'notes.version');
-    }
+    selectNoteCardFields(this.query, truncateContent, contentLimit);
 
     if (this.needsDistinct) {
       this.query.distinct();
@@ -1090,28 +1100,11 @@ class Note {
    * CRUD Operations using Knex
    */
 
-  // Shared field selection for list queries.
-  static applyListFields(query, truncateContent, contentLimit) {
-    if (truncateContent) {
-      query.select([
-        'id', 'title',
-        db.raw(`CASE
-          WHEN length(content) > ? THEN substring(content, 1, ?) || '...'
-          ELSE content
-        END as content`, [contentLimit, contentLimit]),
-        'color', 'is_pinned', 'is_archived', 'is_deleted',
-        'created_at', 'updated_at', 'version', 'metadata'
-      ]);
-    } else {
-      query.select('*', 'version');
-    }
-    return query;
-  }
-
   // Exclude notes carrying a hidden (visible=false) tag. Main-view unpinned
   // stream only — pinned notes stay visible even with hidden tags.
+  // Mutates the query in place.
   static excludeHiddenTagged(query) {
-    return query.whereNotExists(function () {
+    query.whereNotExists(function () {
       this.select('*')
         .from('note_tags')
         .join('tags', 'note_tags.tag_id', 'tags.id')
@@ -1135,7 +1128,7 @@ class Note {
         .where('is_deleted', false)
         .where('is_pinned', false);
       this.excludeHiddenTagged(unpinnedQuery);
-      this.applyListFields(unpinnedQuery, truncateContent, contentLimit);
+      selectNoteCardFields(unpinnedQuery, truncateContent, contentLimit);
       unpinnedQuery.orderBy(orderSpec).limit(limit).offset(offset);
 
       if (page === 1) {
@@ -1149,7 +1142,7 @@ class Note {
             { column: 'created_at', order: 'desc' },
             { column: 'id', order: 'desc' }
           ]);
-        this.applyListFields(pinnedQuery, truncateContent, contentLimit);
+        selectNoteCardFields(pinnedQuery, truncateContent, contentLimit);
 
         const [pinnedResults, unpinnedResults] = await Promise.all([
           pinnedQuery,
@@ -1164,7 +1157,7 @@ class Note {
       const query = db('notes')
         .where('is_archived', archived)
         .where('is_deleted', deleted);
-      this.applyListFields(query, truncateContent, contentLimit);
+      selectNoteCardFields(query, truncateContent, contentLimit);
       query.orderBy(orderSpec).limit(limit).offset(offset);
       notes = await query;
     }

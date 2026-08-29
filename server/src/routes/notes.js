@@ -82,33 +82,34 @@ router.get('/', async (req, res) => {
     const isArchived = archived === 'true';
     const isDeleted = deleted === 'true';
 
-    const notes = await Note.findAll({
-      page: parseInt(page),
-      limit: parseInt(limit),
-      archived: isArchived,
-      deleted: isDeleted,
-      includeDetails: includeDetails === 'true',
-      truncateContent: truncateContent === 'true' || truncateContent === true,
-      contentLimit: parseInt(contentLimit) || 601,
-      sort: normalizeListSort({
-        sort,
-        sortCriteria,
-        oldestFirst: oldestFirst === 'true',
+    // The page of notes and the total count are independent queries, so run
+    // them concurrently — the count scans the table on its own and doesn't need
+    // the fetched notes. Same shape as the /search handler below.
+    const [notes, totalCount] = await Promise.all([
+      Note.findAll({
+        page: parseInt(page),
+        limit: parseInt(limit),
         archived: isArchived,
-        deleted: isDeleted
-      })
-    });
+        deleted: isDeleted,
+        includeDetails: includeDetails === 'true',
+        truncateContent: truncateContent === 'true' || truncateContent === true,
+        contentLimit: parseInt(contentLimit) || 601,
+        sort: normalizeListSort({
+          sort,
+          sortCriteria,
+          oldestFirst: oldestFirst === 'true',
+          archived: isArchived,
+          deleted: isDeleted
+        })
+      }),
+      Note.getCount({ archived: isArchived, deleted: isDeleted })
+    ]);
 
     // Always add objects and link previews to notes
     if (notes.length > 0) {
       await Note.addObjects(notes);
       await Note.addLinks(notes);
     }
-
-    const totalCount = await Note.getCount({
-      archived: isArchived,
-      deleted: isDeleted
-    });
 
     res.json({
       notes,

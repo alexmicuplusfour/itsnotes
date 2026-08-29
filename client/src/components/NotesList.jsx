@@ -17,6 +17,7 @@ import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useSorting } from '../contexts/SortingContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
+import { groupNotesByMonth } from '../utils/groupNotesByMonth';
 import { useStickyMonthHeaders } from '../hooks/useStickyMonthHeaders';
 import StickyMonthHeaderDisplay from './StickyMonthHeaderDisplay';
 import { useSelectionKeyboardShortcuts } from '../hooks/useSelectionKeyboardShortcuts'; // Import keyboard shortcuts hook
@@ -292,16 +293,20 @@ const NotesList = ({ title, notes, showPinned }) => {
   // Determine if we should sort oldest first based on current sort option
   const currentSortOption = getSortForView(searchMode ? 'search' : view);
   const sortOldestFirst = currentSortOption === SORT_OPTIONS.CREATED_ASC;
-  // Month-of-creation headers only make sense when the list is in
-  // creation-date order; other sorts (Recently Updated) render flat.
   const createdSortActive = isCreatedSort(currentSortOption);
-  
-  const { 
-    layoutView, 
-    saveSearch, 
-    savedSearches, 
-    showMonthMarkers 
+
+  const {
+    layoutView,
+    saveSearch,
+    savedSearches,
+    showMonthMarkers: monthMarkersEnabled
   } = useUIPreferences();
+
+  // Month-of-creation headers only make sense when the list is in
+  // creation-date order; other sorts (Recently Updated) render flat. Folding
+  // that into showMonthMarkers here keeps the rest of the component from
+  // having to remember it.
+  const showMonthMarkers = monthMarkersEnabled && createdSortActive;
   
   // Enable keyboard shortcuts for bulk selection
   useSelectionKeyboardShortcuts();
@@ -369,35 +374,8 @@ const NotesList = ({ title, notes, showPinned }) => {
       // The component will render unpinnedNotes directly without month grouping.
       return [{ notes: unpinnedNotes, label: 'search_results_flat' }]; // label helps differentiate
     }
-    
-    const grouped = {};
-    unpinnedNotes.forEach(note => {
-      const date = new Date(note.created_at);
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const monthYearKey = `${year}-${month}`;
-      
-      if (!grouped[monthYearKey]) {
-        grouped[monthYearKey] = {
-          label: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          year: year,
-          month: month,
-          notes: [],
-          timestamp: date.getTime()
-        };
-      }
-      grouped[monthYearKey].notes.push(note);
-    });
-    
-    const sortedMonths = Object.values(grouped).sort((a, b) => 
-      sortOldestFirst ? a.timestamp - b.timestamp : b.timestamp - a.timestamp
-    );
-    
-    const monthShortNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-    return sortedMonths.map(group => ({
-      ...group,
-      monthShort: monthShortNames[group.month - 1]
-    }));
+
+    return groupNotesByMonth(unpinnedNotes, { oldestFirst: sortOldestFirst });
   }, [unpinnedNotes, searchMode, showPinned, sortOldestFirst, createdSortActive]);
 
   const { monthSeparatorRefs, registerMonthSeparatorRef } = useStickyMonthHeaders();
@@ -622,7 +600,7 @@ const NotesList = ({ title, notes, showPinned }) => {
   return (
     <NotesContainer ref={containerRef} className={selectedNoteIds.size > 0 ? 'selection-mode' : ''}>
       <StickyMonthHeaderDisplay
-        showMonthMarkers={showMonthMarkers && createdSortActive}
+        showMonthMarkers={showMonthMarkers}
         searchMode={searchMode}
         notesByMonth={notesByMonth}
         monthSeparatorRefs={monthSeparatorRefs}
@@ -714,7 +692,7 @@ const NotesList = ({ title, notes, showPinned }) => {
             <>
               {layoutView === 'grid' ? (
                 <>
-                  {(!showPinned || searchMode || !showMonthMarkers || !createdSortActive || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
+                  {(!showPinned || searchMode || !showMonthMarkers) ? (
                     <MasonryGrid breakpointCols={breakpointColumnsObj} className="masonry-grid" columnClassName="masonry-grid-column">
                       {unpinnedNotes.map(note => (
                         <div key={note.id} className="masonry-item"><NoteCard note={note} searchQuery={searchQuery} onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></div>
@@ -755,7 +733,7 @@ const NotesList = ({ title, notes, showPinned }) => {
                 </>
               ) : ( // layoutView === 'stacked'
                 <>
-                  {(!showPinned || searchMode || !showMonthMarkers || !createdSortActive || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
+                  {(!showPinned || searchMode || !showMonthMarkers) ? (
                     <StackedViewContainer>
                       {unpinnedNotes.map(note => (
                         <StackedItemWrapper key={note.id}><NoteCard note={note} searchQuery={searchQuery} layoutView="stacked" onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></StackedItemWrapper>

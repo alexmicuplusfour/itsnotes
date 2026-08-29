@@ -52,9 +52,8 @@ const defaultListSort = ({ archived, deleted }) => {
 // deprecated aliases because docs/api.md documents them publicly.
 const normalizeListSort = ({ sort, sortCriteria, oldestFirst, archived, deleted } = {}) => {
   if (ORDER_SPECS[sort]) return sort;
-  if (sortCriteria === 'created_at' || oldestFirst) {
-    return oldestFirst ? 'created_asc' : 'created_desc';
-  }
+  if (oldestFirst) return 'created_asc';
+  if (sortCriteria === 'created_at') return 'created_desc';
   return defaultListSort({ archived, deleted });
 };
 
