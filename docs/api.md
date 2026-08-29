@@ -46,7 +46,8 @@ GET /api/notes
 | `limit` | number | 80 | Results per page |
 | `archived` | boolean | false | Return archived notes |
 | `deleted` | boolean | false | Return trashed notes |
-| `oldestFirst` | boolean | false | Sort by creation date ascending |
+| `sort` | string | per view | One of: `created_desc`, `created_asc`, `updated_desc`, `archived_desc`, `trashed_desc`. Defaults: `trashed_desc` for trash, `archived_desc` for archive, `created_desc` otherwise |
+| `oldestFirst` | boolean | false | Deprecated alias for `sort=created_asc` |
 | `includeDetails` | boolean | false | Include tags, images, and object links on each note |
 | `truncateContent` | boolean | true | Truncate note content |
 | `contentLimit` | number | 401 | Max chars when truncated |
@@ -75,7 +76,7 @@ GET /api/notes/search?query=...
 | `query` or `q` | string | — | Search query (required) |
 | `page` | number | 1 | Page number |
 | `limit` | number | 80 | Results per page |
-| `sortOrder` | string | `updatedAt_desc` | One of: `updatedAt_desc`, `updatedAt_asc`, `createdAt_desc`, `createdAt_asc`, `relevance` |
+| `sortOrder` | string | `updated_desc` | One of: `updated_desc`, `updated_asc`, `created_desc`, `created_asc` (camelCase forms like `updatedAt_desc` are accepted as aliases) |
 | `includeDetails` | boolean | false | Include tags, images, and object links |
 | `truncateContent` | boolean | true | Truncate note content |
 | `contentLimit` | number | 601 | Max chars when truncated |

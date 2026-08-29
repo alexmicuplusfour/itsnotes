@@ -165,7 +165,6 @@ export const NotesProvider = ({ children }) => {
     getSortForView,
     setSortForView,
     getAvailableSortsForView,
-    convertToLegacyParams,
     SORT_LABELS
   } = useSorting(); // Get unified sorting functions
 
@@ -306,9 +305,8 @@ export const NotesProvider = ({ children }) => {
 
     // Use explicit sort option if provided, otherwise compute current sort option from current state
     const sortOptionToUse = explicitSortOption || getSortForView(searchModeRef.current ? 'search' : viewRef.current);
-    const { sortCriteria, oldestFirst, searchSortOrder } = convertToLegacyParams(sortOptionToUse);
 
-    console.log(`loadNotes called: refresh=${refresh}, view=${viewRef.current}, sortOption=${sortOptionToUse}, converted to: sortCriteria=${sortCriteria}, oldestFirst=${oldestFirst}, searchSortOrder=${searchSortOrder}`);
+    console.log(`loadNotes called: refresh=${refresh}, view=${viewRef.current}, sortOption=${sortOptionToUse}`);
     setListLoading(true); // Set loading for this operation
     setError(null);
 
@@ -339,17 +337,16 @@ export const NotesProvider = ({ children }) => {
     loadNotesInProgressRef.current = true;
 
     try {
-      console.log(`Making API call for view: ${currentView}, isArchived=${isArchived}, isDeleted=${isDeleted}, oldestFirst=${oldestFirst}, sortCriteria=${sortCriteria}`);
+      console.log(`Making API call for view: ${currentView}, isArchived=${isArchived}, isDeleted=${isDeleted}, sort=${sortOptionToUse}`);
       const response = await notesApi.getNotes(
         currentPage,
         currentLimit,
         isArchived,
         isDeleted,
-        oldestFirst,
+        sortOptionToUse, // canonical sort option, sent to the API unchanged
         true, // includeDetails
-        sortCriteria, // pass sort criteria
         true, // truncateContent - enable content truncation for stacked view
-        520   // contentLimit - limit content to 300 characters
+        520   // contentLimit
       );
 
       const fetchedNotes = response.notes || [];
@@ -425,7 +422,7 @@ export const NotesProvider = ({ children }) => {
         }, 100); // Reduced delay
       }
     }
-  }, [getSortForView, convertToLegacyParams, reconcileCacheWithList]); // Removed: view, page, hasMore, searchMode, currentSortOption - now using refs
+  }, [getSortForView, reconcileCacheWithList]); // Removed: view, page, hasMore, searchMode, currentSortOption - now using refs
   
   // --- View Management ---
 
@@ -472,9 +469,7 @@ export const NotesProvider = ({ children }) => {
   // --- New function to get reference count without affecting UI state ---
   const getReferenceCount = useCallback(async (noteId) => {
     try {
-      // Use unified sort system to get search sort order
-      const { searchSortOrder } = convertToLegacyParams(getSortForView('search'));
-      const searchResponse = await notesApi.searchNotes(noteId, 1, 1, searchSortOrder, false, true, 50); // Only need 1 result to get totalCount, truncate heavily
+      const searchResponse = await notesApi.searchNotes(noteId, 1, 1, getSortForView('search'), false, true, 50); // Only need 1 result to get totalCount, truncate heavily
       
       // Return the total count minus 1 if the current note is included in the results
       // (since we want to count other notes that reference this one, not the note itself)
@@ -496,9 +491,8 @@ export const NotesProvider = ({ children }) => {
   const refreshSearchCount = useCallback(async (query) => {
     if (!query) return;
     try {
-      const { searchSortOrder } = convertToLegacyParams(getSortForView('search'));
       // Fetch only 1 result to get totalCount, with heavy truncation
-      const response = await notesApi.searchNotes(query, 1, 1, searchSortOrder, true, true, 50, resolvedTagIdsRef.current);
+      const response = await notesApi.searchNotes(query, 1, 1, getSortForView('search'), true, true, 50, resolvedTagIdsRef.current);
       setTotalNotes(response.totalCount || 0);
       setSearchCountQuery(query);
       console.log(`refreshSearchCount: Updated count to ${response.totalCount} for query "${query}"`);
@@ -554,9 +548,7 @@ export const NotesProvider = ({ children }) => {
 
       // 2. Search for references (limit to one page for ID search)
       try {
-        // Use unified sort system to get search sort order
-        const { searchSortOrder } = convertToLegacyParams(getSortForView('search'));
-        const searchResponse = await notesApi.searchNotes(noteId, 1, cacheSettingsRef.current.PAGE_SIZE, searchSortOrder, true, false); // No truncation for ID search
+        const searchResponse = await notesApi.searchNotes(noteId, 1, cacheSettingsRef.current.PAGE_SIZE, getSortForView('search'), true, false); // No truncation for ID search
         if (searchResponse?.notes) {
           console.log(`searchById: Found ${searchResponse.notes.length} notes via text search.`);
           searchResponse.notes.forEach(note => {
@@ -720,9 +712,7 @@ export const NotesProvider = ({ children }) => {
       }
 
       // Use unified sort system to get search sort order
-      // Always use search view's sort option for search, regardless of sortOverride
       const searchSortOption = sortOverride || getSortForView('search');
-      const { searchSortOrder } = convertToLegacyParams(searchSortOption);
       // Use the correct page number: 1 for refresh, current 'page' state for pagination
       // Use pageRef to avoid function recreation when page changes (pagination performance)
       const searchPage = refreshSearch ? 1 : pageRef.current;
@@ -737,8 +727,8 @@ export const NotesProvider = ({ children }) => {
       resolvedTagIdsRef.current = reconciledTagIds;
       lastUsedTagIdsRef.current = JSON.stringify(reconciledTagIds);
 
-      console.log(`handleSearch: API call - Query: \"${rawQuery}\", Page: ${searchPage}, Sort: ${searchSortOrder}`);
-      const response = await notesApi.searchNotes(rawQuery, searchPage, cacheSettingsRef.current.PAGE_SIZE, searchSortOrder, true, true, 520, resolvedTagIdsRef.current);
+      console.log(`handleSearch: API call - Query: \"${rawQuery}\", Page: ${searchPage}, Sort: ${searchSortOption}`);
+      const response = await notesApi.searchNotes(rawQuery, searchPage, cacheSettingsRef.current.PAGE_SIZE, searchSortOption, true, true, 520, resolvedTagIdsRef.current);
   
       setTotalNotes(response.totalCount);
       setSearchCountQuery(rawQuery);
@@ -862,6 +852,14 @@ export const NotesProvider = ({ children }) => {
           }
           const newList = [...prevList];
           newList[index] = updatedNote;
+          // Under Recently Updated, an update moves the note to the top of the
+          // list — front of the array is the top of the unpinned section
+          // (pinned notes render from their own sorted memo, so moving a
+          // pinned note here is harmless). Covers local edits and socket
+          // updates from other devices, MCP, and mirror imports alike.
+          if (getSortForView(view) === SORT_OPTIONS.UPDATED_DESC && index > 0) {
+            newList.unshift(newList.splice(index, 1)[0]);
+          }
           return newList;
         } else { // Only ID, no update function - remove
           return prevList.filter(n => n.id !== noteIdOuter);
@@ -938,7 +936,7 @@ export const NotesProvider = ({ children }) => {
       });
     }
 
-  }, [searchMode, isInCurrentView, view, setNotes, setSearchResults]);
+  }, [searchMode, isInCurrentView, view, getSortForView, setNotes, setSearchResults]);
 
   // --- Cache Management Helpers ---
   // Note: Cache functions (addToCache, touchCacheEntry, removeFromCache) are now provided by usePrefetch hook
@@ -2395,15 +2393,6 @@ export const NotesProvider = ({ children }) => {
     }
   }, [view, searchMode, searchQuery, setSortForView, loadNotes, handleSearch]);
 
-  // Legacy functions for backward compatibility (they now use the unified system)
-  const setSortNewest = useCallback(() => changeSortOption(SORT_OPTIONS.CREATED_DESC), [changeSortOption]);
-  const setSortOldest = useCallback(() => changeSortOption(SORT_OPTIONS.CREATED_ASC), [changeSortOption]);
-  const toggleSortOrder = useCallback(() => {
-    const currentSort = getSortForView(view);
-    const newSort = currentSort === SORT_OPTIONS.CREATED_DESC ? SORT_OPTIONS.CREATED_ASC : SORT_OPTIONS.CREATED_DESC;
-    changeSortOption(newSort);
-  }, [changeSortOption, getSortForView, view]);
-
   // --- Socket Connection Effect ---
   // Use refs to keep track of connection state and handlers
   const socketListenersSetupRef = useRef(false);
@@ -2691,11 +2680,6 @@ export const NotesProvider = ({ children }) => {
     getSortForView,
     getAvailableSortsForView,
     SORT_LABELS,
-    
-    // Legacy sorting functions (for backward compatibility)
-    toggleSortOrder,
-    setSortNewest,
-    setSortOldest,
 
     // Note Actions
     createNote,
@@ -2773,7 +2757,7 @@ export const NotesProvider = ({ children }) => {
     notifyArchived, notifyUnarchived, notifyTrashed, notifyRestored, notifyDeleted, notifyHidden,
     // Include all functions
     loadNotes, handleSearch, loadMoreSearchResults, searchByTag, searchByColor, searchByBook, searchById, getReferenceCount, refreshSearchCount, saveSearch, removeSavedSearch,
-    changeSortOption, toggleSortOrder, setSortNewest, setSortOldest, createNote, duplicateNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
+    changeSortOption, createNote, duplicateNote, updateNote, togglePin, archiveNote, unarchiveNote, trashNote, restoreNote, deleteNote, changeNoteColor,
     getNoteTags, addTagToNote, removeTagFromNote, updateNotesFromServer, openNoteById, closeNoteWithoutUrlUpdate,
     toggleLayoutView, enhancedChangeLayoutView, toggleQuickAccess, toggleMonthMarkers, toggleNoteTabs, setSearchBarActive, setError, _updateOrRemoveNoteInState,
     reloadSettings,

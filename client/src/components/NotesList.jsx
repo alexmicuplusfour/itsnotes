@@ -287,11 +287,14 @@ const NotesList = ({ title, notes, showPinned }) => {
   const { listLoading } = useNotesLoading(); // Changed from loading
 
   // Get unified sorting system
-  const { getSortForView, SORT_OPTIONS } = useSorting();
-  
+  const { getSortForView, SORT_OPTIONS, isCreatedSort } = useSorting();
+
   // Determine if we should sort oldest first based on current sort option
   const currentSortOption = getSortForView(searchMode ? 'search' : view);
   const sortOldestFirst = currentSortOption === SORT_OPTIONS.CREATED_ASC;
+  // Month-of-creation headers only make sense when the list is in
+  // creation-date order; other sorts (Recently Updated) render flat.
+  const createdSortActive = isCreatedSort(currentSortOption);
   
   const { 
     layoutView, 
@@ -359,8 +362,9 @@ const NotesList = ({ title, notes, showPinned }) => {
   const shouldShowPinnedSection = showPinned && pinnedNotes.length > 0;
   
   const notesByMonth = useMemo(() => {
-    if (searchMode && !showPinned) {
+    if ((searchMode && !showPinned) || !createdSortActive) {
       // In search mode without "showPinned" (e.g., viewing search results directly),
+      // or when the list isn't in creation-date order,
       // return a flat structure for unpinnedNotes.
       // The component will render unpinnedNotes directly without month grouping.
       return [{ notes: unpinnedNotes, label: 'search_results_flat' }]; // label helps differentiate
@@ -394,7 +398,7 @@ const NotesList = ({ title, notes, showPinned }) => {
       ...group,
       monthShort: monthShortNames[group.month - 1]
     }));
-  }, [unpinnedNotes, searchMode, showPinned, sortOldestFirst]);
+  }, [unpinnedNotes, searchMode, showPinned, sortOldestFirst, createdSortActive]);
 
   const { monthSeparatorRefs, registerMonthSeparatorRef } = useStickyMonthHeaders();
   
@@ -618,7 +622,7 @@ const NotesList = ({ title, notes, showPinned }) => {
   return (
     <NotesContainer ref={containerRef} className={selectedNoteIds.size > 0 ? 'selection-mode' : ''}>
       <StickyMonthHeaderDisplay
-        showMonthMarkers={showMonthMarkers}
+        showMonthMarkers={showMonthMarkers && createdSortActive}
         searchMode={searchMode}
         notesByMonth={notesByMonth}
         monthSeparatorRefs={monthSeparatorRefs}
@@ -710,7 +714,7 @@ const NotesList = ({ title, notes, showPinned }) => {
             <>
               {layoutView === 'grid' ? (
                 <>
-                  {(!showPinned || searchMode || !showMonthMarkers || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
+                  {(!showPinned || searchMode || !showMonthMarkers || !createdSortActive || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
                     <MasonryGrid breakpointCols={breakpointColumnsObj} className="masonry-grid" columnClassName="masonry-grid-column">
                       {unpinnedNotes.map(note => (
                         <div key={note.id} className="masonry-item"><NoteCard note={note} searchQuery={searchQuery} onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></div>
@@ -751,7 +755,7 @@ const NotesList = ({ title, notes, showPinned }) => {
                 </>
               ) : ( // layoutView === 'stacked'
                 <>
-                  {(!showPinned || searchMode || !showMonthMarkers || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
+                  {(!showPinned || searchMode || !showMonthMarkers || !createdSortActive || (searchMode && notesByMonth.length === 1 && notesByMonth[0].label === 'search_results_flat')) ? (
                     <StackedViewContainer>
                       {unpinnedNotes.map(note => (
                         <StackedItemWrapper key={note.id}><NoteCard note={note} searchQuery={searchQuery} layoutView="stacked" onPickerOpen={setPickerOpenForNoteId} isSelected={selectedNoteIds.has(note.id)} onToggleSelect={toggleNoteSelection} /></StackedItemWrapper>

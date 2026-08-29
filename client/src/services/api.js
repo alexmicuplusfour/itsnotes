@@ -75,36 +75,35 @@ api.interceptors.response.use(
 
 // Notes API
 export const notesApi = {
-  // Get notes with pagination (main, archive, or trash)
-  getNotes: async (page = 1, limit = 80, archived = false, deleted = false, oldestFirst = false, includeDetails = true, sortCriteria = null, truncateContent = true, contentLimit = 300) => {
-    console.log(`API getNotes called with: page=${page}, archived=${archived}, deleted=${deleted}, sortCriteria=${sortCriteria}, truncateContent=${truncateContent}, view params`);
+  // Get notes with pagination (main, archive, or trash).
+  // `sort` is a canonical sort option string from SortingContext (e.g.
+  // 'created_desc', 'updated_desc'); omitted → the server's per-view default.
+  getNotes: async (page = 1, limit = 80, archived = false, deleted = false, sort = null, includeDetails = true, truncateContent = true, contentLimit = 300) => {
+    console.log(`API getNotes called with: page=${page}, archived=${archived}, deleted=${deleted}, sort=${sort}, truncateContent=${truncateContent}`);
     // Convert string 'true'/'false' to boolean if needed
     const isArchived = archived === 'true' || archived === true;
     const isDeleted = deleted === 'true' || deleted === true;
-    
-    const params = { 
-      page, 
-      limit, 
-      archived: isArchived, 
-      deleted: isDeleted, 
-      oldestFirst, 
+
+    const params = {
+      page,
+      limit,
+      archived: isArchived,
+      deleted: isDeleted,
       includeDetails,
       truncateContent,
       contentLimit
     };
-    
-    // Add sort criteria if provided
-    if (sortCriteria) {
-      params.sortCriteria = sortCriteria;
+
+    if (sort) {
+      params.sort = sort;
     }
-    
+
     const response = await api.get('/notes', { params });
     return response.data;
   },
 
-  // Search notes
-  searchNotes: async (query, page = 1, limit = 80, sortOrder = 'updatedAt_desc', includeDetails = true, truncateContent = true, contentLimit = 300, tagIdMap = null) => {
-    // sortOrder can be 'updatedAt_desc', 'createdAt_asc', 'createdAt_desc'
+  // Search notes. sortOrder takes the same canonical sort option strings.
+  searchNotes: async (query, page = 1, limit = 80, sortOrder = 'updated_desc', includeDetails = true, truncateContent = true, contentLimit = 300, tagIdMap = null) => {
     const params = { query, page, limit, sortOrder, includeDetails, truncateContent, contentLimit };
     if (tagIdMap && Object.keys(tagIdMap).length > 0) {
       params.tagIds = JSON.stringify(tagIdMap);

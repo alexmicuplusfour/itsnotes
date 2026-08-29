@@ -16,6 +16,7 @@ import MonthSearchStar from './MonthSearchStar';
 import QuickAccess from './QuickAccess';
 import Icon from './Icons';
 import { useNotes, useNotesLoading } from '../contexts/NotesContext';
+import { useSorting } from '../contexts/SortingContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useNoteActions } from '../contexts/NoteActionsContext';
@@ -249,6 +250,7 @@ function ListView({ searchQuery }) {
     searchByColor,
   } = useNotes();
   const { listLoading } = useNotesLoading();
+  const { getSortForView, SORT_OPTIONS, isCreatedSort } = useSorting();
   
   // Memoize openedNoteId to prevent unnecessary re-renders of list items
   // Only changes when the actual note ID changes, not when note object updates
@@ -367,13 +369,19 @@ function ListView({ searchQuery }) {
     return { pinnedNotes: pinned, unpinnedNotes: unpinned };
   }, [displayNotes, isNoteEmpty, hasHiddenTags]);
   
-  // Group unpinned notes by month for month separators
+  // Group unpinned notes by month for month separators. Month-of-creation
+  // headers only make sense when the list is in creation-date order; other
+  // sorts (Recently Updated) render flat.
+  const currentSortOption = getSortForView(searchMode ? 'search' : view);
+  const sortOldestFirst = currentSortOption === SORT_OPTIONS.CREATED_ASC;
+  const createdSortActive = isCreatedSort(currentSortOption);
+
   const notesByMonth = useMemo(() => {
-    if (searchMode || !showMonthMarkers || view === 'archive' || view === 'trash') {
-      // In search mode, archive, trash, or when month markers disabled, return flat list
+    if (searchMode || !showMonthMarkers || !createdSortActive || view === 'archive' || view === 'trash') {
+      // In search mode, archive, trash, non-created sorts, or when month markers disabled, return flat list
       return [{ notes: unpinnedNotes, label: null }];
     }
-    
+
     const monthShortNames = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
     const grouped = {};
     unpinnedNotes.forEach(note => {
@@ -381,7 +389,7 @@ function ListView({ searchQuery }) {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       const monthYearKey = `${year}-${month}`;
-      
+
       if (!grouped[monthYearKey]) {
         grouped[monthYearKey] = {
           label: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
@@ -394,10 +402,12 @@ function ListView({ searchQuery }) {
       }
       grouped[monthYearKey].notes.push(note);
     });
-    
-    // Sort by timestamp descending (newest first)
-    return Object.values(grouped).sort((a, b) => b.timestamp - a.timestamp);
-  }, [unpinnedNotes, searchMode, showMonthMarkers]);
+
+    // Month groups follow the list direction (newest or oldest first)
+    return Object.values(grouped).sort((a, b) =>
+      sortOldestFirst ? a.timestamp - b.timestamp : b.timestamp - a.timestamp
+    );
+  }, [unpinnedNotes, searchMode, showMonthMarkers, createdSortActive, sortOldestFirst, view]);
   
   // Handle window resize
   useEffect(() => {

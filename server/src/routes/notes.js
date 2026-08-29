@@ -1,5 +1,6 @@
 const express = require('express');
 const Note = require('../models/Note');
+const { normalizeListSort } = require('../models/noteSort');
 const Tag = require('../models/Tag');
 const db = require('../db');
 const { blockInDemo, limitNoteSizeInDemo } = require('../middleware/demoGuard');
@@ -69,23 +70,33 @@ router.get('/', async (req, res) => {
       limit = 80,
       archived = false,
       deleted = false,
-      oldestFirst = false,
       includeDetails = false,
       truncateContent = true,
       contentLimit = 401,
+      // Canonical sort name; the two params below it are deprecated aliases.
+      sort = null,
+      oldestFirst = false,
       sortCriteria = null
     } = req.query;
+
+    const isArchived = archived === 'true';
+    const isDeleted = deleted === 'true';
 
     const notes = await Note.findAll({
       page: parseInt(page),
       limit: parseInt(limit),
-      archived: archived === 'true',
-      deleted: deleted === 'true',
-      oldestFirst: oldestFirst === 'true',
+      archived: isArchived,
+      deleted: isDeleted,
       includeDetails: includeDetails === 'true',
       truncateContent: truncateContent === 'true' || truncateContent === true,
       contentLimit: parseInt(contentLimit) || 601,
-      sortCriteria: sortCriteria
+      sort: normalizeListSort({
+        sort,
+        sortCriteria,
+        oldestFirst: oldestFirst === 'true',
+        archived: isArchived,
+        deleted: isDeleted
+      })
     });
 
     // Always add objects and link previews to notes
@@ -95,8 +106,8 @@ router.get('/', async (req, res) => {
     }
 
     const totalCount = await Note.getCount({
-      archived: archived === 'true',
-      deleted: deleted === 'true'
+      archived: isArchived,
+      deleted: isDeleted
     });
 
     res.json({
@@ -114,17 +125,18 @@ router.get('/', async (req, res) => {
 // Search notes
 router.get('/search', async (req, res) => {
   try {
-    // Accept sortOrder instead of oldestFirst
     const {
-      query,
       page = 1,
       limit = 80,
-      sortOrder = 'updatedAt_desc',
+      sortOrder = 'updated_desc',
       includeDetails = false,
       truncateContent = true,
       contentLimit = 601,
       tagIds
     } = req.query;
+
+    // `query` is the documented name; `q` is accepted as a shorthand alias.
+    const query = req.query.query ?? req.query.q;
 
     console.log('[ROUTE /search] Received query:', query);
 
@@ -191,7 +203,6 @@ router.get('/all-trashed', async (req, res) => {
       limit: 999999, // Very high limit to get all
       archived: false,
       deleted: true,
-      oldestFirst: false,
       includeDetails: false, // We only need IDs
       truncateContent: true,
       contentLimit: 1 // Minimal content since we only need IDs

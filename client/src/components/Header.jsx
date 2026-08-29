@@ -3,7 +3,6 @@ import { useNotes, useNotesLoading } from '../contexts/NotesContext';
 import { useTags } from '../contexts/TagsContext';
 import { useUIPreferences } from '../contexts/UIPreferencesContext';
 import { useNoteSelection } from '../contexts/NoteSelectionContext'; // Import useNoteSelection // Import useUIPreferences
-import { SORT_OPTIONS } from '../contexts/SortingContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigation } from '../navigation'; // Import new navigation system
 import styled, { css, keyframes } from 'styled-components';
@@ -890,8 +889,6 @@ const Header = () => {
   const {
     handleSearch: handleSearchRaw, searchMode, view,
     changeSortOption, getSortForView, getAvailableSortsForView, SORT_LABELS,
-    // Legacy functions for backward compatibility
-    setSortNewest, setSortOldest,
     loadNotes, searchQuery, searchBarActive, setSearchBarActive, createNote, addTagToNote, registerTagId,
     changeLayoutView, // Enhanced version from NotesContext
     openedNote, // For hiding new note button in list view

@@ -1,6 +1,7 @@
 const { db } = require('../knex');
 const Reminder = require('./Reminder');
 const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
+const { ORDER_SPECS, normalizeSearchSort, defaultListSort } = require('./noteSort');
 
 /**
  * SearchQueryBuilder - A unified query builder for all note search operations
@@ -359,19 +360,8 @@ class SearchQueryBuilder {
   /**
    * Apply sorting
    */
-  applySorting(sortOrder = 'updatedAt_desc') {
-    switch (sortOrder) {
-      case 'createdAt_asc':
-        this.query.orderBy('notes.created_at', 'asc');
-        break;
-      case 'createdAt_desc':
-        this.query.orderBy('notes.created_at', 'desc');
-        break;
-      case 'updatedAt_desc':
-      default:
-        this.query.orderBy('notes.updated_at', 'desc');
-        break;
-    }
+  applySorting(sortOrder = 'updated_desc') {
+    this.query.orderBy(ORDER_SPECS[normalizeSearchSort(sortOrder)]);
     return this;
   }
 
@@ -809,7 +799,7 @@ class Note {
   /**
    * Unified search method supporting all operators consistently
    */
-  static async search(searchTerm, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300, tagIdMap = {}) {
+  static async search(searchTerm, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300, tagIdMap = {}) {
     console.log('[SEARCH] Entry - searchTerm:', searchTerm);
 
     const hasResolvedIds = tagIdMap && Object.keys(tagIdMap).length > 0;
@@ -940,7 +930,7 @@ class Note {
   /**
    * Specialized search methods using the unified SearchQueryBuilder
    */
-  static async searchByTag(tagName, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300) {
+  static async searchByTag(tagName, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300) {
     const queryBuilder = new SearchQueryBuilder();
 
     queryBuilder
@@ -960,7 +950,7 @@ class Note {
     return results;
   }
 
-  static async searchByColor(colorName, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300) {
+  static async searchByColor(colorName, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300) {
     const queryBuilder = new SearchQueryBuilder();
 
     queryBuilder
@@ -979,7 +969,7 @@ class Note {
     return results;
   }
 
-  static async searchByYear(yearStr, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300) {
+  static async searchByYear(yearStr, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300) {
     // Parse year and optional month
     const yearMonthMatch = yearStr.match(/^(\d{4})(?::([a-zA-Z]{3,}))?$/i);
     if (!yearMonthMatch) {
@@ -1011,7 +1001,7 @@ class Note {
     return results;
   }
 
-  static async searchByExactPhrase(phrase, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300) {
+  static async searchByExactPhrase(phrase, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300) {
     const queryBuilder = new SearchQueryBuilder();
 
     queryBuilder
@@ -1030,7 +1020,7 @@ class Note {
     return results;
   }
 
-  static async searchByText(searchTerm, page = 1, limit = 80, sortOrder = 'updatedAt_desc', truncateContent = true, contentLimit = 300) {
+  static async searchByText(searchTerm, page = 1, limit = 80, sortOrder = 'updated_desc', truncateContent = true, contentLimit = 300) {
     const queryBuilder = new SearchQueryBuilder();
 
     queryBuilder
@@ -1098,22 +1088,14 @@ class Note {
 
   /**
    * CRUD Operations using Knex
-   */  static async findAll({ page = 1, limit = 80, archived = false, deleted = false, oldestFirst = false, includeDetails = false, truncateContent = true, contentLimit = 300, sortCriteria = null }) {
-    console.log(`Note.findAll called with: archived=${archived}, deleted=${deleted}, oldestFirst=${oldestFirst}, sortCriteria=${sortCriteria}`);
+   */
 
-    const sortDirection = oldestFirst ? 'asc' : 'desc';
-    const offset = (page - 1) * limit;
-
-    // Build base query
-    let query = db('notes')
-      .where('is_archived', archived)
-      .where('is_deleted', deleted);
-
-    // Apply field selection
+  // Shared field selection for list queries.
+  static applyListFields(query, truncateContent, contentLimit) {
     if (truncateContent) {
       query.select([
         'id', 'title',
-        db.raw(`CASE 
+        db.raw(`CASE
           WHEN length(content) > ? THEN substring(content, 1, ?) || '...'
           ELSE content
         END as content`, [contentLimit, contentLimit]),
@@ -1123,132 +1105,75 @@ class Note {
     } else {
       query.select('*', 'version');
     }
+    return query;
+  }
 
-    // Handle pinned notes for main view first page
-    if (page === 1 && !archived && !deleted) {
-      // Get all pinned notes
-      const pinnedQuery = query.clone()
-        .where('is_pinned', true)
-        .orderBy([
-          { column: 'pinned_at', order: 'desc' },
-          { column: 'updated_at', order: 'desc' },
-          { column: 'created_at', order: 'desc' }
-        ]);
+  // Exclude notes carrying a hidden (visible=false) tag. Main-view unpinned
+  // stream only — pinned notes stay visible even with hidden tags.
+  static excludeHiddenTagged(query) {
+    return query.whereNotExists(function () {
+      this.select('*')
+        .from('note_tags')
+        .join('tags', 'note_tags.tag_id', 'tags.id')
+        .whereRaw('note_tags.note_id = notes.id')
+        .where('tags.visible', false);
+    });
+  }
 
-      // Get regular unpinned notes with pagination
+  static async findAll({ page = 1, limit = 80, archived = false, deleted = false, includeDetails = false, truncateContent = true, contentLimit = 300, sort = null }) {
+    const sortName = ORDER_SPECS[sort] ? sort : defaultListSort({ archived, deleted });
+    const orderSpec = ORDER_SPECS[sortName];
+    const offset = (page - 1) * limit;
+
+    let notes;
+
+    if (!archived && !deleted) {
+      // Main view: the sortable stream is the unpinned notes. Pinned notes are
+      // fetched separately on page 1 (ordered by pin time) and prepended.
       const unpinnedQuery = db('notes')
-        .where('is_archived', archived)
-        .where('is_deleted', deleted)
-        .where('is_pinned', false)
-        .whereNotExists(function () {
-          this.select('*')
-            .from('note_tags')
-            .join('tags', 'note_tags.tag_id', 'tags.id')
-            .whereRaw('note_tags.note_id = notes.id')
-            .where('tags.visible', false);
-        }); if (truncateContent) {
-          unpinnedQuery.select([
-            'id', 'title',
-            db.raw(`CASE 
-            WHEN length(content) > ? THEN substring(content, 1, ?) || '...'
-            ELSE content
-          END as content`, [contentLimit, contentLimit]),
-            'color', 'is_pinned', 'is_archived', 'is_deleted',
-            'created_at', 'updated_at', 'version', 'metadata'
+        .where('is_archived', false)
+        .where('is_deleted', false)
+        .where('is_pinned', false);
+      this.excludeHiddenTagged(unpinnedQuery);
+      this.applyListFields(unpinnedQuery, truncateContent, contentLimit);
+      unpinnedQuery.orderBy(orderSpec).limit(limit).offset(offset);
+
+      if (page === 1) {
+        const pinnedQuery = db('notes')
+          .where('is_archived', false)
+          .where('is_deleted', false)
+          .where('is_pinned', true)
+          .orderBy([
+            { column: 'pinned_at', order: 'desc' },
+            { column: 'updated_at', order: 'desc' },
+            { column: 'created_at', order: 'desc' },
+            { column: 'id', order: 'desc' }
           ]);
-        } else {
-        unpinnedQuery.select('*', 'version');
-      }
+        this.applyListFields(pinnedQuery, truncateContent, contentLimit);
 
-      unpinnedQuery
-        .orderBy('created_at', sortDirection)
-        .limit(limit)
-        .offset(offset);
-
-      const [pinnedResults, unpinnedResults] = await Promise.all([
-        pinnedQuery,
-        unpinnedQuery
-      ]);
-
-      const notes = [...pinnedResults, ...unpinnedResults];
-
-      if (includeDetails && notes.length > 0) {
-        await this.addTagsAndImages(notes);
-      }
-
-      return notes;
-    } else if (!archived && !deleted) {
-      // For subsequent pages in main view, get only unpinned notes
-      query
-        .where('is_pinned', false)
-        .whereNotExists(function () {
-          this.select('*')
-            .from('note_tags')
-            .join('tags', 'note_tags.tag_id', 'tags.id')
-            .whereRaw('note_tags.note_id = notes.id')
-            .where('tags.visible', false);
-        })
-        .orderBy('created_at', sortDirection)
-        .limit(limit)
-        .offset(offset);
-    } else {
-      // For archived/deleted views with specific sort orders
-      if (deleted) {
-        console.log(`Trash view: sortCriteria=${sortCriteria}, sortDirection=${sortDirection}`);
-
-        if (sortCriteria === 'created_at') {
-          // Sort by created_at with direction based on oldestFirst
-          query
-            .orderBy('created_at', sortDirection)
-            .limit(limit)
-            .offset(offset);
-        } else {
-          // Default trash sort: ORDER BY trashed_at DESC NULLS LAST, updated_at DESC, created_at DESC
-          query
-            .orderBy([
-              { column: 'trashed_at', order: 'desc', nulls: 'last' },
-              { column: 'updated_at', order: 'desc' },
-              { column: 'created_at', order: 'desc' }
-            ])
-            .limit(limit)
-            .offset(offset);
-        }
-      } else if (archived) {
-        console.log(`Archive view: sortCriteria=${sortCriteria}, sortDirection=${sortDirection}`);
-
-        if (sortCriteria === 'created_at') {
-          // Sort by created_at with direction based on oldestFirst
-          query
-            .orderBy('created_at', sortDirection)
-            .limit(limit)
-            .offset(offset);
-        } else {
-          // Default archive sort: ORDER BY archived_at DESC NULLS LAST, updated_at DESC, created_at DESC
-          query
-            .orderBy([
-              { column: 'archived_at', order: 'desc', nulls: 'last' },
-              { column: 'updated_at', order: 'desc' },
-              { column: 'created_at', order: 'desc' }
-            ])
-            .limit(limit)
-            .offset(offset);
-        }
+        const [pinnedResults, unpinnedResults] = await Promise.all([
+          pinnedQuery,
+          unpinnedQuery
+        ]);
+        notes = [...pinnedResults, ...unpinnedResults];
       } else {
-        // Default sort for other views
-        query
-          .orderBy('created_at', sortDirection)
-          .limit(limit)
-          .offset(offset);
+        notes = await unpinnedQuery;
       }
+    } else {
+      // Archive / trash views: one flat stream, no pinned section.
+      const query = db('notes')
+        .where('is_archived', archived)
+        .where('is_deleted', deleted);
+      this.applyListFields(query, truncateContent, contentLimit);
+      query.orderBy(orderSpec).limit(limit).offset(offset);
+      notes = await query;
     }
 
-    const result = await query;
-
-    if (includeDetails && result.length > 0) {
-      await this.addTagsAndImages(result);
+    if (includeDetails && notes.length > 0) {
+      await this.addTagsAndImages(notes);
     }
 
-    return result;
+    return notes;
   }
 
   static async addTagsAndImages(notes, thumbnailsOnly = true) {

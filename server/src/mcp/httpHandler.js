@@ -11,7 +11,7 @@ const Tag = require('../models/Tag');
 const deps = {
   searchNotes: async (query, limit) => {
     const [notes, totalCount] = await Promise.all([
-      Note.search(query, 1, limit, 'updatedAt_desc', true, 601, {}),
+      Note.search(query, 1, limit, 'updated_desc', true, 601, {}),
       Note.getSearchCount(query, {}),
     ]);
     return { totalCount, notes };
