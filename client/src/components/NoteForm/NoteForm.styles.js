@@ -379,8 +379,10 @@ export const TitleRow = styled.div`
      so it tracks the pill's actual width per note state and is 0 when the
      pill doesn't overlap the title (new note, fullscreen on wide screens).
      While the title is focused the pill fades out, so the title claims the
-     vacated space; the transition below slides it in and out. */
-  padding-right: ${props => props.$titleFocused ? '0' : 'var(--pill-clearance, 160px)'};
+     vacated space; the transition below slides it in and out. The 20px floor
+     mirrors ScrollableContent's left padding so the text is never flush with
+     the edge — neither focused nor when there is no pill (new note). */
+  padding-right: ${props => props.$titleFocused ? '20px' : 'max(20px, var(--pill-clearance, 160px))'};
   transition: padding-right 0.15s ease;
   /* Don't shrink - maintain natural height */
   flex-shrink: 0;
