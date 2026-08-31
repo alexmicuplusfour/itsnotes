@@ -60,6 +60,7 @@ services:
       - "traefik.docker.network=${TRAEFIK_NETWORK:-revProxy-net}"
       - "traefik.http.routers.itsnotes.entrypoints=web,websecure"
       - "traefik.http.routers.itsnotes.rule=Host(`${TRAEFIK_HOST}`) && (Path(`${ITSNOTES_BASE_PATH:-/itsnotes}`) || PathPrefix(`${ITSNOTES_BASE_PATH:-/itsnotes}/`))"
+      - "traefik.http.routers.itsnotes.priority=1000"
       - "traefik.http.services.itsnotes.loadbalancer.server.port=80"
       - "traefik.http.middlewares.itsnotes-https.redirectscheme.scheme=https"
       - "traefik.http.middlewares.itsnotes-https.redirectscheme.permanent=true"
