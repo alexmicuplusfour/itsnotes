@@ -2,13 +2,12 @@
 // Increment version after each build to force cache invalidation
 const SW_VERSION = 'v4';
 const CACHE_NAME = `itsnotes-${SW_VERSION}`;
-// Note: no '/manifest.json' here — the real manifest lives at a hashed
-// /assets/ URL; the bare path only exists via the SPA fallback, so caching it
-// would store index.html under the manifest's name.
+// The browser loads manifest.json directly. It is not cached here so changes
+// to its install metadata take effect without a service-worker update.
 const ASSETS_TO_CACHE = [
-  '/pwa/icon-144.png',
-  '/pwa/icon-192.png',
-  '/pwa/icon-512.png'
+  './pwa/icon-144.png',
+  './pwa/icon-192.png',
+  './pwa/icon-512.png'
 ];
 
 // Cache static assets during installation
@@ -78,7 +77,7 @@ self.addEventListener('fetch', (event) => {
 
   // Vite hashes all filenames in /assets/ by content, so cache-first is safe.
   // A changed file gets a new hash and a new URL, so stale responses are impossible.
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith(new URL('./assets/', self.registration.scope).pathname)) {
     event.respondWith(
       caches.open(CACHE_NAME).then(cache =>
         cache.match(request).then(cached => {

@@ -10,6 +10,7 @@ import {
   Input,
 } from './styles';
 import CopyableField from './CopyableField';
+import env from '../../../env.js';
 
 const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const foxitEnabled = settings.FOXIT_ENABLED === true || settings.FOXIT_ENABLED === 'true';
@@ -22,7 +23,9 @@ const IntegrationsTab = ({ settings, onChange, commit, isDarkTheme }) => {
   const [proxyTokenCopied, setProxyTokenCopied] = useState(false);
   const [proxyTesting, setProxyTesting] = useState(false);
 
-  const serverOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+  const serverOrigin = typeof window !== 'undefined'
+    ? `${window.location.origin}${env.SERVER_BASE_URL}`
+    : '';
 
   const generateProxyToken = useCallback(() => {
     const bytes = new Uint8Array(24);

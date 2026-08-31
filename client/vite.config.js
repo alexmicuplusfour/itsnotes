@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs'; // <-- Import the Node.js file system module
 import path from 'path'; // <-- Import the Node.js path module
+import { normalizeAppBasePath } from './src/config/normalizeBasePath.js';
 
 export default defineConfig(({ mode }) => {
   // Check if SSL certificates exist (for local development)
@@ -12,7 +13,8 @@ export default defineConfig(({ mode }) => {
   const hasSSLCerts = fs.existsSync(keyPath) && fs.existsSync(certPath);
 
   return {
-    base: '/',
+    // Set VITE_BASE_PATH=/itsnotes/ when serving the app below a proxy path.
+    base: normalizeAppBasePath(process.env.VITE_BASE_PATH),
     plugins: [react()],
     server: {
       port: 3000,

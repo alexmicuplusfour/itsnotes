@@ -141,9 +141,41 @@ docker compose up -d
 
 The app will be available on port 80.
 
+### With Traefik on a subpath
+
+[`docker-compose.traefik.example.yml`](docker-compose.traefik.example.yml) is
+for an existing Traefik installation. It publishes the app at a path such as
+`https://notes.example.com/itsnotes`, including API calls, uploads, MCP, and
+Socket.IO. It does not bind ports or run another TLS proxy.
+
+Copy `.env.example` to `.env`, then set these values. `ITSNOTES_BASE_PATH` must
+not end in a slash.
+
+```dotenv
+TRAEFIK_HOST=notes.example.com
+ITSNOTES_BASE_PATH=/itsnotes
+TRAEFIK_NETWORK=revProxy-net
+TRAEFIK_CERT_RESOLVER=production
+```
+
+Start it with:
+
+```bash
+docker compose --env-file .env -f docker-compose.traefik.example.yml up -d --build
+```
+
+The client is built locally because Vite needs the path at build time. If you
+change `ITSNOTES_BASE_PATH`, run the same command with `--build` again. The
+example strips that path before forwarding requests to itsnotes, so it works
+with Traefik's Docker provider and does not require Caddy.
+
 ### With Caddy (HTTPS + domain)
 
-For automatic HTTPS, use [`docker-compose.caddy.example.yml`](docker-compose.caddy.example.yml) instead — it adds a Caddy service. You'll also need a `Caddyfile` ([`Caddyfile.example`](Caddyfile.example)) with your domain. Then `docker compose up -d`; Caddy handles SSL certificates automatically.
+For a standalone deployment that uses Caddy for automatic HTTPS, use
+[`docker-compose.caddy.example.yml`](docker-compose.caddy.example.yml). You'll
+also need a `Caddyfile` ([`Caddyfile.example`](Caddyfile.example)) with your
+domain. Then `docker compose up -d`; Caddy handles SSL certificates
+automatically.
 
 ## Configuration
 

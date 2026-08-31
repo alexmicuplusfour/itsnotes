@@ -23,10 +23,23 @@ import { useSettings } from './SettingsContext';
 import { usePrefetch } from '../hooks/usePrefetch'; // Import prefetch hook
 import { useNavigationContext } from '../navigation/NavigationContext'; // Import navigation context
 import { doesNoteMatchSearchQuery as matchNoteSearchQuery } from '../utils/noteSearchMatch'; // Live-update search matcher
+import { APP_BASE_PATH } from '../config/appBasePath';
 
 // --- Context Definition ---
 const NotesContext = createContext();
 export const useNotes = () => useContext(NotesContext);
+
+const getCurrentAppPath = () => {
+  const pathname = window.location.pathname;
+
+  if (APP_BASE_PATH && (pathname === APP_BASE_PATH || pathname.startsWith(`${APP_BASE_PATH}/`))) {
+    return pathname.slice(APP_BASE_PATH.length) || '/';
+  }
+
+  return pathname;
+};
+
+const getCurrentAppUrl = () => `${getCurrentAppPath()}${window.location.search}`;
 
 // Loading state lives in its own context so that list/search loading toggles
 // don't invalidate the main data context and re-render every note consumer.
@@ -621,14 +634,14 @@ export const NotesProvider = ({ children }) => {
           // No note open - navigate normally
           const targetUrl = targetPath;
           console.log(`handleSearch: Navigating to ${targetUrl} on exit.`);
-          if (window.location.pathname + window.location.search !== targetUrl) {
+          if (getCurrentAppUrl() !== targetUrl) {
             navigateRef.current(targetUrl);
           }
         }
       }
       
       // Load notes for the correct view - determine from current path in case view state is stale
-      const currentPath = window.location.pathname;
+      const currentPath = getCurrentAppPath();
       const targetView = currentPath === '/archive' ? 'archive' : currentPath === '/trash' ? 'trash' : 'main';
       const targetViewSortOption = getSortForView(targetView);
       console.log(`handleSearch: Loading notes for target view "${targetView}" (current view state: "${view}", path: "${currentPath}")`);
@@ -697,10 +710,10 @@ export const NotesProvider = ({ children }) => {
         if (noteParam) {
           newSearch += `&note=${encodeURIComponent(noteParam)}`;
         }
-        const targetPath = window.location.pathname;
+        const targetPath = getCurrentAppPath();
         const newUrl = targetPath + newSearch;
         // Check if URL actually needs changing
-        if (window.location.pathname + window.location.search !== newUrl) {
+        if (getCurrentAppUrl() !== newUrl) {
           // If a note is open AND we're already in search mode, use replace to avoid
           // stacking history entries for each search change while viewing a note
           const shouldReplace = replaceHistory || (!!noteParam && !!existingQuery);

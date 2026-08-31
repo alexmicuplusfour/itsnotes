@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import env from '../../env.js';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/ImportPage.css';
 
@@ -81,7 +82,7 @@ function ImportPage() {
       const uploadPromise = new Promise((resolve, reject) => {
         // Set timeout to 1 hour
         xhr.timeout = 3600000;
-        xhr.open('POST', '/api/import', true);
+        xhr.open('POST', `${env.API_BASE_URL}/import`, true);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         
         // Set up event listeners for the XHR

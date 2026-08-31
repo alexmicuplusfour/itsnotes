@@ -13,6 +13,11 @@ RUN npm ci
 ARG VITE_BUILD_ID=dev
 ENV VITE_BUILD_ID=$VITE_BUILD_ID
 
+# Vite bakes public asset URLs into the bundle, so this must be set when the
+# image is built for a proxy subpath such as /itsnotes/.
+ARG VITE_BASE_PATH=/
+ENV VITE_BASE_PATH=$VITE_BASE_PATH
+
 # Copy source code
 COPY . .
 

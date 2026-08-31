@@ -8,7 +8,10 @@ if (!SERVER_URL || !PROXY_TOKEN) {
   process.exit(1);
 }
 
-const socket = io(`${SERVER_URL}/proxy`, {
+const serverUrl = new URL(SERVER_URL);
+const basePath = serverUrl.pathname.replace(/\/$/, '');
+const socket = io(`${serverUrl.origin}/proxy`, {
+  path: `${basePath}/socket.io`,
   auth: { token: PROXY_TOKEN },
   reconnection: true,
   reconnectionDelay: 2000,

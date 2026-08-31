@@ -1,0 +1,79 @@
+name: itsnotes
+
+services:
+  itsnotes-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: itsnotesuser
+      POSTGRES_PASSWORD: change-this-password
+      POSTGRES_DB: itsnotes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  itsnotes-server:
+    image: ghcr.io/alexmicuplusfour/itsnotes-server:latest
+    restart: unless-stopped
+    depends_on:
+      itsnotes-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: itsnotes-db
+      DB_PORT: 5432
+      DB_USER: itsnotesuser
+      DB_PASSWORD: change-this-password
+      DB_NAME: itsnotes
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      BACKUP_PATH: /app/backups
+      MD_MIRROR_PATH: /data/notes-mirror
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - attachments_data:/app/uploads
+      - backups_data:/app/backups
+      - ./notes-mirror:/data/notes-mirror
+
+  itsnotes-client:
+    # A subpath changes public asset URLs, so build the client locally with the
+    # same ITSNOTES_BASE_PATH used by Traefik. Do not use the root-path latest
+    # image here.
+    build:
+      context: ./client
+      args:
+        VITE_BASE_PATH: ${ITSNOTES_BASE_PATH:-/itsnotes}/
+    image: itsnotes-client:traefik
+    restart: unless-stopped
+    depends_on:
+      - itsnotes-server
+    networks:
+      - default
+      - revproxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-revProxy-net}"
+      - "traefik.http.routers.itsnotes.entrypoints=web,websecure"
+      - "traefik.http.routers.itsnotes.rule=Host(`${TRAEFIK_HOST}`) && (Path(`${ITSNOTES_BASE_PATH:-/itsnotes}`) || PathPrefix(`${ITSNOTES_BASE_PATH:-/itsnotes}/`))"
+      - "traefik.http.services.itsnotes.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.itsnotes-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.itsnotes-https.redirectscheme.permanent=true"
+      - "traefik.http.middlewares.itsnotes-strip.stripprefix.prefixes=${ITSNOTES_BASE_PATH:-/itsnotes}"
+      - "traefik.http.routers.itsnotes.middlewares=itsnotes-https@docker,itsnotes-strip@docker"
+      - "traefik.http.routers.itsnotes.tls=true"
+      - "traefik.http.routers.itsnotes.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-production}"
+
+volumes:
+  postgres_data:
+  attachments_data:
+  backups_data:
+
+networks:
+  revproxy:
+    name: ${TRAEFIK_NETWORK:-revProxy-net}
+    external: true
