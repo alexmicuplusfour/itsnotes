@@ -5,9 +5,9 @@ services:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: itsnotesuser
-      POSTGRES_PASSWORD: change-this-password
-      POSTGRES_DB: itsnotes
+      POSTGRES_USER: ${DB_USER:-itsnotesuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      POSTGRES_DB: ${DB_NAME:-itsnotes}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,9 +27,9 @@ services:
       PORT: 5000
       DB_HOST: itsnotes-db
       DB_PORT: 5432
-      DB_USER: itsnotesuser
-      DB_PASSWORD: change-this-password
-      DB_NAME: itsnotes
+      DB_USER: ${DB_USER:-itsnotesuser}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:-itsnotes}
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
       BACKUP_PATH: /app/backups
       MD_MIRROR_PATH: /data/notes-mirror

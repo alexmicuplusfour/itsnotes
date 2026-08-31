@@ -156,6 +156,7 @@ TRAEFIK_HOST=notes.example.com
 ITSNOTES_BASE_PATH=/itsnotes
 TRAEFIK_NETWORK=revProxy-net
 TRAEFIK_CERT_RESOLVER=production
+DB_PASSWORD=use-a-long-random-password
 ```
 
 Start it with:
