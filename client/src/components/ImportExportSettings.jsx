@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ThemeManager from '../utils/ThemeManager';
 import { Button } from './settings/styles';
 import { useToast } from '../contexts/ToastContext';
+import env from '../../env.js';
 
 const Container = styled.div`
   display: flex;
@@ -212,7 +213,7 @@ const ImportExportSettings = () => {
         let lastIndex = 0;
         const xhr = new XMLHttpRequest();
         xhr.timeout = 3600000;
-        xhr.open('POST', '/api/import', true);
+        xhr.open('POST', `${env.API_BASE_URL}/import`, true);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
         xhr.onprogress = function () {

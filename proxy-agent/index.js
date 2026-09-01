@@ -8,7 +8,18 @@ if (!SERVER_URL || !PROXY_TOKEN) {
   process.exit(1);
 }
 
-const socket = io(`${SERVER_URL}/proxy`, {
+// Parse to split off a subpath (e.g. https://host/itsnotes) — Socket.IO needs
+// the origin and the path passed separately.
+let serverUrl;
+try {
+  serverUrl = new URL(SERVER_URL);
+} catch {
+  console.error(`[proxy-agent] SERVER_URL is not a valid URL (include the scheme, e.g. https://notes.example.com): ${SERVER_URL}`);
+  process.exit(1);
+}
+const basePath = serverUrl.pathname.replace(/\/$/, '');
+const socket = io(`${serverUrl.origin}/proxy`, {
+  path: `${basePath}/socket.io`,
   auth: { token: PROXY_TOKEN },
   reconnection: true,
   reconnectionDelay: 2000,

@@ -145,6 +145,36 @@ The app will be available on port 80.
 
 For automatic HTTPS, use [`docker-compose.caddy.example.yml`](docker-compose.caddy.example.yml) instead — it adds a Caddy service. You'll also need a `Caddyfile` ([`Caddyfile.example`](Caddyfile.example)) with your domain. Then `docker compose up -d`; Caddy handles SSL certificates automatically.
 
+### Serving under a subpath
+
+itsnotes can share a domain with other apps by living under a path prefix,
+e.g. `https://example.com/itsnotes`. Set `BASE_PATH` on the client container
+and put a reverse proxy in front that strips the prefix before forwarding.
+The normal published image is used — changing `BASE_PATH` only needs a
+restart, not a rebuild. Leave `BASE_PATH` unset to serve at the root as usual.
+
+```yaml
+  itsnotes-client:
+    image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
+    environment:
+      BASE_PATH: /itsnotes
+```
+
+With Caddy, `handle_path` strips the prefix:
+
+```caddyfile
+example.com {
+    redir /itsnotes /itsnotes/
+    handle_path /itsnotes/* {
+        reverse_proxy itsnotes-client:80
+    }
+}
+```
+
+For an existing Traefik installation, [`docker-compose.traefik.example.yml`](docker-compose.traefik.example.yml)
+is a complete example using Traefik's Docker provider — edit the placeholder
+domain, path, and network at the top of the file.
+
 ## Configuration
 
 All configuration is via the `environment:` blocks in `docker-compose.yml`. See `.env.example` for the full list of available options.

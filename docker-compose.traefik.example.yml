@@ -1,0 +1,103 @@
+# itsnotes behind an existing Traefik, served on a subpath such as
+# https://notes.example.com/itsnotes
+#
+# Edit the placeholder values below before starting:
+#   - notes.example.com   → your domain
+#   - /itsnotes           → the path you want (must match BASE_PATH and the labels)
+#   - revProxy-net        → the docker network your Traefik watches
+#   - change-this-password
+#
+# Traefik strips the path prefix before forwarding, and the client container
+# rewrites its own URLs to match BASE_PATH at startup — the normal published
+# image works, nothing is built locally. Changing BASE_PATH only needs a
+# restart. This also works with any other reverse proxy that can strip a
+# path prefix (see the README for a Caddy version).
+
+name: itsnotes
+
+services:
+  itsnotes-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: itsnotesuser
+      POSTGRES_PASSWORD: change-this-password
+      POSTGRES_DB: itsnotes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  itsnotes-server:
+    image: ghcr.io/alexmicuplusfour/itsnotes-server:latest
+    restart: unless-stopped
+    depends_on:
+      itsnotes-db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DB_HOST: itsnotes-db
+      DB_PORT: 5432
+      DB_USER: itsnotesuser
+      DB_PASSWORD: change-this-password
+      DB_NAME: itsnotes
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
+      BACKUP_PATH: /app/backups
+      # Markdown Mirror target — exported .md files appear in ./notes-mirror on the host
+      MD_MIRROR_PATH: /data/notes-mirror
+    # Lets the container reach services on the host machine (e.g. Ollama at
+    # http://host.docker.internal:11434). Harmless when unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - attachments_data:/app/uploads
+      - backups_data:/app/backups
+      # Browsable folder for the Markdown Mirror feature (turn it on in Settings)
+      - ./notes-mirror:/data/notes-mirror
+
+  itsnotes-client:
+    image: ghcr.io/alexmicuplusfour/itsnotes-client:latest
+    restart: unless-stopped
+    depends_on:
+      - itsnotes-server
+    environment:
+      # The path the app lives under. No trailing slash. Must match the
+      # path used in the Traefik labels below.
+      BASE_PATH: /itsnotes
+    networks:
+      - default
+      - revproxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=revProxy-net"
+      - "traefik.http.services.itsnotes.loadbalancer.server.port=80"
+      # Plain-HTTP router: only redirects to HTTPS. It must be a separate
+      # router — a router with TLS enabled never matches plain HTTP, so
+      # attaching the redirect there would leave http:// URLs as 404s.
+      - "traefik.http.routers.itsnotes-http.entrypoints=web"
+      - "traefik.http.routers.itsnotes-http.rule=Host(`notes.example.com`) && (Path(`/itsnotes`) || PathPrefix(`/itsnotes/`))"
+      - "traefik.http.routers.itsnotes-http.middlewares=itsnotes-https@docker"
+      - "traefik.http.middlewares.itsnotes-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.itsnotes-https.redirectscheme.permanent=true"
+      # HTTPS router: strips the prefix before forwarding to the client.
+      - "traefik.http.routers.itsnotes.entrypoints=websecure"
+      - "traefik.http.routers.itsnotes.rule=Host(`notes.example.com`) && (Path(`/itsnotes`) || PathPrefix(`/itsnotes/`))"
+      - "traefik.http.routers.itsnotes.middlewares=itsnotes-strip@docker"
+      - "traefik.http.middlewares.itsnotes-strip.stripprefix.prefixes=/itsnotes"
+      - "traefik.http.routers.itsnotes.tls=true"
+      # Uncomment and set to your ACME resolver if Traefik issues certificates:
+      # - "traefik.http.routers.itsnotes.tls.certresolver=letsencrypt"
+
+volumes:
+  postgres_data:
+  attachments_data:
+  backups_data:
+
+networks:
+  revproxy:
+    name: revProxy-net
+    external: true

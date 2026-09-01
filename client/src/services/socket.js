@@ -5,7 +5,7 @@ import env from '../../env.js';
 // Use the dynamically generated base URL from env.js
 const getSocketUrl = () => {
   // Use the pre-constructed base URL which includes protocol, dynamic host, and port
-  const socketUrl = env.SERVER_BASE_URL;
+  const socketUrl = env.SOCKET_URL;
 
   console.log(`Connecting to socket server at:`, socketUrl);
   return socketUrl;
@@ -119,6 +119,7 @@ class SocketService {
     console.log('Creating new socket instance...');
     // Create a new socket with aggressive mobile-optimized settings
     this.socket = io(SOCKET_URL, {
+      path: env.SOCKET_PATH,
       // Re-read the token on every (re)connect so a refreshed token is used
       // after reconnection. The server gates all socket connections on this JWT.
       auth: (cb) => cb({ token: localStorage.getItem('authToken') }),

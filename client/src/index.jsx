@@ -9,6 +9,7 @@ import { StarredNotesProvider } from './contexts/StarredNotesContext'; // Import
 import { UIPreferencesProvider } from './contexts/UIPreferencesContext'; // Import UIPreferencesProvider
 import { AuthProvider } from './contexts/AuthContext'; // Import AuthProvider
 import socketService from './services/socket';
+import { APP_BASE_PATH, withAppBasePath } from './config/appBasePath';
 import './utils/console'; // Import console utility to disable logs in production
 import './index.css';
 
@@ -20,7 +21,7 @@ import './index.css';
 // Register service worker for PWA support
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register(withAppBasePath('sw.js'))
       .then(registration => {
         console.log('ServiceWorker registration successful with scope:', registration.scope);
         
@@ -133,7 +134,7 @@ const root = createRoot(document.getElementById('root'));
 
 root.render(
 
-    <BrowserRouter>
+    <BrowserRouter basename={APP_BASE_PATH || '/'}>
       <AuthProvider> {/* AuthProvider wraps everything */}
         <UIPreferencesProvider> {/* UIPreferencesProvider for basic UI preferences */}
           <App />

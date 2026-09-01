@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import env from '../../env.js';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/ImportPage.css';
 
@@ -81,7 +82,7 @@ function ImportPage() {
       const uploadPromise = new Promise((resolve, reject) => {
         // Set timeout to 1 hour
         xhr.timeout = 3600000;
-        xhr.open('POST', '/api/import', true);
+        xhr.open('POST', `${env.API_BASE_URL}/import`, true);
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         
         // Set up event listeners for the XHR
@@ -187,7 +188,7 @@ function ImportPage() {
       // Set up EventSource for ongoing progress updates
       try {
         // Use a unique URL to avoid caching issues
-        const es = new EventSource(`/api/import/stream?t=${Date.now()}`);
+        const es = new EventSource(`${env.API_BASE_URL}/import/stream?t=${Date.now()}`);
         eventSourceRef.current = es;
         
         es.onmessage = (event) => {

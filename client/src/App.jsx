@@ -29,6 +29,7 @@ import noteFormSaveRegistry from './services/noteFormSaveRegistry'; // Global sa
 import socketService from './services/socket';
 import DemoBanner from './components/DemoBanner';
 import ColorPreloader from './components/ColorPreloader'; // Import color preloader for performance
+import { withAppBasePath } from './config/appBasePath';
 
 function App() {
   const location = useLocation();
@@ -228,7 +229,7 @@ const AppContent = () => {
         try {
           new Notification(data.title || 'Reminder', {
             body: data.message || `Reminder: ${data.title}`,
-            icon: '/pwa/icon-192.png'
+            icon: withAppBasePath('pwa/icon-192.png')
           });
         } catch (e) {
           console.error("App: Failed to show browser notification", e);

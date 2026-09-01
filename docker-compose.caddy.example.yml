@@ -53,6 +53,11 @@ services:
     restart: unless-stopped
     depends_on:
       - itsnotes-server
+    # Uncomment to serve the app under a path prefix behind your own reverse
+    # proxy (which must strip the prefix), e.g. https://example.com/itsnotes —
+    # see "Serving under a subpath" in the README:
+    # environment:
+    #   BASE_PATH: /itsnotes
 
   itsnotes-caddy:
     image: caddy:alpine

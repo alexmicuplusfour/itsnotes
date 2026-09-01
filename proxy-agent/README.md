@@ -21,7 +21,8 @@ traffic is outbound from the agent to the server.
 1. Copy `docker-compose.example.yml` to `docker-compose.yml`.
 2. In the itsnotes app, go to **Settings → Integrations → Proxy Agent** and copy
    the token shown there.
-3. Fill in `SERVER_URL` (your itsnotes address) and `PROXY_TOKEN` in
+3. Fill in `SERVER_URL` (your itsnotes address, including its subpath when it
+   has one) and `PROXY_TOKEN` in
    `docker-compose.yml`.
 4. `docker compose up -d`
 
