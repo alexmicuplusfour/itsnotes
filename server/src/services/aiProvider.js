@@ -29,6 +29,14 @@ function stripThinkTags(text) {
 // so content[0] is not necessarily text — and responses can legally contain
 // more than one text block. Join every text block.
 function extractText(response) {
+  // Newer Claude models run safety classifiers that can decline a request:
+  // HTTP 200, stop_reason "refusal", and no text (or a cut-off start). An
+  // automatic retry would just repeat the verdict, so tell the user plainly.
+  if (response.stop_reason === 'refusal') {
+    const err = new Error('Claude declined this request. If that seems wrong, pick a different model in Settings → AI.');
+    err.nonRetryable = true;
+    throw err;
+  }
   const text = response.content
     .filter(b => b.type === 'text')
     .map(b => b.text)
@@ -54,13 +62,19 @@ class OpenAIProvider {
     });
   }
 
+  // Extra request fields for this backend. OpenAI's docs say newer accounts
+  // store Chat Completions by default — note text shouldn't sit in its logs.
+  async _extraParams() {
+    return { store: false };
+  }
+
   async chat({ system, messages, model, jsonResponse = false }) {
     const client = this._client();
     const allMessages = system
       ? [{ role: 'system', content: system }, ...messages]
       : messages;
 
-    const params = { model, messages: allMessages };
+    const params = { model, messages: allMessages, ...(await this._extraParams()) };
     if (jsonResponse) params.response_format = { type: 'json_object' };
 
     const completion = await client.chat.completions.create(params);
@@ -84,6 +98,7 @@ class OpenAIProvider {
           { type: 'image_url', image_url: { url: dataUrl } },
         ],
       }],
+      ...(await this._extraParams()),
     });
     const content = completion.choices[0].message.content;
     if (!content) {
@@ -102,11 +117,11 @@ class OpenAIProvider {
       ':',                                       // fine-tunes
       'instruct', 'realtime', 'audio', 'search', // not plain chat
       'transcribe', 'tts',                       // audio despite chat-ish names
-      'codex', '-pro', 'deep-research',          // responses-API only — would error here
+      'codex', '-pro', 'deep-research', '-cyber', // responses-API only — would error here
     ];
     return response.data
       .filter(m =>
-        /^(gpt-5|gpt-4|gpt-3\.5|o\d)/.test(m.id) &&
+        /^(gpt-\d|o\d)/.test(m.id) &&
         !EXCLUDED_SUBSTRINGS.some(s => m.id.includes(s)) &&
         !/\d{4}-\d{2}-\d{2}/.test(m.id)          // dated snapshots — the alias covers them
       )
@@ -162,10 +177,13 @@ class AnthropicProvider {
 
   async listModels() {
     const client = this._client();
-    const page = await client.models.list();
-    return page.data
-      .map(m => ({ id: m.id, name: m.display_name || m.id }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    // The API pages this list (20 per page by default); iterating the result
+    // walks every page, so older models never silently drop off the end.
+    const models = [];
+    for await (const m of client.models.list({ limit: 100 })) {
+      models.push({ id: m.id, name: m.display_name || m.id });
+    }
+    return models.sort((a, b) => a.name.localeCompare(b.name));
   }
 }
 
@@ -177,10 +195,37 @@ function getOllamaBaseUrl() {
     .replace(/\/v1$/i, '');
 }
 
+// reasoning_effort "none" turns thinking off on any model from Ollama v0.31.2
+// (Jul 2026) on; earlier builds mishandled JSON mode with thinking off. Older
+// or non-Ollama servers (no /api/version) just keep their default.
+async function ollamaCanSkipThinking() {
+  try {
+    const res = await fetch(`${getOllamaBaseUrl()}/api/version`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return false;
+    const [major, minor, patch] = String((await res.json()).version).split('.').map(n => parseInt(n, 10));
+    return major > 0 || minor > 31 || (minor === 31 && patch >= 2);
+  } catch {
+    return false;
+  }
+}
+
+// Ollama's native /api/tags reports what each model can do (completion,
+// vision, embedding…); /v1/models doesn't. Null on servers without it.
+async function ollamaCapabilities() {
+  try {
+    const res = await fetch(`${getOllamaBaseUrl()}/api/tags`, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) return null;
+    const { models = [] } = await res.json();
+    return new Map(models.filter(m => m.capabilities?.length).map(m => [m.name, m.capabilities]));
+  } catch {
+    return null;
+  }
+}
+
 // Ollama exposes an OpenAI-compatible endpoint at <base>/v1 (chat, vision via
 // base64 data URLs, response_format, model listing), so this rides on the
-// OpenAI SDK — only the client target, the model list, and reasoning-model
-// <think> cleanup differ.
+// OpenAI SDK — only the client target, the extra request fields, the model
+// list, and reasoning-model <think> cleanup differ.
 class OllamaProvider extends OpenAIProvider {
   _client() {
     return new OpenAI({
@@ -189,6 +234,15 @@ class OllamaProvider extends OpenAIProvider {
       maxRetries: 0,
       timeout: OLLAMA_TIMEOUT_MS,
     });
+  }
+
+  // Thinking models (gemma4, qwen3.5, deepseek-r1…) reason before answering
+  // by default. On local hardware that took minutes even for a one-line
+  // reminder, and could fill Ollama's small default context before any answer
+  // came out — so switch it off for every job, where the server handles that
+  // cleanly. No `store`: that's an OpenAI-only field.
+  async _extraParams() {
+    return (await ollamaCanSkipThinking()) ? { reasoning_effort: 'none' } : {};
   }
 
   async chat(opts) {
@@ -205,12 +259,18 @@ class OllamaProvider extends OpenAIProvider {
 
   async listModels() {
     const client = this._client();
-    const response = await client.models.list();
-    // Every locally pulled model is listed; only embedding models can't chat.
+    const [response, capabilities] = await Promise.all([client.models.list(), ollamaCapabilities()]);
+    // Every locally pulled model is listed; keep the ones that can chat.
+    // Without capability info (older Ollama), drop anything named like an
+    // embedding model.
+    const canChat = (id) => capabilities?.has(id)
+      ? capabilities.get(id).includes('completion')
+      : !id.includes('embed');
     return response.data
-      .filter(m => !m.id.includes('embed'))
+      .filter(m => canChat(m.id))
       .sort((a, b) => a.id.localeCompare(b.id))
-      .map(m => ({ id: m.id, name: m.id }));
+      // Cloud models (tag "cloud" or "…-cloud") run on ollama.com, not locally.
+      .map(m => ({ id: m.id, name: /[:-]cloud$/.test(m.id) ? `${m.id} (cloud)` : m.id }));
   }
 }
 
@@ -277,25 +337,39 @@ function getAIProvider() {
     }
   };
 
+  // A 404 from a chat call means the saved model itself is gone — retired by
+  // the provider, or deleted from Ollama. Name it and point at the fix:
+  // opening Settings → AI swaps in one that's available.
+  const withModelCheck = async (opts, call) => {
+    try {
+      return await withRetry(call);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      const err = new Error(`The AI model "${opts.model}" isn't available — open Settings → AI to pick another.`);
+      err.nonRetryable = true;
+      throw err;
+    }
+  };
+
   const originalChat = instance.chat.bind(instance);
   instance.chat = async (opts) => {
     requireModel(opts);
-    const result = await withRetry(() => originalChat(opts));
+    const result = await withModelCheck(opts, () => originalChat(opts));
     return opts.jsonResponse ? stripCodeFences(result) : result;
   };
 
   const originalChatWithVision = instance.chatWithVision.bind(instance);
   instance.chatWithVision = async (opts) => {
     requireModel(opts);
-    return withRetry(() => originalChatWithVision(opts));
+    return withModelCheck(opts, () => originalChatWithVision(opts));
   };
 
   return instance;
 }
 
 const PROVIDER_DEFAULTS = {
-  openai:    { autoTag: 'gpt-5-mini', summarize: 'gpt-5-mini', ocr: 'gpt-5-mini', reminder: 'gpt-5-mini' },
-  anthropic: { autoTag: 'claude-sonnet-5', summarize: 'claude-sonnet-5', ocr: 'claude-sonnet-5', reminder: 'claude-sonnet-5' },
+  openai:    { autoTag: 'gpt-6-luna', summarize: 'gpt-6-luna', ocr: 'gpt-6-luna', reminder: 'gpt-6-luna' },
+  anthropic: { autoTag: 'claude-sonnet-5-5', summarize: 'claude-sonnet-5-5', ocr: 'claude-sonnet-5-5', reminder: 'claude-sonnet-5-5' },
   // No universal default exists for Ollama — the list is whatever the user
   // has pulled. The client falls back to the first available local model.
   ollama:    {},

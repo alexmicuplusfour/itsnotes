@@ -6,10 +6,11 @@ const { getAIProvider, getDefaultModel } = require('../services/aiProvider');
 const { convertHtmlToPlainText } = require('../utils/htmlToPlainText');
 const { respondAIError } = require('../utils/aiErrorResponse');
 const { blockInDemo } = require('../middleware/demoGuard');
+const { prepareOcrImage } = require('../utils/ocrImage');
 
-// Cap OCR uploads: both vision APIs reject images larger than this anyway,
-// so without a limit an oversized image gets fully buffered and base64'd
-// just to fail at the provider.
+// Cap OCR uploads so a huge file isn't buffered and decoded for nothing.
+// Anything under the cap that a provider would reject (too big, wrong
+// format) gets re-encoded by prepareOcrImage.
 const OCR_MAX_BYTES = 10 * 1024 * 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -165,8 +166,9 @@ router.post('/ocr', blockInDemo, ocrUpload, async (req, res) => {
       return res.status(400).json({ message: 'Image file is required' });
     }
 
-    const base64Image = req.file.buffer.toString('base64');
-    const mimeType = req.file.mimetype;
+    const image = await prepareOcrImage(req.file.buffer, req.file.mimetype);
+    const base64Image = image.buffer.toString('base64');
+    const mimeType = image.mimeType;
 
     const corePrompt = process.env.AI_PROMPT_OCR || '';
     const customAdditions = process.env.AI_PROMPT_OCR_CUSTOM || '';

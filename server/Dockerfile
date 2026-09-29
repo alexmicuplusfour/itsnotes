@@ -1,5 +1,5 @@
 # Stage 1: install deps (needs build tools for native modules like bcrypt, sharp)
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 RUN apk add --no-cache python3 make g++
 
@@ -15,7 +15,7 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Stage 2: production image
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \

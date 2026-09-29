@@ -1242,7 +1242,7 @@ export const TagPicker = ({
       }
     } catch (error) {
       console.error("Auto-tagging failed:", error);
-      alert("Failed to suggest tags. Please try again.");
+      alert(error.response?.data?.message || "Failed to suggest tags. Please try again.");
     } finally {
       setIsAutoTagging(false);
     }

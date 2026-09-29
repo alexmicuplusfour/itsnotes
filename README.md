@@ -182,7 +182,7 @@ All configuration is via the `environment:` blocks in `docker-compose.yml`. See 
 Optional AI features (auto-tagging, OCR, summarization, reminder parsing) work with three providers, configured under **Settings → AI**:
 
 - **OpenAI** or **Anthropic** — needs an API key (`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`, or just paste it in Settings).
-- **[Ollama](https://ollama.com)** — fully local, no API key, and note content never leaves your server.
+- **[Ollama](https://ollama.com)** — no API key. Local models keep note content on your own hardware; Ollama's cloud models send it to ollama.com.
 
 ### Local AI with Ollama
 
@@ -192,7 +192,7 @@ Pick **Ollama** in Settings → AI, set the base URL, hit **↻ Refresh models**
 - Ollama as a compose service (commented-out block in [`docker-compose.example.yml`](docker-compose.example.yml)): `http://ollama:11434`
 - Elsewhere on your network: `http://<that-machine>:11434`
 
-OCR requires a model with vision support. Quality depends entirely on the models you run — and if summaries seem to ignore the end of long notes, raise Ollama's context window setting.
+OCR requires a model with vision support. Quality depends entirely on the models you run. If summaries of long notes miss content or fail, raise Ollama's context length (`OLLAMA_CONTEXT_LENGTH`, see [Ollama's docs](https://docs.ollama.com/context-length)).
 
 ## REST API
 

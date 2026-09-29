@@ -14,7 +14,7 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^0.129.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@mozilla/readability": "^0.6.0",
     "archiver": "^7.0.1",
@@ -35,7 +35,7 @@
     "node-cron": "^4.2.1",
     "omdb": "^0.8.0",
     "open-graph-scraper": "^6.11.0",
-    "openai": "^6.9.1",
+    "openai": "^7.23.0",
     "perfect-freehand": "^1.2.3",
     "pg": "^8.16.0",
     "pg-hstore": "^2.3.4",

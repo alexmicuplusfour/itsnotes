@@ -164,7 +164,7 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
       if (notify && models.length === 0) {
         showToast(
           data.provider === 'ollama'
-            ? 'Ollama is running but has no models — pull one first, e.g. "ollama pull llama3.2"'
+            ? 'Ollama is running but has no models — pull one first, e.g. "ollama pull gemma4"'
             : 'No models found — check your API key',
           { variant: 'error' }
         );
@@ -187,24 +187,24 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
     loadModels();
   }, [loadModels]);
 
-  // When models load, auto-select for any feature with no selection: the
-  // server's recommended default if the key can actually use it, otherwise
+  // When models load, auto-select for any feature with no usable selection:
+  // the server's recommended default if the key can actually use it, otherwise
   // the first model in the list. Without the preference, "first in the list"
   // lands on the most expensive Anthropic model (alphabetical) or an ancient
-  // OpenAI one (id sort).
+  // OpenAI one (id sort). A saved model the provider no longer offers (retired,
+  // or removed from Ollama) counts as no selection — otherwise the dropdown
+  // would show the first option while the server kept calling the dead model.
   useEffect(() => {
     if (availableModels.length === 0) return;
+    const isAvailable = (id) => availableModels.some(m => m.id === id);
     const pick = (key) => {
       const preferred = modelDefaults?.[key];
-      return availableModels.some(m => m.id === preferred)
-        ? preferred
-        : availableModels[0].id;
+      return isAvailable(preferred) ? preferred : availableModels[0].id;
     };
     const updates = {};
-    if (!settings.AI_MODEL_SUMMARIZE) updates.AI_MODEL_SUMMARIZE = pick('AI_MODEL_SUMMARIZE');
-    if (!settings.AI_MODEL_OCR) updates.AI_MODEL_OCR = pick('AI_MODEL_OCR');
-    if (!settings.AI_MODEL_REMINDER) updates.AI_MODEL_REMINDER = pick('AI_MODEL_REMINDER');
-    if (!settings.AI_MODEL_AUTO_TAG) updates.AI_MODEL_AUTO_TAG = pick('AI_MODEL_AUTO_TAG');
+    for (const { modelKey } of PROMPT_FEATURES) {
+      if (!isAvailable(settings[modelKey])) updates[modelKey] = pick(modelKey);
+    }
     if (Object.keys(updates).length > 0) {
       commit({ ...settings, ...updates });
     }
@@ -365,9 +365,10 @@ const AiTab = ({ settings, onChange, commit, commitImmediate, isDarkTheme }) => 
               placeholder="http://localhost:11434"
             />
             <p style={{ fontSize: '12px', color: 'var(--text-secondary-color)', margin: '6px 0 0' }}>
-              No API key needed — notes never leave your server. If itsnotes runs
-              in Docker and Ollama on the host, use http://host.docker.internal:11434.
-              OCR needs a model with vision support.
+              No API key needed. Local models keep notes on your own hardware;
+              Ollama's cloud models (marked "cloud" in the list) send them to
+              ollama.com. If itsnotes runs in Docker and Ollama on the host, use
+              http://host.docker.internal:11434. OCR needs a model with vision support.
             </p>
           </FormGroup>
         )}
