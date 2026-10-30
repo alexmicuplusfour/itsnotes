@@ -35,19 +35,19 @@ const CheckboxLabel = styled.span`
   white-space: nowrap;
 `;
 
-const SVGCheckbox = ({ checked, onChange, id, label, className, indeterminate }) => {
+const SVGCheckbox = ({ checked, onChange, id, label, className, indeterminate, disabled = false }) => {
   const effectiveChecked = indeterminate || checked;
 
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    onChange(indeterminate || !checked);
+    if (!disabled) onChange(indeterminate || !checked);
   };
 
   const handleKeyDown = (e) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      onChange(indeterminate || !checked);
+      if (!disabled) onChange(indeterminate || !checked);
     }
   };
 
@@ -61,7 +61,8 @@ const SVGCheckbox = ({ checked, onChange, id, label, className, indeterminate })
       role="checkbox"
       aria-checked={indeterminate ? 'mixed' : !!checked}
       aria-label={label}
-      tabIndex={0}
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled ? -1 : 0}
     >
       <SVGWrapper>
         <svg

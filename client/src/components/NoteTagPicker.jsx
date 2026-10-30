@@ -456,6 +456,8 @@ export const TagPicker = ({
   ); // Only for single note mode
   const [bulkTagStatus, setBulkTagStatus] = useState({}); // { tagId: 'all' | 'some' | 'none' }
   const [loadingBulkStatus, setLoadingBulkStatus] = useState(false);
+  const [isUpdatingFolder, setIsUpdatingFolder] = useState(false);
+  const folderChangeInProgressRef = useRef(false);
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   const [isPositioned, setIsPositioned] = useState(false);
   const [isTransitionEnabled, setIsTransitionEnabled] = useState(false);
@@ -870,7 +872,7 @@ export const TagPicker = ({
 
   const handleTagChange = async (tagId, nextCheckedState) => {
     const currentNoteIds = isBulkMode ? Array.from(selectedNoteIds) : [noteId];
-    if (currentNoteIds.length === 0) return;
+    if (currentNoteIds.length === 0) return false;
 
     try {
       if (isBulkMode) {
@@ -892,6 +894,7 @@ export const TagPicker = ({
           } else {
             console.error("bulkAddTagToNotes function not provided");
             alert("Error: Bulk add function is not available.");
+            return false;
           }
         } else {
           console.log(`Bulk mode: Removing tag ${tagId} from notes:`, noteIdsToUpdate);
@@ -909,10 +912,11 @@ export const TagPicker = ({
           } else {
             console.error("bulkRemoveTagFromNotes function not provided");
             alert("Error: Bulk remove function is not available.");
+            return false;
           }
         }
       } else {
-        if (loadingNoteTags) return;
+        if (loadingNoteTags) return false;
         const originalSelectedTags = [...selectedTags];
         if (nextCheckedState) {
             setSelectedTags(prev => [...prev, tagId]);
@@ -950,41 +954,47 @@ export const TagPicker = ({
             console.error('Failed to update single note tag association:', singleNoteErr);
             setSelectedTags(originalSelectedTags);
             alert(`Error ${nextCheckedState ? 'adding' : 'removing'} tag for this note.`);
-            return;
+            return false;
         }
       }
+      return true;
     } catch (err) {
       console.error('Failed to update tag association:', err);
       alert(`An error occurred while updating tags.`);
+      return false;
     }
   };
 
-  // Folder selection is exclusive: selecting a subfolder deselects its parent and siblings;
-  // selecting a parent folder deselects its subfolders.
-  const handleFolderTagChange = async (tagId, nextCheckedState) => {
-    if (!nextCheckedState || isBulkMode) {
-      handleTagChange(tagId, nextCheckedState);
-      return;
+  // Only parent-child folder selections are exclusive; siblings and unrelated folders can coexist.
+  const updateFolderTag = async (tagId, nextCheckedState) => {
+    if (!nextCheckedState) {
+      return handleTagChange(tagId, nextCheckedState);
     }
 
-    if (loadingNoteTags) return;
+    if (loadingNoteTags || (isBulkMode && loadingBulkStatus)) return;
 
     const tag = uniqueTagsList.find(t => t.id === tagId);
     if (!tag) {
-      handleTagChange(tagId, nextCheckedState);
-      return;
+      return handleTagChange(tagId, nextCheckedState);
     }
 
-    const conflictingIds = selectedTags.filter(id => {
-      if (id === tagId) return false;
-      const t = uniqueTagsList.find(x => x.id === id);
-      if (!t || !t.is_folder) return false;
-      if (tag.parent_id) {
-        return t.id === tag.parent_id || t.parent_id === tag.parent_id;
-      } else {
-        return t.parent_id === tagId;
+    const conflictingIds = uniqueTagsList.filter(t => {
+      if (!t.is_folder || t.id === tagId) return false;
+      const isSelected = isBulkMode
+        ? bulkTagStatus[t.id] === 'all' || bulkTagStatus[t.id] === 'some'
+        : selectedTags.includes(t.id);
+      return isSelected && (t.id === tag.parent_id || t.parent_id === tagId);
+    }).map(t => t.id);
+
+    if (isBulkMode) {
+      // Keep the original membership if adding the destination fails.
+      if (!await handleTagChange(tagId, true)) return;
+      // Update sequentially so each response contains the preceding membership changes.
+      for (const id of conflictingIds) {
+        if (!await handleTagChange(id, false)) return;
       }
-    });
+      return;
+    }
 
     const originalSelectedTags = [...selectedTags];
     setSelectedTags(prev => [
@@ -993,8 +1003,10 @@ export const TagPicker = ({
     ]);
 
     try {
-      await Promise.all(conflictingIds.map(id => tagsApi.removeTagFromNote(noteId, id)));
       await tagsApi.addTagToNote(noteId, tagId);
+      for (const id of conflictingIds) {
+        await tagsApi.removeTagFromNote(noteId, id);
+      }
       clearTagCache(noteId);
       if (refreshTags) refreshTags();
       if (setNotes) {
@@ -1010,8 +1022,29 @@ export const TagPicker = ({
       }
     } catch (err) {
       console.error('Failed to update folder tag association:', err);
-      setSelectedTags(originalSelectedTags);
+      clearTagCache(noteId);
+      try {
+        // A request may have succeeded before another failed; reflect the saved memberships.
+        const response = await tagsApi.getNoteTags(noteId);
+        setSelectedTags(response.tags.map(t => t.id));
+      } catch (refreshError) {
+        console.error('Failed to reload folder memberships:', refreshError);
+        setSelectedTags(originalSelectedTags);
+      }
+      if (refreshTags) refreshTags();
       alert('Error updating folder for this note.');
+    }
+  };
+
+  const handleFolderTagChange = async (tagId, nextCheckedState) => {
+    if (folderChangeInProgressRef.current) return;
+    folderChangeInProgressRef.current = true;
+    setIsUpdatingFolder(true);
+    try {
+      await updateFolderTag(tagId, nextCheckedState);
+    } finally {
+      folderChangeInProgressRef.current = false;
+      setIsUpdatingFolder(false);
     }
   };
 
@@ -1413,6 +1446,7 @@ export const TagPicker = ({
                                 id={`tag-picker-${isBulkMode ? 'bulk' : noteId}-${tag.id}`}
                                 checked={isChecked}
                                 indeterminate={isIndeterminate}
+                                disabled={viewMode === 'folders' && isUpdatingFolder}
                                 onChange={(nextCheckedState) => { viewMode === 'folders' ? handleFolderTagChange(tag.id, nextCheckedState) : handleTagChange(tag.id, nextCheckedState); }}
                                 label={tag.name}
                                 title={tag.name}

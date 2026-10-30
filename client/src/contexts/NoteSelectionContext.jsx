@@ -488,6 +488,7 @@ export const NoteSelectionProvider = ({ children }) => {
     } catch (error) {
       console.error(`[SELECTION_CONTEXT] Error bulk adding tag ${tagId}:`, error);
       notesContextRef.current.setError(`Failed to add tag #${tagId} to selected notes.`);
+      throw error;
     }
   }, []);
 
@@ -510,6 +511,7 @@ export const NoteSelectionProvider = ({ children }) => {
     } catch (error) {
       console.error(`[SELECTION_CONTEXT] Error bulk removing tag ${tagId}:`, error);
       notesContextRef.current.setError(`Failed to remove tag #${tagId} from selected notes.`);
+      throw error;
     }
   }, []);
 
